@@ -7,12 +7,14 @@
 
 // ── CONFIGURACIÓN ──────────────────────────────────────
 const SUCURSALES = [
-  { id: '01', nombre: '01 PASEO',         color: '#185FA5', colorLight: '#DBEAFE' },
-  { id: '05', nombre: '05 WAVE',          color: '#0F6E56', colorLight: '#D1FAE5' },
-  { id: '09', nombre: '09 CIPO SAN MARTIN', color: '#B45309', colorLight: '#FEF3C7' },
-  { id: '10', nombre: '10 PERITO MORENO', color: '#9B2563', colorLight: '#FCE7F3' },
-  { id: '12', nombre: '12 CENTENARIO',    color: '#534AB7', colorLight: '#EDE9FE' },
-  { id: '14', nombre: '14 ROCA',          color: '#3B6D11', colorLight: '#D1FAE5' },
+  { id: '01',     hoja: 'PASEO',   nombre: '01 PASEO',           color: '#185FA5', colorLight: '#DBEAFE' },
+  { id: '05',     hoja: 'WAVE',    nombre: '05 WAVE',            color: '#0F6E56', colorLight: '#D1FAE5' },
+  { id: '09',     hoja: 'CIPO',    nombre: '09 CIPO SAN MARTIN', color: '#B45309', colorLight: '#FEF3C7' },
+  { id: '10',     hoja: 'PERITO',  nombre: '10 PERITO MORENO',   color: '#9B2563', colorLight: '#FCE7F3' },
+  { id: '12',     hoja: 'CENTE',   nombre: '12 CENTENARIO',      color: '#534AB7', colorLight: '#EDE9FE' },
+  { id: '14',     hoja: 'ROCA180', nombre: '14 ROCA',            color: '#3B6D11', colorLight: '#D1FAE5' },
+  { id: 'DEPO',   hoja: 'DEPO',    nombre: 'DEPO',               color: '#475569', colorLight: '#F1F5F9' },
+  { id: 'OFICINA',hoja: 'OFICINA', nombre: 'OFICINA',            color: '#7C3AED', colorLight: '#EDE9FE' },
 ];
 
 const DIAS      = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
@@ -391,14 +393,15 @@ function poblarFiltroEmpleados(datos) {
 }
 
 // ── CONEXIÓN A APPS SCRIPT ─────────────────────────────
-async function fetchSucursal(url, sucId) {
+// Una sola URL sirve para todas las hojas usando ?hoja=NOMBRE
+async function fetchSucursal(url, suc) {
   try {
-    const resp = await fetch(`${url}?sucursal=${sucId}`);
+    const resp = await fetch(`${url}?hoja=${suc.hoja}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
-    return (json.data || []).map(r => ({ ...r, LOCAL: sucId }));
+    return (json.data || []).map(r => ({ ...r, LOCAL: r.LOCAL || suc.id }));
   } catch (e) {
-    console.warn(`Error cargando sucursal ${sucId}:`, e);
+    console.warn(`Error cargando hoja ${suc.hoja}:`, e);
     return [];
   }
 }
@@ -407,9 +410,12 @@ async function cargarDatos(urls) {
   state.cargando = true;
   showToast('Cargando datos...');
 
+  // Si hay una URL única (clave 'unica'), la usamos para todas las hojas
+  const urlUnica = urls['unica'] || null;
+
   const promises = SUCURSALES.map(suc => {
-    const url = urls[suc.id];
-    return url ? fetchSucursal(url, suc.id) : Promise.resolve([]);
+    const url = urlUnica || urls[suc.id];
+    return url ? fetchSucursal(url, suc) : Promise.resolve([]);
   });
 
   const resultados = await Promise.all(promises);
@@ -427,17 +433,20 @@ async function cargarDatos(urls) {
 function buildUrlForm() {
   const saved = getSavedUrls();
   const container = document.getElementById('urlForm');
-  container.innerHTML = SUCURSALES.map(suc =>
-    `<div class="url-row">
-      <div class="url-badge" style="background:${suc.colorLight};color:${suc.color}">
-        <div class="dot" style="background:${suc.color}"></div>
-        ${suc.nombre}
+  container.innerHTML = `
+    <div class="url-row">
+      <div class="url-badge" style="background:#F1F5F9;color:#475569">
+        <div class="dot" style="background:#475569"></div>
+        URL única (todas las sucursales)
       </div>
-      <input type="url" class="url-input" id="url_${suc.id}"
+      <input type="url" class="url-input" id="url_unica"
         placeholder="https://script.google.com/macros/s/.../exec"
-        value="${saved[suc.id] || ''}" />
-    </div>`
-  ).join('');
+        value="${saved['unica'] || ''}" />
+    </div>
+    <p style="font-size:12px;color:#94a3b8;margin:0.5rem 0 1rem 0">
+      Un solo Apps Script conecta PASEO, WAVE, CIPO, PERITO, CENTE, ROCA180, DEPO y OFICINA.
+    </p>
+  `;
 }
 
 function getSavedUrls() {
@@ -449,12 +458,8 @@ function saveUrls(urls) {
 }
 
 function getUrlsFromForm() {
-  const urls = {};
-  SUCURSALES.forEach(suc => {
-    const val = document.getElementById(`url_${suc.id}`)?.value.trim();
-    if (val) urls[suc.id] = val;
-  });
-  return urls;
+  const val = document.getElementById('url_unica')?.value.trim();
+  return val ? { unica: val } : {};
 }
 
 // ── UI HELPERS ─────────────────────────────────────────
