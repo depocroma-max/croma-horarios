@@ -375,53 +375,75 @@ body {
 }
 
 @media (max-width: 700px) {
-  /* Topbar compacta */
+  /* Topbar compacta — todo en una línea */
+  .topbar { height: 48px; padding: 0 0.75rem; gap: 0.5rem; overflow: hidden; }
   .brand-section { display: none; }
   .brand-divider { display: none; }
-  .top-nav { gap: 0; }
-  .nav-btn { padding: 5px 10px; font-size: 12px; }
+  .brand-logo { font-size: 18px; }
+  .brand-tridente { height: 22px; }
+  .top-nav { gap: 0; flex-shrink: 0; }
+  .nav-btn { padding: 4px 8px; font-size: 11px; letter-spacing: 0; }
+  /* Ocultar refresh/print y mostrar solo status compacto */
+  .btn-icon { width: 28px; height: 28px; }
+  .status-label { display: none; }
+  .connection-status { padding: 4px 6px; }
 
   /* Controls bar apilada */
-  .controls-bar {
-    flex-direction: column; align-items: stretch; gap: 0.75rem;
-  }
-  .filters {
-    flex-direction: column; gap: 6px;
-  }
+  .controls-bar { flex-direction: column; align-items: stretch; gap: 0.75rem; }
+  .filters { flex-direction: column; gap: 6px; }
   .filter-select { width: 100%; }
   .week-nav { justify-content: center; }
+  .week-range { font-size: 16px; min-width: 160px; }
 
   /* Stats 2x2 */
   .stats-row { grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat-val { font-size: 28px; }
+  .stat-card { padding: 0.9rem 1rem; }
 
-  /* Calendario mobile */
-  .cal-celda { min-height: 44px; padding: 3px 4px; border-radius: 6px; }
-  .cal-num { font-size: 12px; }
-  .cal-emps { display: none; }
-  .cal-pills-mini { display: none; }
+  /* Calendario mobile — compacto pero con datos */
   .calendario-wrap { padding: 0.5rem; }
+  .cal-grid { gap: 3px; }
+  .cal-header-dias { gap: 3px; }
+  .cal-dia-label { font-size: 9px; }
+  .cal-celda {
+    min-height: 52px; padding: 3px 4px;
+    border-radius: 6px;
+  }
+  .cal-num { font-size: 11px; font-family: var(--font-body); font-weight: 600; }
+  .cal-emps { font-size: 9px; }
+  .cal-pills-mini { display: flex; gap: 1px; flex-wrap: wrap; }
+  .pill-mini { font-size: 8px; padding: 1px 3px; }
 
-  /* Resumen mes tabla — scroll horizontal */
+  /* Nombres en tabla — no partir */
+  .resumen-mes-tabla td { white-space: nowrap; }
   .resumen-mes-wrap { padding: 0.75rem; }
   .resumen-mes-tabla-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .resumen-mes-tabla { font-size: 12px; }
+  .resumen-mes-tabla th { padding: 8px 8px; font-size: 10px; }
+  .resumen-mes-tabla td { padding: 7px 8px; }
+  .suc-badge-mini { font-size: 10px; padding: 1px 6px; }
 
   /* Grilla semana — scroll horizontal */
   .grilla-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-  /* Detalle panel fullscreen en mobile */
+  /* Detalle panel — drawer desde abajo */
+  .detalle-overlay { align-items: flex-end; padding: 0; }
   .detalle-panel {
-    max-width: 100% !important;
-    max-height: 95vh;
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    max-width: 100% !important; width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
     margin-top: auto;
   }
-  .detalle-overlay { align-items: flex-end; padding: 0; }
   .detalle-stats-row { gap: 1rem; flex-wrap: wrap; }
+  .detalle-stat-val { font-size: 22px; }
+  .detalle-header { padding: 1.2rem 1.2rem 1rem; }
+  .detalle-titulo { font-size: 18px; }
 
   /* Empleados filtros panel */
   .emp-filtros-panel { flex-direction: column; gap: 1rem; padding: 1rem; }
   .emp-filtro-grupo { min-width: unset; }
+  .emp-card { padding: 1rem; }
+  .emp-stats { grid-template-columns: 1fr 1fr; }
 }
 
 /* ===== VISTA MES ===== */
