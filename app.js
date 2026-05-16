@@ -525,7 +525,17 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
             </div>
             <div class="detalle-sub">${suc.nombre} · Todos los registros</div>
           </div>
-          <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+          <div class="detalle-acciones">
+            <button class="btn-detalle-accion" onclick="imprimirDetalleEmpleado()" title="Imprimir / PDF">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              PDF
+            </button>
+            <button class="btn-detalle-accion btn-excel" onclick="descargarExcelEmpleado('${nombreEmp.replace(/'/g,"\\''")}', '${nomMostrar}', '${suc.nombre}')" title="Descargar Excel">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              Excel
+            </button>
+            <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+          </div>
         </div>
         <div class="detalle-stats-row">
           <div class="detalle-stat"><span class="detalle-stat-val">${diasUnicos}</span><span class="detalle-stat-lbl">Días</span></div>
@@ -686,6 +696,129 @@ function abrirDetalleEmpleadoPeriodo(nombreEmp, modo) {
   const sucId = datosFiltrados[0]?.LOCAL || '';
   // Llamar abrirDetalleEmpleado pero con datos ya filtrados por período
   abrirDetalleEmpleadoConDatos(nombreEmp, sucId, datosFiltrados);
+}
+
+function imprimirDetalleEmpleado() {
+  // Crear ventana de impresión con solo el contenido del detalle
+  const panel = document.querySelector('#detalleOverlay .detalle-panel');
+  if (!panel) return;
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Jornada CROMA</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'DM Sans', Arial, sans-serif; font-size: 12px; color: #000; padding: 20px; }
+        .detalle-header { padding: 12px 0 16px; border-bottom: 2px solid #000; margin-bottom: 16px; }
+        .detalle-titulo { font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+        .detalle-sub { font-size: 12px; color: #666; margin-bottom: 12px; }
+        .detalle-stats-row { display: flex; gap: 2rem; }
+        .detalle-stat { display: flex; flex-direction: column; }
+        .detalle-stat-val { font-size: 22px; font-weight: 700; }
+        .detalle-stat-lbl { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { padding: 7px 8px; background: #f1f5f9; font-size: 10px; font-weight: 600;
+             text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #ddd; text-align: left; }
+        td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; }
+        tr.fila-sabado td { background: #fffbeb; }
+        tfoot td { background: #f8fafc; border-top: 2px solid #ddd; font-weight: 600; }
+        .detalle-acciones { display: none; }
+        .detalle-close { display: none; }
+        @media print { body { padding: 10px; } }
+      </style>
+    </head>
+    <body>
+      ${panel.outerHTML}
+    </body>
+    </html>
+  `);
+  win.document.close();
+  setTimeout(() => { win.focus(); win.print(); }, 400);
+}
+
+function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
+  // Obtener datos del empleado
+  const registros = state.datos
+    .filter(r => r.EMPLEADO === nombreEmp)
+    .sort((a, b) => {
+      const fa = new Date(a.AÑO, MESES_ES.indexOf(a.MES), parseInt(a.DIA));
+      const fb = new Date(b.AÑO, MESES_ES.indexOf(b.MES), parseInt(b.DIA));
+      return fa - fb;
+    });
+
+  if (!registros.length) return;
+
+  // Agrupar por fecha igual que el detalle
+  const porFecha = {};
+  registros.forEach(r => {
+    const key = `${r.AÑO}-${r.MES}-${r.DIA}`;
+    if (!porFecha[key]) porFecha[key] = [];
+    porFecha[key].push(r);
+  });
+
+  const DIAS_SEM = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  // Construir filas CSV/Excel
+  const filas = Object.entries(porFecha).map(([key, regs]) => {
+    regs.sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
+    const r0 = regs[0];
+    const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
+    const fechaStr = fecha.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const diaSem = DIAS_SEM[fecha.getDay()];
+    const esSab = fecha.getDay() === 6;
+
+    let horaReg = '';
+    if (r0.MARCA_TEMPORAL) {
+      try { horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }); } catch(e) {}
+    }
+
+    const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '';
+    const turno2 = regs[1]?.H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
+    const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
+    const hsExtra = Math.max(0, hsTotal - 8);
+    const nota = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
+    const local = regs.map(r => {
+      const s = SUCURSALES.find(x => x.id === r.LOCAL);
+      return s ? s.nombre : r.LOCAL;
+    }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
+
+    return [fechaStr, diaSem, horaReg, turno1, turno2, hsTotal.toFixed(1), hsExtra > 0 ? hsExtra.toFixed(1) : '0', esSab ? 'Sí' : '', local, nota];
+  });
+
+  // Totales
+  const totalHoras = filas.reduce((a, f) => a + parseFloat(f[5]||0), 0);
+  const totalExtra  = filas.reduce((a, f) => a + parseFloat(f[6]||0), 0);
+  const totalSabs   = filas.filter(f => f[7] === 'Sí').length;
+
+  // Generar CSV con BOM para que Excel abra bien con tildes
+  const BOM = '\uFEFF';
+  const sep = ';';
+  const encabezado = ['DETALLE DE JORNADA - ' + nomMostrar.toUpperCase()];
+  const subenc = [sucNombre, '', '', '', '', '', '', '', '', ''];
+  const cols = ['FECHA','DÍA','HORA REG.','TURNO 1','TURNO 2','HS TOTAL','HS EXTRA','SÁBADO','LOCAL','NOTA'];
+  const pie  = ['TOTALES','','','','', totalHoras.toFixed(1), totalExtra.toFixed(1), String(totalSabs),'',''];
+
+  const lineas = [
+    encabezado.join(sep),
+    subenc.join(sep),
+    cols.join(sep),
+    ...filas.map(f => f.map(v => `"${String(v).replace(/"/g,'""')}"`).join(sep)),
+    pie.join(sep),
+  ];
+
+  const csv = BOM + lineas.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `CROMA_Jornada_${nomMostrar.replace(/\s+/g,'_')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Archivo descargado — abrilo con Excel');
 }
 
 function cerrarDetalle(event) {
