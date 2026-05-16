@@ -544,7 +544,11 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
           <div class="detalle-stat"><span class="detalle-stat-val">${totalSabs}</span><span class="detalle-stat-lbl">Sábados</span></div>
         </div>
       </div>
-      <div class="detalle-tabla-wrap">
+      <div class="detalle-tabs">
+        <button class="detalle-tab active" onclick="switchDetalleTab('jornada', this)">Jornada</button>
+        <button class="detalle-tab" onclick="switchDetalleTab('evolucion', this)">Evolución mensual</button>
+      </div>
+      <div class="detalle-tabla-wrap" id="detalleTabJornada">
         <table class="detalle-tabla">
           <thead>
             <tr>
@@ -586,6 +590,9 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
             </tr>
           </tfoot>
         </table>
+      </div>
+      <div class="detalle-tabla-wrap" id="detalleTabEvolucion" style="display:none;padding:1.5rem">
+        ${generarEvolucionHTML(state.datos, nombreEmp, suc)}
       </div>
     </div>
   </div>`;
@@ -878,6 +885,71 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
   showToast(`✓ Descargado: ${fileName}`);
 }
 
+function switchDetalleTab(tab, btn) {
+  document.querySelectorAll('.detalle-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('detalleTabJornada').style.display  = tab === 'jornada'   ? 'block' : 'none';
+  document.getElementById('detalleTabEvolucion').style.display = tab === 'evolucion' ? 'block' : 'none';
+}
+
+function generarEvolucionHTML(datos, nombreEmp, suc) {
+  const registros = datos.filter(r => r.EMPLEADO === nombreEmp);
+  if (!registros.length) return '<p style="color:#999;font-size:13px">Sin datos históricos.</p>';
+
+  // Agrupar por mes
+  const porMes = {};
+  registros.forEach(r => {
+    const key = `${r.AÑO}||${r.MES}`;
+    if (!porMes[key]) porMes[key] = { horas: 0, dias: new Set(), hsExtra: 0, sabados: 0 };
+    const hs = parseFloat(r.TOTAL_HS) || 0;
+    porMes[key].horas += hs;
+    porMes[key].dias.add(r.DIA);
+    if (hs > 8) porMes[key].hsExtra += hs - 8;
+    const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
+    if (dow === 6) porMes[key].sabados++;
+  });
+
+  const meses = Object.entries(porMes).sort((a, b) => {
+    const [aY, aM] = a[0].split('||');
+    const [bY, bM] = b[0].split('||');
+    return (parseInt(aY)*12 + MESES_ES.indexOf(aM)) - (parseInt(bY)*12 + MESES_ES.indexOf(bM));
+  });
+
+  const maxHoras = Math.max(...meses.map(([,v]) => v.horas)) || 1;
+
+  // Tabla + mini barras
+  const filas = meses.map(([key, v]) => {
+    const [anio, mes] = key.split('||');
+    const pct = (v.horas / maxHoras * 100).toFixed(0);
+    return `<tr>
+      <td style="white-space:nowrap;font-weight:500">${mes} ${anio}</td>
+      <td>${v.dias.size}</td>
+      <td>
+        <div class="comp-bar-row">
+          <div class="comp-bar" style="width:${pct}%;background:${suc.color}"></div>
+          <span><strong>${v.horas.toFixed(0)}</strong>h</span>
+        </div>
+      </td>
+      <td>${v.hsExtra > 0 ? `<span class="hs-extra">${v.hsExtra.toFixed(0)}h</span>` : '—'}</td>
+      <td>${v.sabados || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const totalH = meses.reduce((a,[,v]) => a + v.horas, 0);
+  const promH  = meses.length ? totalH / meses.length : 0;
+
+  return `
+    <div style="margin-bottom:1rem;display:flex;gap:2rem">
+      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${meses.length}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Meses</span></div>
+      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${totalH.toFixed(0)}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Hs totales</span></div>
+      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${promH.toFixed(0)}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Hs promedio/mes</span></div>
+    </div>
+    <table class="detalle-tabla">
+      <thead><tr><th>Mes</th><th>Días</th><th>Horas</th><th>Hs extra</th><th>Sábados</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table>`;
+}
+
 function cerrarDetalle(event) {
   if (event && event.target !== event.currentTarget) return;
   const el = document.getElementById('detalleOverlay');
@@ -974,12 +1046,101 @@ function renderReportes(datos) {
       </div>`;
     }).join('');
 
+  // ── COMPARAR MESES ──
+  const selComp = document.getElementById('repFiltComp')?.value || 'none';
+  let htmlComparacion = '';
+
+  if (selComp !== 'none') {
+    const [cAnio, cMes] = selComp.split('||');
+    let datosComp = datos.filter(r => String(r.AÑO) === cAnio && r.MES === cMes);
+    if (selLocal !== 'all') datosComp = datosComp.filter(r => r.LOCAL === selLocal);
+
+    const compLabel = `${cMes} ${cAnio}`;
+
+    // Horas por empleado en mes de comparación
+    const horasComp = {};
+    datosComp.forEach(r => {
+      if (!horasComp[r.EMPLEADO]) horasComp[r.EMPLEADO] = 0;
+      horasComp[r.EMPLEADO] += parseFloat(r.TOTAL_HS) || 0;
+    });
+
+    // Combinar ambos meses
+    const todosEmpsComp = new Set([...Object.keys(horasPorEmp), ...Object.keys(horasComp)]);
+    const maxHComp = Math.max(
+      ...Object.values(horasPorEmp).map(v => v.horas),
+      ...Object.values(horasComp)
+    ) || 1;
+
+    const filaComp = [...todosEmpsComp].map(nombre => {
+      const h1 = horasPorEmp[nombre]?.horas || 0;
+      const h2 = horasComp[nombre] || 0;
+      const diff = h1 - h2;
+      const s = SUCURSALES.find(x => x.id === (horasPorEmp[nombre]?.local || '')) || { color: '#888' };
+      const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
+      const label = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
+      const diffHtml = diff > 0
+        ? `<span class="comp-diff comp-diff-up">+${diff.toFixed(0)}h</span>`
+        : diff < 0
+          ? `<span class="comp-diff comp-diff-down">${diff.toFixed(0)}h</span>`
+          : `<span class="comp-diff comp-diff-eq">—</span>`;
+      return { nombre, label, h1, h2, diff, s, diffHtml };
+    }).sort((a, b) => b.h1 - a.h1);
+
+    htmlComparacion = `
+    <div class="reporte-card full comp-card">
+      <h3>Comparación por empleado <span class="rep-periodo-tag">${periodoLabel} vs ${compLabel}</span></h3>
+      <div class="comp-tabla-wrap">
+        <table class="comp-tabla">
+          <thead>
+            <tr>
+              <th>Empleado</th>
+              <th>${periodoLabel}</th>
+              <th>${compLabel}</th>
+              <th>Diferencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filaComp.map(f => `<tr>
+              <td class="reporte-nombre">${f.label}</td>
+              <td>
+                <div class="comp-bar-row">
+                  <div class="comp-bar" style="width:${(f.h1/maxHComp*100).toFixed(0)}%;background:${f.s.color}"></div>
+                  <span>${f.h1.toFixed(0)}h</span>
+                </div>
+              </td>
+              <td>
+                <div class="comp-bar-row">
+                  <div class="comp-bar comp-bar-2" style="width:${(f.h2/maxHComp*100).toFixed(0)}%"></div>
+                  <span>${f.h2.toFixed(0)}h</span>
+                </div>
+              </td>
+              <td>${f.diffHtml}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // Opciones para comparar (excluye el período seleccionado)
+  const compOpts = [`<option value="none">Sin comparación</option>`,
+    ...periodos.filter(p => p !== selPeriodo).map(p => {
+      const [y, m] = p.split('||');
+      return `<option value="${p}" ${p === selComp ? 'selected' : ''}>${m} ${y}</option>`;
+    })].join('');
+
   container.innerHTML = `
     <div class="rep-filtros-panel">
       <div class="rep-filtro-grupo">
         <label class="emp-filtro-label">Período</label>
         <select class="emp-filtro-select" id="repFiltPeriodo" onchange="renderReportes(state.datos)">
           ${periodoOpts}
+        </select>
+      </div>
+      <div class="rep-filtro-grupo">
+        <label class="emp-filtro-label">Comparar con</label>
+        <select class="emp-filtro-select" id="repFiltComp" onchange="renderReportes(state.datos)">
+          ${compOpts}
         </select>
       </div>
       <div class="rep-filtro-grupo">
@@ -1006,6 +1167,7 @@ function renderReportes(datos) {
         <h3>Cobertura por sucursal <span class="rep-periodo-tag">${periodoLabel}</span></h3>
         ${htmlSuc}
       </div>
+      ${htmlComparacion}
     </div>`;
 }
 
