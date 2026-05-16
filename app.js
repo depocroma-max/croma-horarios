@@ -155,7 +155,7 @@ function pillHTML(tipo) {
   const map = {
     TM:     ['pill pill-tm',     'Mañana'],
     TT:     ['pill pill-tt',     'Tarde'],
-    COMP:   ['pill pill-comp',   'Completo'],
+    COMP:   ['pill pill-comp',   'Corrido'],
     FRANCO: ['pill pill-franco', 'Franco'],
     FALTA:  ['pill pill-falta',  'Falta'],
   };
