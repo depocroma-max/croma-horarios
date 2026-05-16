@@ -565,3 +565,32 @@ body {
   transition: color 0.15s;
 }
 .emp-card:hover .emp-card-footer { color: var(--black); }
+
+/* ===== FILTROS PANEL EMPLEADOS ===== */
+.emp-filtros-panel {
+  display: flex; gap: 1.5rem; flex-wrap: wrap;
+  background: var(--white); border: 1px solid var(--gray-100);
+  border-radius: var(--radius-lg); padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem; box-shadow: var(--shadow-sm);
+}
+.emp-filtro-grupo {
+  display: flex; flex-direction: column; gap: 6px; min-width: 220px; flex: 1;
+}
+.emp-filtro-label {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--gray-400);
+}
+.emp-filtro-select {
+  height: 42px; padding: 0 14px;
+  font-family: var(--font-body); font-size: 14px;
+  border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+  background: var(--white); color: var(--black); cursor: pointer;
+  transition: border 0.15s;
+}
+.emp-filtro-select:focus { outline: none; border-color: var(--black); }
+
+/* Tarjeta con 4 stats */
+.emp-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 8px; border-top: 1px solid var(--gray-100); padding-top: 12px;
+}
