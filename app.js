@@ -267,42 +267,90 @@ function renderGrilla(datos) {
 
 // ── RENDER EMPLEADOS ───────────────────────────────────
 function renderEmpleados(datos) {
-  const { sucursal } = getFilters();
+  const container = document.getElementById('empContainer');
 
-  // Usamos todos los datos (no solo semana) para las tarjetas
-  const datosFiltrados = datos.filter(r => sucursal === 'all' || r.LOCAL === sucursal);
-
-  // Agrupar por empleado — stats del mes actual
-  const datosMes = getDatosMes(datosFiltrados, state.mesOffset);
-  const empMap = {};
-  datosMes.forEach(r => {
-    if (!empMap[r.EMPLEADO]) {
-      empMap[r.EMPLEADO] = { horas: 0, dias: new Set(), suc: r.LOCAL };
-    }
-    empMap[r.EMPLEADO].horas += parseFloat(r.TOTAL_HS) || 0;
-    empMap[r.EMPLEADO].dias.add(`${r.DIA}-${r.MES}`);
+  // Armar opciones de período (meses con datos)
+  const periodos = [...new Set(datos.map(r => `${r.AÑO}||${r.MES}`))].sort((a, b) => {
+    const [aY, aM] = a.split('||');
+    const [bY, bM] = b.split('||');
+    const ai = parseInt(aY) * 12 + MESES_ES.indexOf(aM);
+    const bi = parseInt(bY) * 12 + MESES_ES.indexOf(bM);
+    return bi - ai; // más reciente primero
   });
 
-  const lista = Object.entries(empMap)
-    .map(([nombre, d]) => ({ nombre, horas: d.horas, dias: d.dias.size, suc: d.suc }))
-    .sort((a, b) => {
-      // Ordenar por número de vendedor si existe, sino alfabético
-      const numA = parseInt(a.nombre) || 999;
-      const numB = parseInt(b.nombre) || 999;
-      return numA !== numB ? numA - numB : a.nombre.localeCompare(b.nombre);
-    });
+  // Leer filtros del panel de empleados
+  const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
+  const selLocal   = document.getElementById('empFiltLocal')?.value   || 'all';
+  const selEmp     = document.getElementById('empFiltEmp')?.value     || 'all';
 
+  // Datos filtrados
+  let datosFilt = datos;
+  if (selPeriodo !== 'all') {
+    const [anio, mes] = selPeriodo.split('||');
+    datosFilt = datosFilt.filter(r => String(r.AÑO) === anio && r.MES === mes);
+  }
+  if (selLocal !== 'all') datosFilt = datosFilt.filter(r => r.LOCAL === selLocal);
+
+  // Empleados disponibles según filtros de período y local
+  const empsDisp = [...new Set(datosFilt.map(r => r.EMPLEADO))].sort((a, b) => {
+    const na = parseInt(a) || 999, nb = parseInt(b) || 999;
+    return na !== nb ? na - nb : a.localeCompare(b);
+  });
+
+  // Si hay un empleado seleccionado específico → abrir detalle
+  if (selEmp !== 'all') {
+    const sucId = datosFilt.find(r => r.EMPLEADO === selEmp)?.LOCAL || '';
+    abrirDetalleEmpleado(selEmp, sucId);
+  }
+
+  // Render panel de filtros
+  const periodoOpts = [`<option value="all">Todos los períodos</option>`,
+    ...periodos.map(p => {
+      const [y, m] = p.split('||');
+      return `<option value="${p}" ${p === selPeriodo ? 'selected' : ''}>${m} ${y}</option>`;
+    })].join('');
+
+  const localOpts = [`<option value="all">Todos los locales</option>`,
+    ...SUCURSALES.map(s =>
+      `<option value="${s.id}" ${s.id === selLocal ? 'selected' : ''}>${s.nombre}</option>`
+    )].join('');
+
+  const empOpts = [`<option value="all">Todos los empleados</option>`,
+    ...empsDisp.map(e => {
+      const numMatch = e.match(/^(\d+)\s+(.+)$/);
+      const label = numMatch ? `#${numMatch[1]} ${numMatch[2]}` : e;
+      return `<option value="${e}" ${e === selEmp ? 'selected' : ''}>${label}</option>`;
+    })].join('');
+
+  // Grilla de tarjetas (cuando no hay empleado específico)
   const suc = (id) => SUCURSALES.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
 
-  const html = `<div class="emp-grid">${lista.map(e => {
+  const empMap = {};
+  datosFilt.forEach(r => {
+    if (selEmp !== 'all' && r.EMPLEADO !== selEmp) return;
+    const key = r.EMPLEADO;
+    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, suc: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: 0 };
+    empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
+    empMap[key].dias.add(`${r.DIA}-${r.MES}-${r.AÑO}`);
+    const hsDay = parseFloat(r.TOTAL_HS) || 0;
+    if (hsDay > 8) empMap[key].hsExtra += hsDay - 8;
+    const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
+    if (dow === 6) empMap[key].sabados++;
+  });
+
+  const lista = Object.values(empMap).sort((a, b) => {
+    const na = parseInt(a.nombre) || 999, nb = parseInt(b.nombre) || 999;
+    return na !== nb ? na - nb : a.nombre.localeCompare(b.nombre);
+  });
+
+  const grilla = lista.map(e => {
     const s = suc(e.suc);
-    const nombrePartes = e.nombre.replace(/^\d+\s+/, '').split(' ');
-    const iniciales = nombrePartes.slice(0,2).map(p => p[0]?.toUpperCase()).join('');
-    // Separar número y nombre para mostrarlos distinto
     const numMatch = e.nombre.match(/^(\d+)\s+(.+)$/);
     const numVend  = numMatch ? numMatch[1] : '';
     const nomMostrar = numMatch ? numMatch[2] : e.nombre;
-    return `<div class="emp-card" onclick="abrirDetalleEmpleado('${e.nombre.replace(/'/g,"\\'")}', '${e.suc}')" style="cursor:pointer">
+    const nombrePartes = nomMostrar.split(' ');
+    const iniciales = nombrePartes.slice(0,2).map(p => p[0]?.toUpperCase()).join('');
+    return `<div class="emp-card" onclick="abrirDetalleEmpleado('${e.nombre.replace(/'/g,"\''")}', '${e.suc}')" style="cursor:pointer">
       <div class="emp-card-head">
         <div class="emp-avatar" style="background:${s.colorLight};color:${s.color}">
           ${numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales}
@@ -314,24 +362,55 @@ function renderEmpleados(datos) {
       </div>
       <div class="emp-stats">
         <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.horas.toFixed(0)}</div>
-          <div class="emp-stat-label">Horas mes</div>
-        </div>
-        <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.dias}</div>
+          <div class="emp-stat-val">${e.dias.size}</div>
           <div class="emp-stat-label">Días</div>
         </div>
         <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.dias > 0 ? (e.horas / e.dias).toFixed(1) : '0'}</div>
-          <div class="emp-stat-label">Hs/día</div>
+          <div class="emp-stat-val">${e.horas.toFixed(0)}</div>
+          <div class="emp-stat-label">Hs total</div>
+        </div>
+        <div class="emp-stat-item">
+          <div class="emp-stat-val">${e.hsExtra.toFixed(0)}</div>
+          <div class="emp-stat-label">Hs extra</div>
+        </div>
+        <div class="emp-stat-item">
+          <div class="emp-stat-val">${e.sabados}</div>
+          <div class="emp-stat-label">Sábados</div>
         </div>
       </div>
       <div class="emp-card-footer">Ver jornada completa →</div>
     </div>`;
-  }).join('')}</div>`;
+  }).join('');
 
-  document.getElementById('empContainer').innerHTML = lista.length ? html :
-    '<p style="padding:2rem;color:#999;font-size:14px">No hay datos.</p>';
+  container.innerHTML = `
+    <div class="emp-filtros-panel">
+      <div class="emp-filtro-grupo">
+        <label class="emp-filtro-label">Período</label>
+        <select class="emp-filtro-select" id="empFiltPeriodo" onchange="renderEmpleados(state.datos)">
+          ${periodoOpts}
+        </select>
+      </div>
+      <div class="emp-filtro-grupo">
+        <label class="emp-filtro-label">Local</label>
+        <select class="emp-filtro-select" id="empFiltLocal" onchange="empCambioLocal()">
+          ${localOpts}
+        </select>
+      </div>
+      <div class="emp-filtro-grupo">
+        <label class="emp-filtro-label">Empleado/a</label>
+        <select class="emp-filtro-select" id="empFiltEmp" onchange="renderEmpleados(state.datos)">
+          ${empOpts}
+        </select>
+      </div>
+    </div>
+    <div class="emp-grid" id="empGrid">
+      ${grilla || '<p style="padding:2rem;color:#999;font-size:14px">No hay empleados para los filtros seleccionados.</p>'}
+    </div>`;
+}
+
+function empCambioLocal() {
+  // Al cambiar local, resetear empleado y re-renderizar
+  renderEmpleados(state.datos);
 }
 
 // ── DETALLE EMPLEADO ───────────────────────────────────
