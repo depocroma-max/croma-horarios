@@ -1413,6 +1413,30 @@ function init() {
   // Print
   document.getElementById('btnPrint').addEventListener('click', () => window.print());
 
+  // ── BÚSQUEDA RÁPIDA DE EMPLEADO ──
+  const inputBuscar = document.getElementById('buscarEmp');
+  const btnClear    = document.getElementById('btnClearSearch');
+
+  inputBuscar.addEventListener('input', () => {
+    const q = inputBuscar.value.trim();
+    btnClear.style.display = q ? 'flex' : 'none';
+    buscarEmpleado(q);
+  });
+
+  inputBuscar.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      inputBuscar.value = '';
+      btnClear.style.display = 'none';
+      cerrarBusqueda();
+    }
+  });
+
+  btnClear.addEventListener('click', () => {
+    inputBuscar.value = '';
+    btnClear.style.display = 'none';
+    cerrarBusqueda();
+  });
+
   // Poblar select de sucursales
   const selSuc = document.getElementById('filterSucursal');
   selSuc.innerHTML = '<option value="all">Todas las sucursales</option>' +
@@ -1420,6 +1444,78 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ── BÚSQUEDA RÁPIDA ───────────────────────────────────
+function buscarEmpleado(query) {
+  if (!query || query.length < 2) {
+    cerrarBusqueda();
+    return;
+  }
+
+  const q = query.toLowerCase();
+  const datos = state.datos;
+
+  // Buscar coincidencias únicas por empleado
+  const matches = [...new Map(
+    datos
+      .filter(r => r.EMPLEADO.toLowerCase().includes(q))
+      .map(r => [r.EMPLEADO, r])
+  ).values()].slice(0, 8);
+
+  if (!matches.length) {
+    mostrarDropdownBusqueda([]);
+    return;
+  }
+
+  mostrarDropdownBusqueda(matches);
+}
+
+function mostrarDropdownBusqueda(matches) {
+  let dropdown = document.getElementById('searchDropdown');
+  if (!dropdown) {
+    dropdown = document.createElement('div');
+    dropdown.id = 'searchDropdown';
+    dropdown.className = 'search-dropdown';
+    document.querySelector('.top-search').appendChild(dropdown);
+  }
+
+  if (!matches.length) {
+    dropdown.innerHTML = '<div class="search-empty">Sin resultados</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  dropdown.innerHTML = matches.map(r => {
+    const s = SUCURSALES.find(x => x.id === r.LOCAL) || { color: '#888', colorLight: '#eee', nombre: r.LOCAL };
+    const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
+    const numVend  = numMatch ? `<span class="search-num">#${numMatch[1]}</span>` : '';
+    const nombre   = numMatch ? numMatch[2] : r.EMPLEADO;
+    return `<div class="search-item" onclick="seleccionarBusqueda('${r.EMPLEADO.replace(/'/g,"\\'")}', '${r.LOCAL}')">
+      <span class="search-dot" style="background:${s.color}"></span>
+      <span class="search-nombre">${numVend} ${nombre}</span>
+      <span class="search-suc">${s.nombre}</span>
+    </div>`;
+  }).join('');
+
+  dropdown.style.display = 'block';
+}
+
+function seleccionarBusqueda(nombreEmp, sucId) {
+  document.getElementById('buscarEmp').value = '';
+  document.getElementById('btnClearSearch').style.display = 'none';
+  cerrarBusqueda();
+  abrirDetalleEmpleado(nombreEmp, sucId);
+}
+
+function cerrarBusqueda() {
+  const dropdown = document.getElementById('searchDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+// Cerrar dropdown al hacer clic afuera
+document.addEventListener('click', e => {
+  if (!e.target.closest('.top-search')) cerrarBusqueda();
+});
 
 // ── AUTO-REFRESH ───────────────────────────────────────
 const AUTO_REFRESH_MIN = 5;
