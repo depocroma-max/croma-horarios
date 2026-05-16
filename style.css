@@ -697,3 +697,35 @@ body {
   font-size: 9px; color: var(--gray-400); font-family: monospace;
   white-space: nowrap; letter-spacing: -0.3px;
 }
+
+/* ===== BOTONES ACCIONES DETALLE ===== */
+.detalle-acciones {
+  display: flex; align-items: center; gap: 8px;
+}
+.btn-detalle-accion {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--gray-200); background: var(--white);
+  color: var(--gray-600); font-family: var(--font-body);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-detalle-accion:hover {
+  background: var(--black); color: var(--white); border-color: var(--black);
+}
+.btn-excel { color: #0F6E56; border-color: #0F6E56; }
+.btn-excel:hover { background: #0F6E56; color: var(--white); border-color: #0F6E56; }
+
+@media print {
+  .detalle-overlay {
+    position: static !important;
+    background: none !important;
+  }
+  .detalle-panel {
+    box-shadow: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+  }
+  .detalle-acciones, .detalle-close { display: none !important; }
+  .detalle-overlay ~ * { display: none !important; }
+}
