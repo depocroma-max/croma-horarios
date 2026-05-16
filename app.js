@@ -1271,7 +1271,7 @@ function setView(view) {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
-    filters.style.display  = 'flex';
+    filters.style.display  = 'none';
   }
 }
 
