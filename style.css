@@ -600,3 +600,12 @@ body {
   color: var(--accent);
   text-decoration: underline;
 }
+
+/* ===== LOGO TRIDENTE ===== */
+.brand-tridente {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+  margin-right: 2px;
+  filter: drop-shadow(0 0 4px rgba(232,37,26,0.4));
+}
