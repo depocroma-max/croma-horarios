@@ -259,6 +259,8 @@ body {
 }
 .grilla td.td-emp {
   text-align: left; font-weight: 500; font-size: 13px; color: var(--black);
+  white-space: nowrap; max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis;
 }
 .grilla tr:last-child td { border-bottom: none; }
 .grilla tr:hover td { background: var(--gray-50); }
@@ -468,6 +470,12 @@ body {
   background: var(--white); border: 1px solid var(--gray-100);
   display: flex; flex-direction: column; gap: 3px;
   transition: background 0.15s; box-shadow: var(--shadow-sm);
+}
+.cal-vacia {
+  min-height: 40px !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 .cal-celda:hover { background: var(--gray-50); }
 .cal-vacia { background: transparent; border-color: transparent; box-shadow: none; }
