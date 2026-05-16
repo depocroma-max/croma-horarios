@@ -236,19 +236,41 @@ function renderGrilla(datos) {
       const celdas = DIAS.map((_, i) => {
         const f = new Date(lunes); f.setDate(lunes.getDate() + i);
         const esHoy = f.toDateString() === hoy.toDateString();
-        const reg = filasSuc.find(r =>
+
+        // Buscar TODOS los registros del empleado en ese día (para turno cortado)
+        const regsDelDia = filasSuc.filter(r =>
           r.EMPLEADO === emp &&
           String(r.DIA) === String(f.getDate()) &&
           r.MES === MESES_ES[f.getMonth()] &&
           String(r.AÑO) === String(f.getFullYear())
-        );
-        let tipoTurno = null;
-        if (reg) {
-          tipoTurno = clasificarTurno(reg.H_ENTRADA, reg.H_SALIDA);
-          totalEmp += parseFloat(reg.TOTAL_HS) || 0;
+        ).sort((a, b) => (a.H_ENTRADA || '').localeCompare(b.H_ENTRADA || ''));
+
+        if (!regsDelDia.length) {
+          return `<td class="${esHoy ? 'hoy' : ''}"><span class="empty-dash">·</span></td>`;
         }
-        if (turno !== 'all' && tipoTurno !== turno) tipoTurno = null;
-        return `<td class="${esHoy ? 'hoy' : ''}">${pillHTML(tipoTurno)}</td>`;
+
+        // Acumular horas
+        regsDelDia.forEach(r => { totalEmp += parseFloat(r.TOTAL_HS) || 0; });
+
+        // Generar pills para cada turno del día
+        let pillsHtml = '';
+        regsDelDia.forEach(r => {
+          const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
+          if (turno !== 'all' && tipo !== turno) return;
+          // Mostrar hora si hay más de un turno
+          if (regsDelDia.length > 1) {
+            pillsHtml += `<div class="turno-doble">
+              ${pillHTML(tipo)}
+              <span class="turno-hora">${r.H_ENTRADA}–${r.H_SALIDA}</span>
+            </div>`;
+          } else {
+            pillsHtml += pillHTML(tipo);
+          }
+        });
+
+        if (!pillsHtml) pillsHtml = '<span class="empty-dash">·</span>';
+
+        return `<td class="${esHoy ? 'hoy' : ''}" style="vertical-align:top;padding:6px 8px">${pillsHtml}</td>`;
       }).join('');
 
       html += `<tr>
