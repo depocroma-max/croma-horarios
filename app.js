@@ -1235,6 +1235,7 @@ async function cargarDatos(urls) {
   setConnected(true);
   showApp();
   renderAll();
+  iniciarAutoRefresh();
 }
 
 // ── SETUP SCREEN ───────────────────────────────────────
@@ -1284,7 +1285,12 @@ function showSetup() {
 function setConnected(ok) {
   const el = document.getElementById('connStatus');
   el.classList.toggle('connected', ok);
-  el.querySelector('.status-label').textContent = ok ? 'Conectado' : 'Sin conexión';
+  if (ok) {
+    const hora = new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+    el.querySelector('.status-label').textContent = `Conectado · ${hora}`;
+  } else {
+    el.querySelector('.status-label').textContent = 'Sin conexión';
+  }
 }
 
 function showToast(msg, duration = 2500) {
@@ -1414,3 +1420,15 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ── AUTO-REFRESH ───────────────────────────────────────
+const AUTO_REFRESH_MIN = 5;
+let autoRefreshTimer = null;
+
+function iniciarAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => {
+    cargarDatos({ unica: APPS_SCRIPT_URL });
+    showToast(`↻ Datos actualizados automáticamente`);
+  }, AUTO_REFRESH_MIN * 60 * 1000);
+}
