@@ -1713,12 +1713,25 @@ function mostrarDropdownBusqueda(matches) {
     const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
     const numVend  = numMatch ? `<span class="search-num">#${numMatch[1]}</span>` : '';
     const nombre   = numMatch ? numMatch[2] : r.EMPLEADO;
-    return `<div class="search-item" onclick="seleccionarBusqueda('${r.EMPLEADO.replace(/'/g,"\\'")}', '${r.LOCAL}')">
+    return `<div class="search-item"
+      data-emp="${r.EMPLEADO.replace(/"/g,'&quot;')}"
+      data-suc="${r.LOCAL}">
       <span class="search-dot" style="background:${s.color}"></span>
       <span class="search-nombre">${numVend} ${nombre}</span>
       <span class="search-suc">${s.nombre}</span>
     </div>`;
   }).join('');
+
+  // Usar tanto click como touchend para mobile
+  dropdown.querySelectorAll('.search-item').forEach(item => {
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      seleccionarBusqueda(item.dataset.emp, item.dataset.suc);
+    };
+    item.addEventListener('click', handler);
+    item.addEventListener('touchend', handler);
+  });
 
   dropdown.style.display = 'block';
 }
@@ -1735,10 +1748,13 @@ function cerrarBusqueda() {
   if (dropdown) dropdown.style.display = 'none';
 }
 
-// Cerrar dropdown al hacer clic afuera
+// Cerrar dropdown al hacer clic afuera (no cerrar si se toca dentro del dropdown)
 document.addEventListener('click', e => {
-  if (!e.target.closest('.top-search')) cerrarBusqueda();
+  if (!e.target.closest('.top-search') && !e.target.closest('#searchDropdown')) cerrarBusqueda();
 });
+document.addEventListener('touchstart', e => {
+  if (!e.target.closest('.top-search') && !e.target.closest('#searchDropdown')) cerrarBusqueda();
+}, { passive: true });
 
 // ── AUTO-REFRESH ───────────────────────────────────────
 const AUTO_REFRESH_MIN = 5;
