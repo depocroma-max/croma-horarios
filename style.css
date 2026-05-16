@@ -594,3 +594,9 @@ body {
   display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 8px; border-top: 1px solid var(--gray-100); padding-top: 12px;
 }
+
+/* ===== EMPLEADO LINK EN GRILLA ===== */
+.td-emp-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
