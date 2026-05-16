@@ -1624,6 +1624,20 @@ function init() {
   const inputBuscar = document.getElementById('buscarEmp');
   const btnClear    = document.getElementById('btnClearSearch');
 
+  // Expandir buscador al tocar la lupa en mobile
+  const topSearch = document.querySelector('.top-search');
+  topSearch?.querySelector('svg')?.addEventListener('click', () => {
+    if (window.innerWidth <= 700) {
+      topSearch.classList.toggle('expanded');
+      if (topSearch.classList.contains('expanded')) {
+        setTimeout(() => inputBuscar.focus(), 300);
+      } else {
+        inputBuscar.value = '';
+        cerrarBusqueda();
+      }
+    }
+  });
+
   inputBuscar.addEventListener('input', () => {
     const q = inputBuscar.value.trim();
     btnClear.style.display = q ? 'flex' : 'none';
@@ -1635,6 +1649,7 @@ function init() {
       inputBuscar.value = '';
       btnClear.style.display = 'none';
       cerrarBusqueda();
+      topSearch?.classList.remove('expanded');
     }
   });
 
@@ -1642,6 +1657,7 @@ function init() {
     inputBuscar.value = '';
     btnClear.style.display = 'none';
     cerrarBusqueda();
+    topSearch?.classList.remove('expanded');
   });
 
   // Poblar select de sucursales
