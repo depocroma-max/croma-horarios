@@ -32,7 +32,7 @@ let state = {
   semanaOffset: 0,
   mesOffset: 0,       // 0 = mes actual, -1 = mes anterior, etc.
   datos: [],
-  tabActual: 'semana',
+  tabActual: 'mes',
   cargando: false,
 };
 
@@ -252,7 +252,7 @@ function renderGrilla(datos) {
       }).join('');
 
       html += `<tr>
-        <td class="td-emp">${emp}</td>
+        <td class="td-emp td-emp-link" onclick="abrirDetalleEmpleadoPeriodo('${emp.replace(/'/g,"\\'")}', 'semana')" style="cursor:pointer">${emp}</td>
         ${celdas}
         <td><strong>${totalEmp.toFixed(1)}</strong>h</td>
       </tr>`;
@@ -415,12 +415,15 @@ function empCambioLocal() {
 
 // ── DETALLE EMPLEADO ───────────────────────────────────
 function abrirDetalleEmpleado(nombreEmp, sucId) {
+  abrirDetalleEmpleadoConDatos(nombreEmp, sucId, state.datos.filter(r => r.EMPLEADO === nombreEmp));
+}
+
+function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
   const datos = state.datos;
   const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
 
-  // Todos los registros del empleado ordenados por fecha
-  const registros = datos
-    .filter(r => r.EMPLEADO === nombreEmp)
+  // Registros ya filtrados, ordenados por fecha
+  const registros = registrosFiltrados
     .sort((a, b) => {
       const fa = new Date(a.AÑO, MESES_ES.indexOf(a.MES), parseInt(a.DIA));
       const fb = new Date(b.AÑO, MESES_ES.indexOf(b.MES), parseInt(b.DIA));
@@ -563,6 +566,22 @@ function abrirDetalleEmpleado(nombreEmp, sucId) {
   div.innerHTML = html;
   document.body.appendChild(div);
   document.body.style.overflow = 'hidden';
+}
+
+function abrirDetalleEmpleadoPeriodo(nombreEmp, modo) {
+  // modo: 'semana' o 'mes'
+  let datosFiltrados = state.datos.filter(r => r.EMPLEADO === nombreEmp);
+
+  if (modo === 'semana') {
+    datosFiltrados = getDatosSemana(datosFiltrados, state.semanaOffset);
+  } else if (modo === 'mes') {
+    datosFiltrados = getDatosMes(datosFiltrados, state.mesOffset);
+  }
+
+  if (!datosFiltrados.length) { showToast('Sin registros en este período'); return; }
+  const sucId = datosFiltrados[0]?.LOCAL || '';
+  // Llamar abrirDetalleEmpleado pero con datos ya filtrados por período
+  abrirDetalleEmpleadoConDatos(nombreEmp, sucId, datosFiltrados);
 }
 
 function cerrarDetalle(event) {
@@ -763,8 +782,8 @@ function renderResumenMes(datos) {
 
   lista.forEach(e => {
     const s = suc(e.local);
-    html += `<tr>
-      <td class="td-emp">${e.nombre}</td>
+    html += `<tr onclick="abrirDetalleEmpleadoPeriodo('${e.nombre.replace(/'/g,"\\'")}', 'mes')" style="cursor:pointer">
+      <td class="td-emp td-emp-link">${e.nombre}</td>
       <td><span class="suc-badge-mini" style="background:${s.colorLight};color:${s.color}">${s.nombre}</span></td>
       <td>${e.dias.size}</td>
       <td><strong>${e.horas.toFixed(1)}</strong></td>
@@ -911,15 +930,26 @@ function setView(view) {
   document.getElementById(`view${capitalize(view)}`)?.classList.add('active');
   document.querySelector(`[data-view="${view}"]`)?.classList.add('active');
 
-  // Mostrar navegación correcta según vista
-  const weekNav = document.querySelector('.week-nav:not(.mes-nav)');
-  const mesNav  = document.getElementById('mesNav');
+  const weekNav  = document.querySelector('.week-nav:not(.mes-nav)');
+  const mesNav   = document.getElementById('mesNav');
+  const statsRow = document.querySelector('.stats-row');
+  const filters  = document.querySelector('.filters');
+
   if (view === 'mes') {
-    weekNav.style.display = 'none';
-    mesNav.style.display  = 'flex';
+    weekNav.style.display  = 'none';
+    mesNav.style.display   = 'flex';
+    statsRow.style.display = 'grid';
+    filters.style.display  = 'flex';
+  } else if (view === 'empleados') {
+    weekNav.style.display  = 'none';
+    mesNav.style.display   = 'none';
+    statsRow.style.display = 'none';
+    filters.style.display  = 'none';
   } else {
-    weekNav.style.display = 'flex';
-    mesNav.style.display  = 'none';
+    weekNav.style.display  = 'flex';
+    mesNav.style.display   = 'none';
+    statsRow.style.display = 'grid';
+    filters.style.display  = 'flex';
   }
 }
 
@@ -929,6 +959,8 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function init() {
   // Mostrar app directamente (sin pantalla de setup)
   showApp();
+  // Vista inicial: mes
+  setView('mes');
   // Cargar datos en segundo plano
   cargarDatos({ unica: APPS_SCRIPT_URL });
 
