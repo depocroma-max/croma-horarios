@@ -568,6 +568,88 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
   document.body.style.overflow = 'hidden';
 }
 
+function abrirDetalleDia(dia, mesIdx, anio) {
+  const mes = MESES_ES[mesIdx];
+  const registros = state.datos.filter(r =>
+    String(r.DIA) === String(dia) &&
+    r.MES === mes &&
+    String(r.AÑO) === String(anio)
+  );
+  if (!registros.length) return;
+
+  const fecha = new Date(anio, mesIdx, dia);
+  const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const fechaStr = fecha.toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+
+  // Agrupar por sucursal
+  const porSuc = {};
+  registros.forEach(r => {
+    if (!porSuc[r.LOCAL]) porSuc[r.LOCAL] = [];
+    porSuc[r.LOCAL].push(r);
+  });
+
+  let bodyHtml = '';
+  Object.entries(porSuc).forEach(([sucId, regs]) => {
+    const s = SUCURSALES.find(x => x.id === sucId) || { color:'#888', colorLight:'#eee', nombre: sucId };
+    regs.sort((a,b) => (a.EMPLEADO||'').localeCompare(b.EMPLEADO||''));
+    bodyHtml += regs.map(r => {
+      const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
+      const nomLabel = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : r.EMPLEADO;
+      const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
+      const pill = pillHTML(tipo);
+      return `<tr>
+        <td>${nomLabel}</td>
+        <td><span class="suc-badge-mini" style="background:${s.colorLight};color:${s.color}">${s.nombre}</span></td>
+        <td class="turno-cell">${r.H_ENTRADA || '—'} - ${r.H_SALIDA || '—'}</td>
+        <td>${pill}</td>
+        <td><strong>${parseFloat(r.TOTAL_HS||0).toFixed(1)}</strong></td>
+        <td class="nota-cell">${r.NOTA || ''}</td>
+      </tr>`;
+    }).join('');
+  });
+
+  const totalEmps = new Set(registros.map(r => r.EMPLEADO)).size;
+  const totalHoras = registros.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
+
+  const html = `
+  <div class="detalle-overlay" onclick="cerrarDetalle(event)">
+    <div class="detalle-panel" onclick="event.stopPropagation()" style="max-width:700px">
+      <div class="detalle-header" style="border-left:4px solid var(--accent)">
+        <div class="detalle-header-top">
+          <div>
+            <div class="detalle-titulo">${fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1)}</div>
+            <div class="detalle-sub">${totalEmps} empleados · ${totalHoras.toFixed(1)} hs totales</div>
+          </div>
+          <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+        </div>
+      </div>
+      <div class="detalle-tabla-wrap">
+        <table class="detalle-tabla">
+          <thead>
+            <tr>
+              <th>Empleado</th>
+              <th>Local</th>
+              <th>Turno</th>
+              <th>Tipo</th>
+              <th>Horas</th>
+              <th>Nota</th>
+            </tr>
+          </thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  const existing = document.getElementById('detalleOverlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'detalleOverlay';
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  document.body.style.overflow = 'hidden';
+}
+
 function abrirDetalleEmpleadoPeriodo(nombreEmp, modo) {
   // modo: 'semana' o 'mes'
   let datosFiltrados = state.datos.filter(r => r.EMPLEADO === nombreEmp);
@@ -716,7 +798,9 @@ function renderCalendario(datos) {
     const tt   = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'TT').length;
     const comp = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'COMP').length;
 
-    html += `<div class="cal-celda ${esHoy ? 'cal-hoy' : ''} ${esFinde ? 'cal-finde' : ''}">
+    const diaKey = `${anio}-${mes}-${d}`;
+    html += `<div class="cal-celda ${esHoy ? 'cal-hoy' : ''} ${esFinde ? 'cal-finde' : ''} ${registros.length ? 'cal-celda-click' : ''}"
+      ${registros.length ? `onclick="abrirDetalleDia(${d}, ${mes}, ${anio})"` : ''}>
       <div class="cal-num">${d}</div>
       ${registros.length ? `
         <div class="cal-emps">${emps} emp.</div>
@@ -744,9 +828,13 @@ function renderResumenMes(datos) {
   const empMap = {};
   datosMes.forEach(r => {
     const key = `${r.EMPLEADO}||${r.LOCAL}`;
-    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), tm: 0, tt: 0, comp: 0 };
-    empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
+    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: 0, tm: 0, tt: 0, comp: 0 };
+    const hs = parseFloat(r.TOTAL_HS) || 0;
+    empMap[key].horas += hs;
     empMap[key].dias.add(r.DIA);
+    if (hs > 8) empMap[key].hsExtra += hs - 8;
+    const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
+    if (dow === 6) empMap[key].sabados++;
     const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
     if (tipo === 'TM') empMap[key].tm++;
     else if (tipo === 'TT') empMap[key].tt++;
@@ -773,6 +861,8 @@ function renderResumenMes(datos) {
           <th>Sucursal</th>
           <th>Días</th>
           <th>Horas</th>
+          <th>Hs extra</th>
+          <th>Sábados</th>
           <th>Mañana</th>
           <th>Tarde</th>
           <th>Completo</th>
@@ -782,11 +872,15 @@ function renderResumenMes(datos) {
 
   lista.forEach(e => {
     const s = suc(e.local);
+    const numMatch2 = e.nombre.match(/^(\d+)\s+(.+)$/);
+    const nomLabel = numMatch2 ? `<span style="color:#94a3b8;font-size:11px;margin-right:4px">#${numMatch2[1]}</span>${numMatch2[2]}` : e.nombre;
     html += `<tr onclick="abrirDetalleEmpleadoPeriodo('${e.nombre.replace(/'/g,"\\'")}', 'mes')" style="cursor:pointer">
-      <td class="td-emp td-emp-link">${e.nombre}</td>
+      <td class="td-emp td-emp-link">${nomLabel}</td>
       <td><span class="suc-badge-mini" style="background:${s.colorLight};color:${s.color}">${s.nombre}</span></td>
       <td>${e.dias.size}</td>
       <td><strong>${e.horas.toFixed(1)}</strong></td>
+      <td>${e.hsExtra > 0 ? `<span class="hs-extra">${e.hsExtra.toFixed(1)}</span>` : '—'}</td>
+      <td>${e.sabados || '—'}</td>
       <td>${e.tm || '—'}</td>
       <td>${e.tt || '—'}</td>
       <td>${e.comp || '—'}</td>
@@ -799,7 +893,7 @@ function renderResumenMes(datos) {
         <tr>
           <td colspan="3"><strong>TOTAL</strong></td>
           <td><strong>${totalHoras.toFixed(1)}</strong></td>
-          <td colspan="3"></td>
+          <td colspan="5"></td>
         </tr>
       </tfoot>
     </table></div></div>`;
@@ -940,11 +1034,13 @@ function setView(view) {
     mesNav.style.display   = 'none';
     statsRow.style.display = 'grid';
     filters.style.display  = 'flex';
+    document.getElementById('filterTurno').style.display = 'block';
   } else if (view === 'mes') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'flex';
     statsRow.style.display = 'none';
     filters.style.display  = 'flex';
+    document.getElementById('filterTurno').style.display = 'none';
   } else if (view === 'empleados') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
