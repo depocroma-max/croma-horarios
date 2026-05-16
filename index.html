@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Croma · Horarios</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">CROMA</span>
+      <span class="brand-divider">|</span>
+      <span class="brand-section">HORARIOS</span>
+    </div>
+    <nav class="top-nav">
+      <button class="nav-btn active" data-view="semana">Semana</button>
+      <button class="nav-btn" data-view="empleados">Empleados</button>
+      <button class="nav-btn" data-view="reportes">Reportes</button>
+    </nav>
+    <div class="top-actions">
+      <button class="btn-icon" id="btnRefresh" title="Actualizar datos">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      </button>
+      <button class="btn-icon" id="btnPrint" title="Imprimir">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </button>
+      <div class="connection-status" id="connStatus">
+        <span class="status-dot"></span>
+        <span class="status-label">Sin conexión</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SETUP SCREEN -->
+  <div class="setup-screen" id="setupScreen">
+    <div class="setup-card">
+      <div class="setup-logo">CROMA</div>
+      <h1 class="setup-title">Panel de Horarios</h1>
+      <p class="setup-desc">Conectá los Google Sheets de cada sucursal para visualizar los horarios en tiempo real.</p>
+
+      <div class="setup-steps">
+        <div class="setup-step">
+          <div class="step-num">1</div>
+          <div class="step-text">En cada Google Sheet abrí <strong>Extensiones → Apps Script</strong> y pegá el código del archivo <code>apps-script.js</code></div>
+        </div>
+        <div class="setup-step">
+          <div class="step-num">2</div>
+          <div class="step-text">Hacé clic en <strong>Implementar → Nueva implementación</strong>, tipo <em>Aplicación web</em>, acceso: <em>Cualquier persona</em></div>
+        </div>
+        <div class="setup-step">
+          <div class="step-num">3</div>
+          <div class="step-text">Copiá la URL generada y pegala abajo para cada sucursal</div>
+        </div>
+      </div>
+
+      <div class="url-form" id="urlForm">
+        <!-- generado por JS -->
+      </div>
+
+      <button class="btn-connect" id="btnConnect">Conectar y ver horarios</button>
+      <button class="btn-demo" id="btnDemo">Ver demo con datos de ejemplo</button>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <main class="app" id="mainApp" style="display:none">
+
+    <!-- STATS ROW -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-val" id="stEmp">—</div>
+        <div class="stat-label">Empleados</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="stTurnos">—</div>
+        <div class="stat-label">Turnos semana</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="stHoras">—</div>
+        <div class="stat-label">Horas totales</div>
+      </div>
+      <div class="stat-card highlight">
+        <div class="stat-val" id="stHoy">—</div>
+        <div class="stat-label" id="stHoyLabel">Trabajan hoy</div>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls-bar">
+      <div class="week-nav">
+        <button class="week-btn" id="prevWeek">&#8592;</button>
+        <span class="week-range" id="weekRange"></span>
+        <button class="week-btn" id="nextWeek">&#8594;</button>
+      </div>
+      <div class="filters">
+        <select id="filterSucursal" class="filter-select">
+          <option value="all">Todas las sucursales</option>
+        </select>
+        <select id="filterEmp" class="filter-select">
+          <option value="all">Todos los empleados</option>
+        </select>
+        <select id="filterTurno" class="filter-select">
+          <option value="all">Todos los turnos</option>
+          <option value="TM">Mañana</option>
+          <option value="TT">Tarde</option>
+          <option value="COMP">Completo</option>
+          <option value="FRANCO">Franco</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- VISTA SEMANA -->
+    <div class="view active" id="viewSemana">
+      <div id="grillaContainer"></div>
+    </div>
+
+    <!-- VISTA EMPLEADOS -->
+    <div class="view" id="viewEmpleados">
+      <div id="empContainer"></div>
+    </div>
+
+    <!-- VISTA REPORTES -->
+    <div class="view" id="viewReportes">
+      <div class="reportes-grid">
+        <div class="reporte-card">
+          <h3>Resumen de horas por empleado</h3>
+          <div id="reporteHoras"></div>
+        </div>
+        <div class="reporte-card">
+          <h3>Cobertura por sucursal</h3>
+          <div id="reporteCobertura"></div>
+        </div>
+        <div class="reporte-card full">
+          <h3>Empleados sin turno cargado esta semana</h3>
+          <div id="reporteFaltantes"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
