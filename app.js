@@ -27,7 +27,8 @@ const LS_URLS_KEY = 'croma_horarios_urls';
 // ── ESTADO GLOBAL ──────────────────────────────────────
 let state = {
   semanaOffset: 0,
-  datos: [],          // todos los registros cargados
+  mesOffset: 0,       // 0 = mes actual, -1 = mes anterior, etc.
+  datos: [],
   tabActual: 'semana',
   cargando: false,
 };
@@ -373,12 +374,172 @@ function renderReportes(datos) {
     : '<p style="font-size:13px;color:#22c55e;padding:0.5rem 0">✓ Todos los empleados tienen turno esta semana</p>';
 }
 
-// ── RENDER COMPLETO ────────────────────────────────────
+// ── VISTA MES ──────────────────────────────────────────
+function getMesActual(offset = 0) {
+  const hoy = new Date();
+  return new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1);
+}
+
+function getMesLabel(offset = 0) {
+  const d = getMesActual(offset);
+  return `${MESES_ES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function getDatosMes(datos, offset = 0) {
+  const d   = getMesActual(offset);
+  const mes = MESES_ES[d.getMonth()];
+  const anio = String(d.getFullYear());
+  return datos.filter(r => r.MES === mes && String(r.AÑO) === anio);
+}
+
+function renderCalendario(datos) {
+  const offset  = state.mesOffset;
+  const base    = getMesActual(offset);
+  const mes     = base.getMonth();
+  const anio    = base.getFullYear();
+  const { sucursal } = getFilters();
+
+  const diasEnMes  = new Date(anio, mes + 1, 0).getDate();
+  const primerDow  = new Date(anio, mes, 1).getDay(); // 0=Dom
+  const startCol   = primerDow === 0 ? 6 : primerDow - 1; // ajustar a Lun=0
+
+  const datosMes = getDatosMes(datos, offset)
+    .filter(r => sucursal === 'all' || r.LOCAL === sucursal);
+
+  // Agrupar registros por día
+  const porDia = {};
+  datosMes.forEach(r => {
+    const d = String(r.DIA);
+    if (!porDia[d]) porDia[d] = [];
+    porDia[d].push(r);
+  });
+
+  const hoy = new Date();
+  const esEsteMes = hoy.getMonth() === mes && hoy.getFullYear() === anio;
+
+  let html = `<div class="calendario-wrap">
+    <div class="cal-header-dias">
+      ${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div class="cal-dia-label">${d}</div>`).join('')}
+    </div>
+    <div class="cal-grid">`;
+
+  // Celdas vacías al inicio
+  for (let i = 0; i < startCol; i++) {
+    html += `<div class="cal-celda cal-vacia"></div>`;
+  }
+
+  for (let d = 1; d <= diasEnMes; d++) {
+    const registros = porDia[String(d)] || [];
+    const emps      = new Set(registros.map(r => r.EMPLEADO)).size;
+    const esHoy     = esEsteMes && hoy.getDate() === d;
+    const dow       = new Date(anio, mes, d).getDay();
+    const esFinde   = dow === 0 || dow === 6;
+
+    // Contar tipos de turno
+    const tm   = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'TM').length;
+    const tt   = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'TT').length;
+    const comp = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'COMP').length;
+
+    html += `<div class="cal-celda ${esHoy ? 'cal-hoy' : ''} ${esFinde ? 'cal-finde' : ''}">
+      <div class="cal-num">${d}</div>
+      ${registros.length ? `
+        <div class="cal-emps">${emps} emp.</div>
+        <div class="cal-pills-mini">
+          ${tm   ? `<span class="pill-mini pill-mini-tm">M:${tm}</span>` : ''}
+          ${tt   ? `<span class="pill-mini pill-mini-tt">T:${tt}</span>` : ''}
+          ${comp ? `<span class="pill-mini pill-mini-comp">C:${comp}</span>` : ''}
+        </div>
+      ` : `<div class="cal-sin-datos"></div>`}
+    </div>`;
+  }
+
+  html += `</div></div>`;
+  document.getElementById('calendarioContainer').innerHTML = html;
+}
+
+function renderResumenMes(datos) {
+  const offset   = state.mesOffset;
+  const { sucursal, empleado } = getFilters();
+  const datosMes = getDatosMes(datos, offset)
+    .filter(r => sucursal === 'all' || r.LOCAL === sucursal)
+    .filter(r => empleado === 'all' || r.EMPLEADO === empleado);
+
+  // Agrupar por empleado
+  const empMap = {};
+  datosMes.forEach(r => {
+    const key = `${r.EMPLEADO}||${r.LOCAL}`;
+    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), tm: 0, tt: 0, comp: 0 };
+    empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
+    empMap[key].dias.add(r.DIA);
+    const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
+    if (tipo === 'TM') empMap[key].tm++;
+    else if (tipo === 'TT') empMap[key].tt++;
+    else if (tipo === 'COMP') empMap[key].comp++;
+  });
+
+  const lista = Object.values(empMap).sort((a, b) => b.horas - a.horas);
+
+  if (!lista.length) {
+    document.getElementById('resumenMesContainer').innerHTML =
+      '<p style="padding:2rem;color:#999;font-size:14px">No hay datos para este mes.</p>';
+    return;
+  }
+
+  const suc = (id) => SUCURSALES.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
+
+  let html = `<div class="resumen-mes-wrap">
+    <h3 class="resumen-mes-titulo">Resumen del mes — ${getMesLabel(offset)}</h3>
+    <div class="resumen-mes-tabla-wrap">
+    <table class="resumen-mes-tabla">
+      <thead>
+        <tr>
+          <th>Empleado</th>
+          <th>Sucursal</th>
+          <th>Días</th>
+          <th>Horas</th>
+          <th>Mañana</th>
+          <th>Tarde</th>
+          <th>Completo</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  lista.forEach(e => {
+    const s = suc(e.local);
+    html += `<tr>
+      <td class="td-emp">${e.nombre}</td>
+      <td><span class="suc-badge-mini" style="background:${s.colorLight};color:${s.color}">${s.nombre}</span></td>
+      <td>${e.dias.size}</td>
+      <td><strong>${e.horas.toFixed(1)}</strong></td>
+      <td>${e.tm || '—'}</td>
+      <td>${e.tt || '—'}</td>
+      <td>${e.comp || '—'}</td>
+    </tr>`;
+  });
+
+  const totalHoras = lista.reduce((a, e) => a + e.horas, 0);
+  html += `</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3"><strong>TOTAL</strong></td>
+          <td><strong>${totalHoras.toFixed(1)}</strong></td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+    </table></div></div>`;
+
+  document.getElementById('resumenMesContainer').innerHTML = html;
+}
+
+
 function renderAll() {
   const datos = state.datos.length ? state.datos : [];
   document.getElementById('weekRange').textContent = getWeekRange(state.semanaOffset);
+  document.getElementById('mesRange').textContent  = getMesLabel(state.mesOffset);
   renderStats(datos);
   renderGrilla(datos);
+  renderCalendario(datos);
+  renderResumenMes(datos);
   renderEmpleados(datos);
   renderReportes(datos);
   poblarFiltroEmpleados(datos);
@@ -492,6 +653,17 @@ function setView(view) {
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById(`view${capitalize(view)}`)?.classList.add('active');
   document.querySelector(`[data-view="${view}"]`)?.classList.add('active');
+
+  // Mostrar navegación correcta según vista
+  const weekNav = document.querySelector('.week-nav:not(.mes-nav)');
+  const mesNav  = document.getElementById('mesNav');
+  if (view === 'mes') {
+    weekNav.style.display = 'none';
+    mesNav.style.display  = 'flex';
+  } else {
+    weekNav.style.display = 'flex';
+    mesNav.style.display  = 'none';
+  }
 }
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -509,6 +681,7 @@ function init() {
 
   // Semana
   document.getElementById('weekRange').textContent = getWeekRange(0);
+  document.getElementById('mesRange').textContent  = getMesLabel(0);
 
   // Navegación de semanas
   document.getElementById('prevWeek').addEventListener('click', () => {
@@ -517,6 +690,16 @@ function init() {
   });
   document.getElementById('nextWeek').addEventListener('click', () => {
     state.semanaOffset++;
+    renderAll();
+  });
+
+  // Navegación de mes
+  document.getElementById('prevMes').addEventListener('click', () => {
+    state.mesOffset--;
+    renderAll();
+  });
+  document.getElementById('nextMes').addEventListener('click', () => {
+    state.mesOffset++;
     renderAll();
   });
 

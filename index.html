@@ -19,6 +19,7 @@
     </div>
     <nav class="top-nav">
       <button class="nav-btn active" data-view="semana">Semana</button>
+      <button class="nav-btn" data-view="mes">Mes</button>
       <button class="nav-btn" data-view="empleados">Empleados</button>
       <button class="nav-btn" data-view="reportes">Reportes</button>
     </nav>
@@ -97,6 +98,11 @@
         <span class="week-range" id="weekRange"></span>
         <button class="week-btn" id="nextWeek">&#8594;</button>
       </div>
+      <div class="week-nav mes-nav" id="mesNav" style="display:none">
+        <button class="week-btn" id="prevMes">&#8592;</button>
+        <span class="week-range" id="mesRange"></span>
+        <button class="week-btn" id="nextMes">&#8594;</button>
+      </div>
       <div class="filters">
         <select id="filterSucursal" class="filter-select">
           <option value="all">Todas las sucursales</option>
@@ -117,6 +123,12 @@
     <!-- VISTA SEMANA -->
     <div class="view active" id="viewSemana">
       <div id="grillaContainer"></div>
+    </div>
+
+    <!-- VISTA MES -->
+    <div class="view" id="viewMes">
+      <div id="calendarioContainer"></div>
+      <div id="resumenMesContainer"></div>
     </div>
 
     <!-- VISTA EMPLEADOS -->
