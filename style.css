@@ -469,3 +469,99 @@ body {
   .cal-celda { min-height: 44px; }
   .cal-pills-mini { display: none; }
 }
+
+/* ===== DETALLE EMPLEADO ===== */
+.detalle-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.detalle-panel {
+  background: var(--white); border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  width: 100%; max-width: 960px;
+  max-height: 90vh; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.detalle-header {
+  padding: 1.5rem 1.8rem 1.2rem;
+  border-bottom: 1px solid var(--gray-100);
+  background: var(--gray-50);
+}
+.detalle-header-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.detalle-titulo {
+  font-family: var(--font-display); font-size: 24px; letter-spacing: 1px;
+  color: var(--black); display: flex; align-items: center; gap: 10px;
+}
+.detalle-num {
+  font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  padding: 3px 10px; border-radius: 20px;
+}
+.detalle-sub { font-size: 13px; color: var(--gray-400); margin-top: 4px; }
+.detalle-close {
+  width: 32px; height: 32px; border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm); background: var(--white);
+  cursor: pointer; font-size: 14px; color: var(--gray-600);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all 0.15s;
+}
+.detalle-close:hover { background: var(--black); color: var(--white); border-color: var(--black); }
+
+.detalle-stats-row {
+  display: flex; gap: 2rem;
+}
+.detalle-stat { display: flex; flex-direction: column; gap: 2px; }
+.detalle-stat-val {
+  font-family: var(--font-display); font-size: 28px; letter-spacing: 1px;
+  color: var(--black); line-height: 1;
+}
+.detalle-stat-lbl { font-size: 11px; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; }
+
+.detalle-tabla-wrap { overflow: auto; flex: 1; }
+.detalle-tabla {
+  width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px;
+}
+.detalle-tabla th {
+  position: sticky; top: 0;
+  padding: 10px 12px; background: var(--gray-50);
+  font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--gray-400);
+  border-bottom: 2px solid var(--gray-100); text-align: left;
+  white-space: nowrap;
+}
+.detalle-tabla td {
+  padding: 8px 12px; border-bottom: 1px solid var(--gray-100);
+  color: var(--black); vertical-align: middle;
+}
+.detalle-tabla tbody tr:hover td { background: var(--gray-50); }
+.detalle-tabla tfoot td {
+  padding: 10px 12px; background: var(--gray-50);
+  border-top: 2px solid var(--gray-200); font-size: 13px;
+}
+.fila-sabado td { background: #FFFBEB; }
+.fila-domingo td { background: #FEF2F2; }
+.turno-cell { font-family: monospace; font-size: 12px; white-space: nowrap; }
+.hora-reg { font-size: 12px; color: var(--gray-400); }
+.hs-extra {
+  background: #FEF3C7; color: #B45309;
+  padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.check-sab { color: #0F6E56; font-weight: 700; }
+.local-tag { font-size: 12px; font-weight: 500; }
+.nota-cell { font-size: 12px; color: var(--gray-600); max-width: 200px; }
+
+/* Tarjeta empleado — número vendedor y footer */
+.emp-num-vend {
+  font-family: var(--font-display); font-size: 18px; letter-spacing: 0.5px;
+}
+.emp-card-footer {
+  border-top: 1px solid var(--gray-100); margin-top: 10px;
+  padding-top: 8px; font-size: 11px; color: var(--gray-400);
+  text-align: right; letter-spacing: 0.3px;
+  transition: color 0.15s;
+}
+.emp-card:hover .emp-card-footer { color: var(--black); }

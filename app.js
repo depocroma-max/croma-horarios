@@ -21,6 +21,9 @@ const DIAS      = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const MESES_ES  = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
                    'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 
+// URL fija del Apps Script (no requiere configuración manual)
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxfWe4uREUDqnOiMVMGQH3pGKZk1OdfNT8k0TyeYjZGyiFuNE4j5AM3pRkQWcG8Hcy6/exec';
+
 // Claves de localStorage para URLs de Apps Script
 const LS_URLS_KEY = 'croma_horarios_urls';
 
@@ -265,11 +268,14 @@ function renderGrilla(datos) {
 // ── RENDER EMPLEADOS ───────────────────────────────────
 function renderEmpleados(datos) {
   const { sucursal } = getFilters();
-  const semana = getDatosSemana(datos, state.semanaOffset);
 
+  // Usamos todos los datos (no solo semana) para las tarjetas
+  const datosFiltrados = datos.filter(r => sucursal === 'all' || r.LOCAL === sucursal);
+
+  // Agrupar por empleado — stats del mes actual
+  const datosMes = getDatosMes(datosFiltrados, state.mesOffset);
   const empMap = {};
-  semana.forEach(r => {
-    if (sucursal !== 'all' && r.LOCAL !== sucursal) return;
+  datosMes.forEach(r => {
     if (!empMap[r.EMPLEADO]) {
       empMap[r.EMPLEADO] = { horas: 0, dias: new Set(), suc: r.LOCAL };
     }
@@ -279,25 +285,37 @@ function renderEmpleados(datos) {
 
   const lista = Object.entries(empMap)
     .map(([nombre, d]) => ({ nombre, horas: d.horas, dias: d.dias.size, suc: d.suc }))
-    .sort((a, b) => b.horas - a.horas);
+    .sort((a, b) => {
+      // Ordenar por número de vendedor si existe, sino alfabético
+      const numA = parseInt(a.nombre) || 999;
+      const numB = parseInt(b.nombre) || 999;
+      return numA !== numB ? numA - numB : a.nombre.localeCompare(b.nombre);
+    });
 
   const suc = (id) => SUCURSALES.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
 
   const html = `<div class="emp-grid">${lista.map(e => {
     const s = suc(e.suc);
-    const iniciales = e.nombre.split(' ').slice(0,2).map(p => p[0]?.toUpperCase()).join('');
-    return `<div class="emp-card">
+    const nombrePartes = e.nombre.replace(/^\d+\s+/, '').split(' ');
+    const iniciales = nombrePartes.slice(0,2).map(p => p[0]?.toUpperCase()).join('');
+    // Separar número y nombre para mostrarlos distinto
+    const numMatch = e.nombre.match(/^(\d+)\s+(.+)$/);
+    const numVend  = numMatch ? numMatch[1] : '';
+    const nomMostrar = numMatch ? numMatch[2] : e.nombre;
+    return `<div class="emp-card" onclick="abrirDetalleEmpleado('${e.nombre.replace(/'/g,"\\'")}', '${e.suc}')" style="cursor:pointer">
       <div class="emp-card-head">
-        <div class="emp-avatar" style="background:${s.colorLight};color:${s.color}">${iniciales}</div>
+        <div class="emp-avatar" style="background:${s.colorLight};color:${s.color}">
+          ${numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales}
+        </div>
         <div>
-          <div class="emp-nombre">${e.nombre}</div>
-          <div class="emp-suc">${s.nombre}</div>
+          <div class="emp-nombre">${nomMostrar}</div>
+          <div class="emp-suc">${s.nombre}${numVend ? ` · <span style="color:${s.color};font-weight:500">Vend. #${numVend}</span>` : ''}</div>
         </div>
       </div>
       <div class="emp-stats">
         <div class="emp-stat-item">
           <div class="emp-stat-val">${e.horas.toFixed(0)}</div>
-          <div class="emp-stat-label">Horas</div>
+          <div class="emp-stat-label">Horas mes</div>
         </div>
         <div class="emp-stat-item">
           <div class="emp-stat-val">${e.dias}</div>
@@ -308,11 +326,171 @@ function renderEmpleados(datos) {
           <div class="emp-stat-label">Hs/día</div>
         </div>
       </div>
+      <div class="emp-card-footer">Ver jornada completa →</div>
     </div>`;
   }).join('')}</div>`;
 
-  document.getElementById('empContainer').innerHTML = html ||
+  document.getElementById('empContainer').innerHTML = lista.length ? html :
     '<p style="padding:2rem;color:#999;font-size:14px">No hay datos.</p>';
+}
+
+// ── DETALLE EMPLEADO ───────────────────────────────────
+function abrirDetalleEmpleado(nombreEmp, sucId) {
+  const datos = state.datos;
+  const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
+
+  // Todos los registros del empleado ordenados por fecha
+  const registros = datos
+    .filter(r => r.EMPLEADO === nombreEmp)
+    .sort((a, b) => {
+      const fa = new Date(a.AÑO, MESES_ES.indexOf(a.MES), parseInt(a.DIA));
+      const fb = new Date(b.AÑO, MESES_ES.indexOf(b.MES), parseInt(b.DIA));
+      return fb - fa; // más reciente primero
+    });
+
+  if (!registros.length) { showToast('Sin registros para este empleado'); return; }
+
+  // Agrupar por fecha para detectar doble turno
+  const porFecha = {};
+  registros.forEach(r => {
+    const key = `${r.AÑO}-${r.MES}-${r.DIA}`;
+    if (!porFecha[key]) porFecha[key] = [];
+    porFecha[key].push(r);
+  });
+
+  // Separar número y nombre
+  const numMatch = nombreEmp.match(/^(\d+)\s+(.+)$/);
+  const numVend  = numMatch ? numMatch[1] : '';
+  const nomMostrar = numMatch ? numMatch[2] : nombreEmp;
+
+  // Totales generales
+  const totalHoras = registros.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
+  const diasUnicos = Object.keys(porFecha).length;
+  const sabados    = registros.filter(r => {
+    const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
+    return dow === 6;
+  }).length;
+
+  const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+  // Construir filas — una por fecha (agrupando doble turno)
+  const filas = Object.entries(porFecha).map(([key, regs]) => {
+    regs.sort((a, b) => (a.H_ENTRADA || '').localeCompare(b.H_ENTRADA || ''));
+    const r0 = regs[0];
+    const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
+    const fechaStr = fecha.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const diaSem  = DIAS_SEMANA[fecha.getDay()];
+    const esSab   = fecha.getDay() === 6;
+    const esDom   = fecha.getDay() === 0;
+
+    // Hora de registro (MARCA_TEMPORAL)
+    let horaReg = '';
+    if (r0.MARCA_TEMPORAL) {
+      try {
+        const mt = new Date(r0.MARCA_TEMPORAL);
+        horaReg = mt.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+      } catch(e) {}
+    }
+
+    const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '—';
+    const turno2 = regs[1] && regs[1].H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
+    const hsTotal = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
+    // Horas extra: lo que supera 8hs en el día
+    const hsExtra = Math.max(0, hsTotal - 8);
+    const nota = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
+    const localStr = regs.map(r => {
+      const s = SUCURSALES.find(x => x.id === r.LOCAL);
+      return s ? s.nombre : r.LOCAL;
+    }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
+
+    return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, nota, localStr };
+  });
+
+  const totalHsExtra = filas.reduce((a, f) => a + f.hsExtra, 0);
+  const totalSabs    = filas.filter(f => f.esSab).length;
+
+  const html = `
+  <div class="detalle-overlay" onclick="cerrarDetalle(event)">
+    <div class="detalle-panel" onclick="event.stopPropagation()">
+      <div class="detalle-header" style="border-left: 4px solid ${suc.color}">
+        <div class="detalle-header-top">
+          <div>
+            <div class="detalle-titulo">
+              ${numVend ? `<span class="detalle-num" style="background:${suc.colorLight};color:${suc.color}">#${numVend}</span>` : ''}
+              ${nomMostrar}
+            </div>
+            <div class="detalle-sub">${suc.nombre} · Todos los registros</div>
+          </div>
+          <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+        </div>
+        <div class="detalle-stats-row">
+          <div class="detalle-stat"><span class="detalle-stat-val">${diasUnicos}</span><span class="detalle-stat-lbl">Días</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val">${totalHoras.toFixed(1)}</span><span class="detalle-stat-lbl">Hs totales</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val">${totalHsExtra.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val">${totalSabs}</span><span class="detalle-stat-lbl">Sábados</span></div>
+        </div>
+      </div>
+      <div class="detalle-tabla-wrap">
+        <table class="detalle-tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Día</th>
+              <th>Hora reg.</th>
+              <th>Turno 1</th>
+              <th>Turno 2</th>
+              <th>Hs total</th>
+              <th>Hs extra</th>
+              <th>Sáb.</th>
+              <th>Local</th>
+              <th>Nota</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filas.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''}">
+              <td>${f.fechaStr}</td>
+              <td>${f.diaSem}</td>
+              <td class="hora-reg">${f.horaReg}</td>
+              <td class="turno-cell">${f.turno1}</td>
+              <td class="turno-cell">${f.turno2 || '—'}</td>
+              <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+              <td>${f.hsExtra > 0 ? `<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>` : '—'}</td>
+              <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
+              <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
+              <td class="nota-cell">${f.nota || ''}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2"><strong>TOTALES</strong></td>
+              <td>${diasUnicos}</td>
+              <td colspan="2"></td>
+              <td><strong>${totalHoras.toFixed(1)}</strong></td>
+              <td>${totalHsExtra > 0 ? `<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>` : '—'}</td>
+              <td>${totalSabs}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  // Insertar overlay
+  const existing = document.getElementById('detalleOverlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'detalleOverlay';
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarDetalle(event) {
+  if (event && event.target !== event.currentTarget) return;
+  const el = document.getElementById('detalleOverlay');
+  if (el) el.remove();
+  document.body.style.overflow = '';
 }
 
 // ── RENDER REPORTES ────────────────────────────────────
@@ -670,14 +848,8 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // Render setup form
-  buildUrlForm();
-
-  // Chequear si ya hay URLs guardadas → autoconectar
-  const saved = getSavedUrls();
-  if (Object.keys(saved).length > 0) {
-    cargarDatos(saved);
-  }
+  // Autoconectar directamente con la URL hardcodeada
+  cargarDatos({ unica: APPS_SCRIPT_URL });
 
   // Semana
   document.getElementById('weekRange').textContent = getWeekRange(0);
@@ -735,13 +907,7 @@ function init() {
 
   // Refresh
   document.getElementById('btnRefresh').addEventListener('click', () => {
-    const urls = getSavedUrls();
-    if (Object.keys(urls).length) {
-      cargarDatos(urls);
-    } else {
-      showToast('Configurá las URLs primero');
-      showSetup();
-    }
+    cargarDatos({ unica: APPS_SCRIPT_URL });
   });
 
   // Print
