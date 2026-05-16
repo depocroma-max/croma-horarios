@@ -609,3 +609,14 @@ body {
   margin-right: 2px;
   filter: drop-shadow(0 0 4px rgba(232,37,26,0.4));
 }
+
+/* Celda calendario clicable */
+.cal-celda-click {
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.cal-celda-click:hover {
+  background: #e8f4fd;
+  border-color: #93C5FD;
+  transform: scale(1.02);
+}
