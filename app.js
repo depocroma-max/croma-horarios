@@ -741,7 +741,16 @@ function imprimirDetalleEmpleado() {
 }
 
 function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
-  // Obtener datos del empleado
+  // Cargar SheetJS dinámicamente si no está cargado
+  if (typeof XLSX === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = () => descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre);
+    document.head.appendChild(script);
+    showToast('Preparando Excel...');
+    return;
+  }
+
   const registros = state.datos
     .filter(r => r.EMPLEADO === nombreEmp)
     .sort((a, b) => {
@@ -752,7 +761,6 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
 
   if (!registros.length) return;
 
-  // Agrupar por fecha igual que el detalle
   const porFecha = {};
   registros.forEach(r => {
     const key = `${r.AÑO}-${r.MES}-${r.DIA}`;
@@ -762,63 +770,112 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
 
   const DIAS_SEM = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
-  // Construir filas CSV/Excel
   const filas = Object.entries(porFecha).map(([key, regs]) => {
     regs.sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
     const r0 = regs[0];
     const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
     const fechaStr = fecha.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-    const diaSem = DIAS_SEM[fecha.getDay()];
-    const esSab = fecha.getDay() === 6;
+    const diaSem  = DIAS_SEM[fecha.getDay()];
+    const esSab   = fecha.getDay() === 6;
 
     let horaReg = '';
     if (r0.MARCA_TEMPORAL) {
       try { horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }); } catch(e) {}
     }
 
-    const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '';
-    const turno2 = regs[1]?.H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
+    const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '';
+    const turno2  = regs[1]?.H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
     const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
     const hsExtra = Math.max(0, hsTotal - 8);
-    const nota = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
-    const local = regs.map(r => {
+    const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
+    const local   = regs.map(r => {
       const s = SUCURSALES.find(x => x.id === r.LOCAL);
       return s ? s.nombre : r.LOCAL;
     }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
-    return [fechaStr, diaSem, horaReg, turno1, turno2, hsTotal.toFixed(1), hsExtra > 0 ? hsExtra.toFixed(1) : '0', esSab ? 'Sí' : '', local, nota];
+    return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, local, nota };
   });
 
-  // Totales
-  const totalHoras = filas.reduce((a, f) => a + parseFloat(f[5]||0), 0);
-  const totalExtra  = filas.reduce((a, f) => a + parseFloat(f[6]||0), 0);
-  const totalSabs   = filas.filter(f => f[7] === 'Sí').length;
+  const totalHoras = filas.reduce((a,f) => a + f.hsTotal, 0);
+  const totalExtra = filas.reduce((a,f) => a + f.hsExtra, 0);
+  const totalSabs  = filas.filter(f => f.esSab).length;
 
-  // Generar CSV con BOM para que Excel abra bien con tildes
-  const BOM = '\uFEFF';
-  const sep = ';';
-  const encabezado = ['DETALLE DE JORNADA - ' + nomMostrar.toUpperCase()];
-  const subenc = [sucNombre, '', '', '', '', '', '', '', '', ''];
-  const cols = ['FECHA','DÍA','HORA REG.','TURNO 1','TURNO 2','HS TOTAL','HS EXTRA','SÁBADO','LOCAL','NOTA'];
-  const pie  = ['TOTALES','','','','', totalHoras.toFixed(1), totalExtra.toFixed(1), String(totalSabs),'',''];
+  // ── Construir workbook ──
+  const wb = XLSX.utils.book_new();
+  const ws_data = [];
 
-  const lineas = [
-    encabezado.join(sep),
-    subenc.join(sep),
-    cols.join(sep),
-    ...filas.map(f => f.map(v => `"${String(v).replace(/"/g,'""')}"`).join(sep)),
-    pie.join(sep),
+  // Fila 1: título
+  ws_data.push([`DETALLE DE JORNADA — ${nomMostrar.toUpperCase()}`, '', '', '', '', '', '', '', '', '']);
+  // Fila 2: sucursal y fecha generación
+  ws_data.push([sucNombre, '', '', '', '', '', `Generado: ${new Date().toLocaleDateString('es-AR')}`, '', '', '']);
+  // Fila 3: vacía
+  ws_data.push([]);
+  // Fila 4: encabezados
+  ws_data.push(['FECHA','DÍA','HORA REG.','TURNO 1','TURNO 2','HS TOTAL','HS EXTRA','SÁBADO','LOCAL','NOTA']);
+  // Filas de datos
+  filas.forEach(f => {
+    ws_data.push([
+      f.fechaStr, f.diaSem, f.horaReg,
+      f.turno1, f.turno2,
+      f.hsTotal, f.hsExtra > 0 ? f.hsExtra : 0,
+      f.esSab ? 'Sí' : '',
+      f.local, f.nota
+    ]);
+  });
+  // Fila vacía
+  ws_data.push([]);
+  // Fila totales
+  ws_data.push(['TOTALES', '', filas.length + ' días', '', '', totalHoras, totalExtra, totalSabs, '', '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+  // ── Anchos de columna ──
+  ws['!cols'] = [
+    { wch: 12 }, // FECHA
+    { wch: 6  }, // DÍA
+    { wch: 10 }, // HORA REG
+    { wch: 14 }, // TURNO 1
+    { wch: 14 }, // TURNO 2
+    { wch: 9  }, // HS TOTAL
+    { wch: 9  }, // HS EXTRA
+    { wch: 7  }, // SÁBADO
+    { wch: 16 }, // LOCAL
+    { wch: 35 }, // NOTA
   ];
 
-  const csv = BOM + lineas.join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `CROMA_Jornada_${nomMostrar.replace(/\s+/g,'_')}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Archivo descargado — abrilo con Excel');
+  // ── Estilos (negrita en encabezados y totales) ──
+  const headerRow = 3; // índice 0-based fila 4
+  const totalRow  = ws_data.length - 1;
+  const cols = ['A','B','C','D','E','F','G','H','I','J'];
+
+  // Título — fila 1
+  if (ws['A1']) {
+    ws['A1'].s = { font: { bold: true, sz: 14 }, fill: { fgColor: { rgb: '0D0D0D' } }, font: { bold: true, sz: 14, color: { rgb: 'FFFFFF' } } };
+  }
+  // Encabezados — fila 4
+  cols.forEach(c => {
+    const cell = ws[`${c}4`];
+    if (cell) cell.s = {
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '1E293B' } },
+      alignment: { horizontal: 'center' }
+    };
+  });
+  // Totales — última fila
+  const totRef = `A${ws_data.length}`;
+  if (ws[totRef]) ws[totRef].s = { font: { bold: true } };
+
+  // Merge título
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }, // título
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }, // sucursal
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Jornada');
+
+  const fileName = `CROMA_${nomMostrar.replace(/\s+/g,'_')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  showToast(`✓ Descargado: ${fileName}`);
 }
 
 function cerrarDetalle(event) {
