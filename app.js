@@ -848,7 +848,9 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // Autoconectar directamente con la URL hardcodeada
+  // Mostrar app directamente (sin pantalla de setup)
+  showApp();
+  // Cargar datos en segundo plano
   cargarDatos({ unica: APPS_SCRIPT_URL });
 
   // Semana
