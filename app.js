@@ -1301,6 +1301,7 @@ function setView(view) {
   document.getElementById(`view${capitalize(view)}`)?.classList.add('active');
   document.querySelector(`[data-view="${view}"]`)?.classList.add('active');
 
+  localStorage.setItem('croma_vista', view);
   const weekNav  = document.querySelector('.week-nav:not(.mes-nav)');
   const mesNav   = document.getElementById('mesNav');
   const statsRow = document.querySelector('.stats-row');
@@ -1338,8 +1339,9 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function init() {
   // Mostrar app directamente (sin pantalla de setup)
   showApp();
-  // Vista inicial: mes
-  setView('mes');
+  // Recuperar última vista visitada (o mes por defecto)
+  const vistaGuardada = localStorage.getItem('croma_vista') || 'mes';
+  setView(vistaGuardada);
   // Cargar datos en segundo plano
   cargarDatos({ unica: APPS_SCRIPT_URL });
 
