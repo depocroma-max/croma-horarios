@@ -935,10 +935,15 @@ function setView(view) {
   const statsRow = document.querySelector('.stats-row');
   const filters  = document.querySelector('.filters');
 
-  if (view === 'mes') {
+  if (view === 'semana') {
+    weekNav.style.display  = 'flex';
+    mesNav.style.display   = 'none';
+    statsRow.style.display = 'grid';
+    filters.style.display  = 'flex';
+  } else if (view === 'mes') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'flex';
-    statsRow.style.display = 'grid';
+    statsRow.style.display = 'none';
     filters.style.display  = 'flex';
   } else if (view === 'empleados') {
     weekNav.style.display  = 'none';
@@ -946,9 +951,10 @@ function setView(view) {
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
   } else {
-    weekNav.style.display  = 'flex';
+    // reportes
+    weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
-    statsRow.style.display = 'grid';
+    statsRow.style.display = 'none';
     filters.style.display  = 'flex';
   }
 }
