@@ -1445,13 +1445,18 @@ function showSetup() {
 }
 
 function setConnected(ok) {
+  const hora = new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+  const label = ok ? `Conectado · ${hora}` : 'Sin conexión';
+
   const el = document.getElementById('connStatus');
   el.classList.toggle('connected', ok);
-  if (ok) {
-    const hora = new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
-    el.querySelector('.status-label').textContent = `Conectado · ${hora}`;
-  } else {
-    el.querySelector('.status-label').textContent = 'Sin conexión';
+  el.querySelector('.status-label').textContent = label;
+
+  // También en drawer
+  const drawerConn = document.getElementById('drawerConnStatus');
+  if (drawerConn) {
+    drawerConn.classList.toggle('connected', ok);
+    drawerConn.querySelector('.status-label').textContent = label;
   }
 }
 
@@ -1470,6 +1475,11 @@ function setView(view) {
   document.querySelector(`[data-view="${view}"]`)?.classList.add('active');
 
   localStorage.setItem('croma_vista', view);
+
+  // Sincronizar drawer: marcar activo
+  document.querySelectorAll('.drawer-nav-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
   const weekNav  = document.querySelector('.week-nav:not(.mes-nav)');
   const mesNav   = document.getElementById('mesNav');
   const statsRow = document.querySelector('.stats-row');
@@ -1574,6 +1584,41 @@ function init() {
 
   // Print
   document.getElementById('btnPrint').addEventListener('click', () => window.print());
+
+  // ── DRAWER MOBILE ──
+  const drawer        = document.getElementById('drawerMenu');
+  const drawerOverlay = document.getElementById('drawerOverlay');
+  const btnHamburger  = document.getElementById('btnHamburger');
+  const btnClose      = document.getElementById('btnDrawerClose');
+
+  function abrirDrawer() {
+    drawer.classList.add('open');
+    drawerOverlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function cerrarDrawer() {
+    drawer.classList.remove('open');
+    drawerOverlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  btnHamburger?.addEventListener('click', abrirDrawer);
+  btnClose?.addEventListener('click', cerrarDrawer);
+  drawerOverlay?.addEventListener('click', cerrarDrawer);
+
+  // Botones de navegación del drawer
+  document.querySelectorAll('.drawer-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setView(btn.dataset.view);
+      cerrarDrawer();
+    });
+  });
+
+  // Refresh desde drawer
+  document.getElementById('drawerRefresh')?.addEventListener('click', () => {
+    cerrarDrawer();
+    cargarDatos({ unica: APPS_SCRIPT_URL });
+  });
 
   // ── BÚSQUEDA RÁPIDA DE EMPLEADO ──
   const inputBuscar = document.getElementById('buscarEmp');
