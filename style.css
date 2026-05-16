@@ -827,3 +827,57 @@ body {
   .top-search { min-width: 120px; }
   .top-search input { font-size: 12px; }
 }
+
+/* ===== COMPARAR MESES ===== */
+.comp-card { margin-top: 0; }
+.comp-tabla-wrap { overflow-x: auto; }
+.comp-tabla {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.comp-tabla th {
+  padding: 9px 12px; background: var(--gray-50);
+  font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--gray-400);
+  border-bottom: 2px solid var(--gray-100); text-align: left;
+}
+.comp-tabla td {
+  padding: 8px 12px; border-bottom: 1px solid var(--gray-100);
+  vertical-align: middle;
+}
+.comp-tabla tbody tr:hover td { background: var(--gray-50); }
+.comp-bar-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.comp-bar {
+  height: 6px; border-radius: 3px; min-width: 2px;
+  flex-shrink: 0; transition: width 0.3s;
+  max-width: 120px;
+}
+.comp-bar-2 { background: var(--gray-300) !important; }
+.comp-diff {
+  display: inline-block; padding: 2px 8px;
+  border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.comp-diff-up   { background: #D1FAE5; color: #065F46; }
+.comp-diff-down { background: #FEE2E2; color: #991B1B; }
+.comp-diff-eq   { color: var(--gray-400); }
+
+/* ===== TABS DETALLE ===== */
+.detalle-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--gray-100);
+  padding: 0 1.5rem;
+  background: var(--gray-50);
+}
+.detalle-tab {
+  padding: 10px 18px; border: none; background: transparent;
+  font-family: var(--font-body); font-size: 13px; font-weight: 400;
+  color: var(--gray-400); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: all 0.15s;
+}
+.detalle-tab:hover { color: var(--black); }
+.detalle-tab.active {
+  color: var(--black); font-weight: 500;
+  border-bottom-color: var(--black);
+}
