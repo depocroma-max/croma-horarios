@@ -1694,13 +1694,24 @@ function buscarEmpleado(query) {
 }
 
 function mostrarDropdownBusqueda(matches) {
+  // Mover el dropdown al body para evitar recorte por overflow de la topbar
   let dropdown = document.getElementById('searchDropdown');
   if (!dropdown) {
     dropdown = document.createElement('div');
     dropdown.id = 'searchDropdown';
     dropdown.className = 'search-dropdown';
-    document.querySelector('.top-search').appendChild(dropdown);
+    document.body.appendChild(dropdown);
   }
+
+  // Posicionar bajo el buscador
+  const searchEl = document.querySelector('.top-search');
+  const rect = searchEl.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.top  = (rect.bottom + 6) + 'px';
+  dropdown.style.left = Math.max(8, rect.left) + 'px';
+  dropdown.style.right = 'auto';
+  dropdown.style.width = Math.max(280, rect.width) + 'px';
+  dropdown.style.zIndex = '9999';
 
   if (!matches.length) {
     dropdown.innerHTML = '<div class="search-empty">Sin resultados</div>';
@@ -1722,7 +1733,6 @@ function mostrarDropdownBusqueda(matches) {
     </div>`;
   }).join('');
 
-  // Usar tanto click como touchend para mobile
   dropdown.querySelectorAll('.search-item').forEach(item => {
     const handler = (e) => {
       e.preventDefault();
