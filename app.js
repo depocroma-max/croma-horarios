@@ -830,61 +830,126 @@ function cerrarDetalle(event) {
 
 // ── RENDER REPORTES ────────────────────────────────────
 function renderReportes(datos) {
-  const semana = getDatosSemana(datos, state.semanaOffset);
-  const { sucursal } = getFilters();
+  const container = document.getElementById('viewReportes');
 
-  // Horas por empleado
+  // Armar opciones de período
+  const periodos = [...new Set(datos.map(r => `${r.AÑO}||${r.MES}`))].sort((a, b) => {
+    const [aY, aM] = a.split('||');
+    const [bY, bM] = b.split('||');
+    return (parseInt(bY)*12 + MESES_ES.indexOf(bM)) - (parseInt(aY)*12 + MESES_ES.indexOf(aM));
+  });
+
+  // Leer filtros del panel de reportes
+  const selPeriodo = document.getElementById('repFiltPeriodo')?.value || 'all';
+  const selLocal   = document.getElementById('repFiltLocal')?.value   || 'all';
+
+  // Filtrar datos
+  let datosFilt = datos;
+  if (selPeriodo !== 'all') {
+    const [anio, mes] = selPeriodo.split('||');
+    datosFilt = datosFilt.filter(r => String(r.AÑO) === anio && r.MES === mes);
+  }
+  if (selLocal !== 'all') datosFilt = datosFilt.filter(r => r.LOCAL === selLocal);
+
+  const periodoLabel = selPeriodo !== 'all'
+    ? selPeriodo.split('||').reverse().join(' ')
+    : 'Todos los períodos';
+
+  // ── HORAS POR EMPLEADO (todos, no solo top10) ──
   const horasPorEmp = {};
-  semana.forEach(r => {
-    if (sucursal !== 'all' && r.LOCAL !== sucursal) return;
-    if (!horasPorEmp[r.EMPLEADO]) horasPorEmp[r.EMPLEADO] = 0;
-    horasPorEmp[r.EMPLEADO] += parseFloat(r.TOTAL_HS) || 0;
+  datosFilt.forEach(r => {
+    if (!horasPorEmp[r.EMPLEADO]) horasPorEmp[r.EMPLEADO] = { horas: 0, local: r.LOCAL };
+    horasPorEmp[r.EMPLEADO].horas += parseFloat(r.TOTAL_HS) || 0;
   });
-  const topEmps = Object.entries(horasPorEmp).sort((a,b) => b[1]-a[1]).slice(0, 10);
-  const maxH = topEmps[0]?.[1] || 1;
+  const listaEmps = Object.entries(horasPorEmp)
+    .sort((a, b) => b[1].horas - a[1].horas);
+  const maxH = listaEmps[0]?.[1].horas || 1;
+  const promH = listaEmps.length ? listaEmps.reduce((a,[,v]) => a + v.horas, 0) / listaEmps.length : 0;
 
-  document.getElementById('reporteHoras').innerHTML = topEmps.map(([nombre, horas]) =>
-    `<div class="reporte-row">
-      <span class="reporte-nombre">${nombre}</span>
-      <div class="reporte-bar-wrap"><div class="reporte-bar" style="width:${(horas/maxH*100).toFixed(0)}%"></div></div>
-      <span class="reporte-val">${horas.toFixed(0)}h</span>
-    </div>`
-  ).join('') || '<p style="font-size:13px;color:#999;padding:1rem 0">Sin datos</p>';
-
-  // Cobertura por sucursal
-  const cobPorSuc = {};
-  semana.forEach(r => {
-    if (!cobPorSuc[r.LOCAL]) cobPorSuc[r.LOCAL] = new Set();
-    cobPorSuc[r.LOCAL].add(r.EMPLEADO);
+  // ── HORAS Y COBERTURA POR SUCURSAL ──
+  const porSuc = {};
+  datosFilt.forEach(r => {
+    if (!porSuc[r.LOCAL]) porSuc[r.LOCAL] = { emps: new Set(), horas: 0 };
+    porSuc[r.LOCAL].emps.add(r.EMPLEADO);
+    porSuc[r.LOCAL].horas += parseFloat(r.TOTAL_HS) || 0;
   });
-  document.getElementById('reporteCobertura').innerHTML = SUCURSALES
-    .filter(s => sucursal === 'all' || s.id === sucursal)
+  const maxSucH = Math.max(...SUCURSALES.map(s => porSuc[s.id]?.horas || 0)) || 1;
+
+  // Opciones de filtros
+  const periodoOpts = [`<option value="all">Todos los períodos</option>`,
+    ...periodos.map(p => {
+      const [y, m] = p.split('||');
+      return `<option value="${p}" ${p === selPeriodo ? 'selected' : ''}>${m} ${y}</option>`;
+    })].join('');
+
+  const localOpts = [`<option value="all">Todas las sucursales</option>`,
+    ...SUCURSALES.map(s =>
+      `<option value="${s.id}" ${s.id === selLocal ? 'selected' : ''}>${s.nombre}</option>`
+    )].join('');
+
+  const htmlEmps = listaEmps.map(([nombre, d], i) => {
+    const s = SUCURSALES.find(x => x.id === d.local) || { color: '#888' };
+    const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
+    const label = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
+    return `<div class="reporte-row" style="gap:10px">
+      <span class="rep-rank">${i+1}</span>
+      <span class="reporte-nombre" style="flex:1;min-width:0">${label}</span>
+      <div class="reporte-bar-wrap"><div class="reporte-bar" style="width:${(d.horas/maxH*100).toFixed(0)}%;background:${s.color}"></div></div>
+      <span class="reporte-val" style="font-size:16px">${d.horas.toFixed(0)}h</span>
+    </div>`;
+  }).join('') || '<p style="font-size:13px;color:#999;padding:1rem 0">Sin datos</p>';
+
+  const htmlSuc = SUCURSALES
+    .filter(s => selLocal === 'all' || s.id === selLocal)
     .map(s => {
-      const count = cobPorSuc[s.id]?.size || 0;
-      return `<div class="reporte-row">
-        <span class="reporte-nombre" style="display:flex;align-items:center;gap:6px">
-          <span style="width:8px;height:8px;border-radius:50%;background:${s.color};display:inline-block"></span>
-          ${s.nombre}
-        </span>
-        <span class="reporte-val">${count} emp.</span>
+      const d = porSuc[s.id] || { emps: new Set(), horas: 0 };
+      const pct = (d.horas / maxSucH * 100).toFixed(0);
+      return `<div class="reporte-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px 0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0;display:inline-block"></span>
+          <span class="reporte-nombre" style="flex:1">${s.nombre}</span>
+          <span style="font-size:12px;color:#64748b">${d.emps.size} emp.</span>
+          <span class="reporte-val" style="font-size:16px">${d.horas.toFixed(0)}h</span>
+        </div>
+        <div class="reporte-bar-wrap" style="margin:0;height:5px">
+          <div class="reporte-bar" style="width:${pct}%;background:${s.color}"></div>
+        </div>
       </div>`;
     }).join('');
 
-  // Empleados sin turno esta semana (solo los conocidos de semanas anteriores)
-  const todosEmps = new Set(datos.map(r => `${r.EMPLEADO}|${r.LOCAL}`));
-  const conTurno  = new Set(semana.map(r => `${r.EMPLEADO}|${r.LOCAL}`));
-  const sinTurno  = [...todosEmps].filter(e => !conTurno.has(e));
+  container.innerHTML = `
+    <div class="rep-filtros-panel">
+      <div class="rep-filtro-grupo">
+        <label class="emp-filtro-label">Período</label>
+        <select class="emp-filtro-select" id="repFiltPeriodo" onchange="renderReportes(state.datos)">
+          ${periodoOpts}
+        </select>
+      </div>
+      <div class="rep-filtro-grupo">
+        <label class="emp-filtro-label">Sucursal</label>
+        <select class="emp-filtro-select" id="repFiltLocal" onchange="renderReportes(state.datos)">
+          ${localOpts}
+        </select>
+      </div>
+      <div class="rep-stat-resumen">
+        <span class="rep-stat-item"><strong>${listaEmps.length}</strong> empleados</span>
+        <span class="rep-stat-sep">·</span>
+        <span class="rep-stat-item"><strong>${datosFilt.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0).toFixed(0)}</strong> hs totales</span>
+        <span class="rep-stat-sep">·</span>
+        <span class="rep-stat-item">Promedio <strong>${promH.toFixed(1)}</strong> hs/emp</span>
+      </div>
+    </div>
 
-  document.getElementById('reporteFaltantes').innerHTML = sinTurno.length
-    ? sinTurno.map(e => {
-        const [nombre, sucId] = e.split('|');
-        const s = SUCURSALES.find(x => x.id === sucId);
-        return `<span class="badge-faltante">
-          <span style="width:6px;height:6px;border-radius:50%;background:${s?.color||'#999'};display:inline-block"></span>
-          ${nombre} (${s?.nombre || sucId})
-        </span>`;
-      }).join('')
-    : '<p style="font-size:13px;color:#22c55e;padding:0.5rem 0">✓ Todos los empleados tienen turno esta semana</p>';
+    <div class="reportes-grid">
+      <div class="reporte-card">
+        <h3>Horas por empleado <span class="rep-periodo-tag">${periodoLabel}</span></h3>
+        <div class="reporte-scroll">${htmlEmps}</div>
+      </div>
+      <div class="reporte-card">
+        <h3>Cobertura por sucursal <span class="rep-periodo-tag">${periodoLabel}</span></h3>
+        ${htmlSuc}
+      </div>
+    </div>`;
 }
 
 // ── VISTA MES ──────────────────────────────────────────
