@@ -976,7 +976,26 @@ body {
 @media (max-width: 700px) {
   .hamburger-btn { display: flex; }
   .top-nav { display: none; }
-  .top-search { min-width: 36px; }
-  .top-search input { display: none; }
-  .top-search:focus-within input { display: block; min-width: 140px; }
+
+  /* Buscador mobile: siempre visible como ícono, se expande al tocar */
+  .top-search {
+    min-width: 36px; max-width: 36px;
+    padding: 0 10px; overflow: hidden;
+    transition: max-width 0.3s ease, padding 0.3s ease;
+    position: relative; z-index: 10;
+  }
+  .top-search input {
+    display: block; width: 0; opacity: 0;
+    transition: width 0.3s ease, opacity 0.2s ease;
+    pointer-events: none;
+  }
+  .top-search.expanded {
+    max-width: 200px; padding: 0 10px;
+    border-color: #666;
+  }
+  .top-search.expanded input {
+    width: 120px; opacity: 1; pointer-events: auto;
+  }
+  #btnClearSearch { display: none; }
+  .top-search.expanded #btnClearSearch { display: flex; }
 }
