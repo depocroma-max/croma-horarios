@@ -396,7 +396,7 @@ function renderEmpleados(datos) {
           <div class="emp-stat-label">Hs extra</div>
         </div>
         <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.sabados}</div>
+          <div class="emp-stat-val">${e.sabados.size}</div>
           <div class="emp-stat-label">Sábados</div>
         </div>
       </div>
@@ -900,13 +900,13 @@ function generarEvolucionHTML(datos, nombreEmp, suc) {
   const porMes = {};
   registros.forEach(r => {
     const key = `${r.AÑO}||${r.MES}`;
-    if (!porMes[key]) porMes[key] = { horas: 0, dias: new Set(), hsExtra: 0, sabados: 0 };
+    if (!porMes[key]) porMes[key] = { horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set() };
     const hs = parseFloat(r.TOTAL_HS) || 0;
     porMes[key].horas += hs;
     porMes[key].dias.add(r.DIA);
     if (hs > 8) porMes[key].hsExtra += hs - 8;
     const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
-    if (dow === 6) porMes[key].sabados++;
+    if (dow === 6) porMes[key].sabados.add(r.DIA);
   });
 
   const meses = Object.entries(porMes).sort((a, b) => {
@@ -931,7 +931,7 @@ function generarEvolucionHTML(datos, nombreEmp, suc) {
         </div>
       </td>
       <td>${v.hsExtra > 0 ? `<span class="hs-extra">${v.hsExtra.toFixed(0)}h</span>` : '—'}</td>
-      <td>${v.sabados || '—'}</td>
+      <td>${v.sabados.size || '—'}</td>
     </tr>`;
   }).join('');
 
@@ -1267,13 +1267,13 @@ function renderResumenMes(datos) {
   const empMap = {};
   datosMes.forEach(r => {
     const key = `${r.EMPLEADO}||${r.LOCAL}`;
-    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: 0, tm: 0, tt: 0, comp: 0 };
+    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(), tm: 0, tt: 0, comp: 0 };
     const hs = parseFloat(r.TOTAL_HS) || 0;
     empMap[key].horas += hs;
     empMap[key].dias.add(r.DIA);
     if (hs > 8) empMap[key].hsExtra += hs - 8;
     const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
-    if (dow === 6) empMap[key].sabados++;
+    if (dow === 6) empMap[key].sabados.add(r.DIA);
     const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
     if (tipo === 'TM') empMap[key].tm++;
     else if (tipo === 'TT') empMap[key].tt++;
