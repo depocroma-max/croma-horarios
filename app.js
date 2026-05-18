@@ -351,13 +351,13 @@ function renderEmpleados(datos) {
   datosFilt.forEach(r => {
     if (selEmp !== 'all' && r.EMPLEADO !== selEmp) return;
     const key = r.EMPLEADO;
-    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, suc: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: 0 };
+    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, suc: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set() };
     empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
     empMap[key].dias.add(`${r.DIA}-${r.MES}-${r.AÑO}`);
     const hsDay = parseFloat(r.TOTAL_HS) || 0;
     if (hsDay > 8) empMap[key].hsExtra += hsDay - 8;
     const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
-    if (dow === 6) empMap[key].sabados++;
+    if (dow === 6) empMap[key].sabados.add(`${r.DIA}-${r.MES}-${r.AÑO}`);
   });
 
   const lista = Object.values(empMap).sort((a, b) => {
@@ -1319,7 +1319,7 @@ function renderResumenMes(datos) {
       <td>${e.dias.size}</td>
       <td><strong>${e.horas.toFixed(1)}</strong></td>
       <td>${e.hsExtra > 0 ? `<span class="hs-extra">${e.hsExtra.toFixed(1)}</span>` : '—'}</td>
-      <td>${e.sabados || '—'}</td>
+      <td>${e.sabados.size || '—'}</td>
       <td>${e.tm || '—'}</td>
       <td>${e.tt || '—'}</td>
       <td>${e.comp || '—'}</td>
