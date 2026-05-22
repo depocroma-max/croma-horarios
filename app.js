@@ -372,7 +372,7 @@ function renderEmpleados(datos) {
     const nomMostrar = numMatch ? numMatch[2] : e.nombre;
     const nombrePartes = nomMostrar.split(' ');
     const iniciales = nombrePartes.slice(0,2).map(p => p[0]?.toUpperCase()).join('');
-    return `<div class="emp-card" onclick="abrirDetalleEmpleado('${e.nombre.replace(/'/g,"\''")}', '${e.suc}')" style="cursor:pointer">
+    return `<div class="emp-card" onclick="abrirDetalleEmpleadoDesdePanel('${e.nombre.replace(/'/g,"\''")}', '${e.suc}')" style="cursor:pointer">
       <div class="emp-card-head">
         <div class="emp-avatar" style="background:${s.colorLight};color:${s.color}">
           ${numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales}
@@ -440,7 +440,14 @@ function abrirDetalleEmpleado(nombreEmp, sucId) {
   abrirDetalleEmpleadoConDatos(nombreEmp, sucId, state.datos.filter(r => r.EMPLEADO === nombreEmp));
 }
 
-function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
+function abrirDetalleEmpleadoDesdePanel(nombreEmp, sucId) {
+  // Leer el período seleccionado en el panel de empleados
+  const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
+  const registros  = state.datos.filter(r => r.EMPLEADO === nombreEmp);
+  abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registros, selPeriodo !== 'all' ? selPeriodo : null);
+}
+
+function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, periodoForzado) {
   const datos = state.datos;
   const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
 
@@ -562,7 +569,9 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
   }
 
   // Período inicial: el más reciente
-  const periodoInicial = periodos[periodos.length - 1] || 'TODOS';
+  const periodoInicial = (periodoForzado && periodos.includes(periodoForzado))
+    ? periodoForzado
+    : (periodos[periodos.length - 1] || 'TODOS');
   const { filas: filasIni, totalHoras: thIni, totalHsExtra: theIni, totalSabs: tsIni, diasUnicos: duIni } = calcularContenido(periodoInicial);
 
   const opcionesMes = [`<option value="TODOS">Todos los registros</option>`]
