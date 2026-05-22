@@ -444,74 +444,130 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
   const datos = state.datos;
   const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
 
-  // Registros ya filtrados, ordenados por fecha
-  const registros = registrosFiltrados
-    .sort((a, b) => {
-      const fa = new Date(a.AÑO, MESES_ES.indexOf(a.MES), parseInt(a.DIA));
-      const fb = new Date(b.AÑO, MESES_ES.indexOf(b.MES), parseInt(b.DIA));
-      return fb - fa; // más reciente primero
-    });
-
-  if (!registros.length) { showToast('Sin registros para este empleado'); return; }
-
-  // Agrupar por fecha para detectar doble turno
-  const porFecha = {};
-  registros.forEach(r => {
-    const key = `${r.AÑO}-${r.MES}-${r.DIA}`;
-    if (!porFecha[key]) porFecha[key] = [];
-    porFecha[key].push(r);
+  // Registros ya filtrados, ordenados por fecha (más reciente primero)
+  const registrosTodos = registrosFiltrados.sort((a, b) => {
+    const fa = new Date(a.AÑO, MESES_ES.indexOf(a.MES), parseInt(a.DIA));
+    const fb = new Date(b.AÑO, MESES_ES.indexOf(b.MES), parseInt(b.DIA));
+    return fb - fa;
   });
 
+  if (!registrosTodos.length) { showToast('Sin registros para este empleado'); return; }
+
   // Separar número y nombre
-  const numMatch = nombreEmp.match(/^(\d+)\s+(.+)$/);
-  const numVend  = numMatch ? numMatch[1] : '';
+  const numMatch   = nombreEmp.match(/^(\d+)\s+(.+)$/);
+  const numVend    = numMatch ? numMatch[1] : '';
   const nomMostrar = numMatch ? numMatch[2] : nombreEmp;
 
-  // Totales generales
-  const totalHoras = registros.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
-  const diasUnicos = Object.keys(porFecha).length;
-  const sabados    = registros.filter(r => {
-    const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
-    return dow === 6;
-  }).length;
+  // Obtener períodos disponibles ordenados cronológicamente
+  const ORDEN_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                       'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  const periodosSet = new Set();
+  registrosTodos.forEach(r => periodosSet.add(r.MES + ' ' + r.AÑO));
+  const periodos = Array.from(periodosSet).sort((a, b) => {
+    const [mA, aA] = a.split(' ');
+    const [mB, aB] = b.split(' ');
+    if (aA !== aB) return parseInt(aA) - parseInt(aB);
+    return ORDEN_MESES.indexOf(mA) - ORDEN_MESES.indexOf(mB);
+  });
 
   const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
-  // Construir filas — una por fecha (agrupando doble turno)
-  const filas = Object.entries(porFecha).map(([key, regs]) => {
-    regs.sort((a, b) => (a.H_ENTRADA || '').localeCompare(b.H_ENTRADA || ''));
-    const r0 = regs[0];
-    const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
-    const fechaStr = fecha.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-    const diaSem  = DIAS_SEMANA[fecha.getDay()];
-    const esSab   = fecha.getDay() === 6;
-    const esDom   = fecha.getDay() === 0;
+  // Función para calcular filas y totales según período seleccionado
+  function calcularContenido(periodo) {
+    const registros = periodo === 'TODOS'
+      ? registrosTodos
+      : registrosTodos.filter(r => (r.MES + ' ' + r.AÑO) === periodo);
 
-    // Hora de registro (MARCA_TEMPORAL)
-    let horaReg = '';
-    if (r0.MARCA_TEMPORAL) {
-      try {
-        const mt = new Date(r0.MARCA_TEMPORAL);
-        horaReg = mt.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
-      } catch(e) {}
-    }
+    const porFecha = {};
+    registros.forEach(r => {
+      const key = `${r.AÑO}-${r.MES}-${r.DIA}`;
+      if (!porFecha[key]) porFecha[key] = [];
+      porFecha[key].push(r);
+    });
 
-    const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '—';
-    const turno2 = regs[1] && regs[1].H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
-    const hsTotal = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
-    // Horas extra: lo que supera 8hs en el día
-    const hsExtra = Math.max(0, hsTotal - 8);
-    const nota = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
-    const localStr = regs.map(r => {
-      const s = SUCURSALES.find(x => x.id === r.LOCAL);
-      return s ? s.nombre : r.LOCAL;
-    }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
+    const totalHoras = registros.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
+    const diasUnicos = Object.keys(porFecha).length;
 
-    return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, nota, localStr };
-  });
+    const filas = Object.entries(porFecha).map(([key, regs]) => {
+      regs.sort((a, b) => (a.H_ENTRADA || '').localeCompare(b.H_ENTRADA || ''));
+      const r0 = regs[0];
+      const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
+      const fechaStr = fecha.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+      const diaSem  = DIAS_SEMANA[fecha.getDay()];
+      const esSab   = fecha.getDay() === 6;
+      const esDom   = fecha.getDay() === 0;
 
-  const totalHsExtra = filas.reduce((a, f) => a + f.hsExtra, 0);
-  const totalSabs    = filas.filter(f => f.esSab).length;
+      let horaReg = '';
+      if (r0.MARCA_TEMPORAL) {
+        try {
+          const mt = new Date(r0.MARCA_TEMPORAL);
+          horaReg = mt.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+        } catch(e) {}
+      }
+
+      const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '—';
+      const turno2  = regs[1] && regs[1].H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
+      const hsTotal = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
+      const hsExtra = Math.max(0, hsTotal - 8);
+      const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
+      const localStr = regs.map(r => {
+        const s = SUCURSALES.find(x => x.id === r.LOCAL);
+        return s ? s.nombre : r.LOCAL;
+      }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
+
+      return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, nota, localStr };
+    });
+
+    const totalHsExtra = filas.reduce((a, f) => a + f.hsExtra, 0);
+    const totalSabs    = filas.filter(f => f.esSab).length;
+
+    return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos };
+  }
+
+  // Función para re-renderizar tabla y stats al cambiar mes
+  function renderDetalle(periodo) {
+    const { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcularContenido(periodo);
+    const periodoLabel = periodo === 'TODOS' ? 'Todos los registros' : periodo;
+
+    document.getElementById('detalleStatDias').textContent  = diasUnicos;
+    document.getElementById('detalleStatHs').textContent    = totalHoras.toFixed(1);
+    document.getElementById('detalleStatExtra').textContent = totalHsExtra.toFixed(1);
+    document.getElementById('detalleStatSabs').textContent  = totalSabs;
+    document.getElementById('detalleSub').textContent       = suc.nombre + ' · ' + periodoLabel;
+
+    document.getElementById('detalleTbody').innerHTML = filas.map(f => `
+      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''}">
+        <td>${f.fechaStr}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">${f.horaReg}</td>
+        <td class="turno-cell">${f.turno1}</td>
+        <td class="turno-cell">${f.turno2 || '—'}</td>
+        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td>${f.hsExtra > 0 ? `<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>` : '—'}</td>
+        <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
+        <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
+        <td class="nota-cell">${f.nota || ''}</td>
+      </tr>`).join('');
+
+    document.getElementById('detalleTfoot').innerHTML = `
+      <tr>
+        <td colspan="2"><strong>TOTALES</strong></td>
+        <td>${diasUnicos}</td>
+        <td colspan="2"></td>
+        <td><strong>${totalHoras.toFixed(1)}</strong></td>
+        <td>${totalHsExtra > 0 ? `<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>` : '—'}</td>
+        <td>${totalSabs}</td>
+        <td colspan="2"></td>
+      </tr>`;
+  }
+
+  // Período inicial: el más reciente
+  const periodoInicial = periodos[periodos.length - 1] || 'TODOS';
+  const { filas: filasIni, totalHoras: thIni, totalHsExtra: theIni, totalSabs: tsIni, diasUnicos: duIni } = calcularContenido(periodoInicial);
+
+  const opcionesMes = [`<option value="TODOS">Todos los registros</option>`]
+    .concat(periodos.map(p => `<option value="${p}" ${p === periodoInicial ? 'selected' : ''}>${p}</option>`))
+    .join('');
 
   const html = `
   <div class="detalle-overlay" onclick="cerrarDetalle(event)">
@@ -523,9 +579,12 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
               ${numVend ? `<span class="detalle-num" style="background:${suc.colorLight};color:${suc.color}">#${numVend}</span>` : ''}
               ${nomMostrar}
             </div>
-            <div class="detalle-sub">${suc.nombre} · Todos los registros</div>
+            <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
           </div>
           <div class="detalle-acciones">
+            <select id="detalleSelectMes" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:12px;font-family:inherit;background:#f8f9fa;color:#333;cursor:pointer;margin-right:6px;">
+              ${opcionesMes}
+            </select>
             <button class="btn-detalle-accion" onclick="imprimirDetalleEmpleado()" title="Imprimir / PDF">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               PDF
@@ -538,10 +597,10 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
           </div>
         </div>
         <div class="detalle-stats-row">
-          <div class="detalle-stat"><span class="detalle-stat-val">${diasUnicos}</span><span class="detalle-stat-lbl">Días</span></div>
-          <div class="detalle-stat"><span class="detalle-stat-val">${totalHoras.toFixed(1)}</span><span class="detalle-stat-lbl">Hs totales</span></div>
-          <div class="detalle-stat"><span class="detalle-stat-val">${totalHsExtra.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
-          <div class="detalle-stat"><span class="detalle-stat-val">${totalSabs}</span><span class="detalle-stat-lbl">Sábados</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatDias">${duIni}</span><span class="detalle-stat-lbl">Días</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatHs">${thIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs totales</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatExtra">${theIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatSabs">${tsIni}</span><span class="detalle-stat-lbl">Sábados</span></div>
         </div>
       </div>
       <div class="detalle-tabs">
@@ -552,20 +611,14 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
         <table class="detalle-tabla">
           <thead>
             <tr>
-              <th>Fecha</th>
-              <th>Día</th>
-              <th>Hora reg.</th>
-              <th>Turno 1</th>
-              <th>Turno 2</th>
-              <th>Hs total</th>
-              <th>Hs extra</th>
-              <th>Sáb.</th>
-              <th>Local</th>
-              <th>Nota</th>
+              <th>Fecha</th><th>Día</th><th>Hora reg.</th>
+              <th>Turno 1</th><th>Turno 2</th>
+              <th>Hs total</th><th>Hs extra</th>
+              <th>Sáb.</th><th>Local</th><th>Nota</th>
             </tr>
           </thead>
-          <tbody>
-            ${filas.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''}">
+          <tbody id="detalleTbody">
+            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''}">
               <td>${f.fechaStr}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
@@ -578,14 +631,14 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
               <td class="nota-cell">${f.nota || ''}</td>
             </tr>`).join('')}
           </tbody>
-          <tfoot>
+          <tfoot id="detalleTfoot">
             <tr>
               <td colspan="2"><strong>TOTALES</strong></td>
-              <td>${diasUnicos}</td>
+              <td>${duIni}</td>
               <td colspan="2"></td>
-              <td><strong>${totalHoras.toFixed(1)}</strong></td>
-              <td>${totalHsExtra > 0 ? `<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>` : '—'}</td>
-              <td>${totalSabs}</td>
+              <td><strong>${thIni.toFixed(1)}</strong></td>
+              <td>${theIni > 0 ? `<span class="hs-extra">${theIni.toFixed(1)}</span>` : '—'}</td>
+              <td>${tsIni}</td>
               <td colspan="2"></td>
             </tr>
           </tfoot>
@@ -597,7 +650,6 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
     </div>
   </div>`;
 
-  // Insertar overlay
   const existing = document.getElementById('detalleOverlay');
   if (existing) existing.remove();
   const div = document.createElement('div');
@@ -605,6 +657,11 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados) {
   div.innerHTML = html;
   document.body.appendChild(div);
   document.body.style.overflow = 'hidden';
+
+  // Evento del selector de mes — actualiza tabla y stats en tiempo real
+  document.getElementById('detalleSelectMes').addEventListener('change', function() {
+    renderDetalle(this.value);
+  });
 }
 
 function abrirDetalleDia(dia, mesIdx, anio) {
