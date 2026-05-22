@@ -1328,13 +1328,22 @@ function renderResumenMes(datos) {
     const hs = parseFloat(r.TOTAL_HS) || 0;
     empMap[key].horas += hs;
     empMap[key].dias.add(r.DIA);
-    if (hs > 8) empMap[key].hsExtra += hs - 8;
+    // Acumular horas por día para calcular extra correctamente (turnos cortados)
+    if (!empMap[key].hsPorDia) empMap[key].hsPorDia = {};
+    const diaKey = r.AÑO + '-' + r.MES + '-' + r.DIA;
+    empMap[key].hsPorDia[diaKey] = (empMap[key].hsPorDia[diaKey] || 0) + hs;
     const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
     if (dow === 6) empMap[key].sabados.add(r.DIA);
     const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
     if (tipo === 'TM') empMap[key].tm++;
     else if (tipo === 'TT') empMap[key].tt++;
     else if (tipo === 'COMP') empMap[key].comp++;
+  });
+
+  // Calcular hsExtra correctamente agrupando por día
+  Object.values(empMap).forEach(e => {
+    e.hsExtra = Object.values(e.hsPorDia || {})
+      .reduce((acc, hsDia) => acc + Math.max(0, hsDia - 8), 0);
   });
 
   const lista = Object.values(empMap).sort((a, b) => b.horas - a.horas);
