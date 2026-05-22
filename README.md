@@ -75,7 +75,7 @@ Repetí este proceso para cada una de las 6 sucursales.
 
 ## Notas técnicas
 
-- Los datos se cargan al iniciar y al presionar refresh — no hay auto-refresh
+- Los datos se cargan al iniciar, al presionar refresh y cada 5 min hay auto-refresh
 - Las URLs de conexión se guardan en `localStorage` del navegador
 - El modo demo funciona sin conexión para mostrar el panel con datos de ejemplo
 - Compatible con Chrome, Firefox y Edge modernos
