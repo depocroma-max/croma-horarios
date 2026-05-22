@@ -441,10 +441,15 @@ function abrirDetalleEmpleado(nombreEmp, sucId) {
 }
 
 function abrirDetalleEmpleadoDesdePanel(nombreEmp, sucId) {
-  // Leer el período seleccionado en el panel de empleados
+  // Leer el período seleccionado en el panel de empleados (formato: "2026||ABRIL")
   const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
   const registros  = state.datos.filter(r => r.EMPLEADO === nombreEmp);
-  abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registros, selPeriodo !== 'all' ? selPeriodo : null);
+  let periodoForzado = null;
+  if (selPeriodo !== 'all') {
+    const [anio, mes] = selPeriodo.split('||');
+    periodoForzado = mes + ' ' + anio; // convierte a "ABRIL 2026"
+  }
+  abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registros, periodoForzado);
 }
 
 function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, periodoForzado) {
