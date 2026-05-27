@@ -21,6 +21,109 @@ const DIAS      = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const MESES_ES  = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
                    'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 
+// ── EMPRESAS ───────────────────────────────────────────
+const EMPRESAS = ['MOSHE SRL', 'CROMAWAVE SRL'];
+
+// ── CATEGORÍAS DE EMPLEADOS ────────────────────────────
+// Se cargan desde el Sheet (hoja CATEGORIAS) y se cachean aquí
+// Formato: { id, nombre, hsDiarias, diasBase (array de 0-6, 0=Dom), percibe_extra }
+let CATEGORIAS_CONFIG = [
+  {
+    id: 'JC',
+    nombre: 'Jornada Completa',
+    descripcion: '8h Lun-Vie, 4h Sáb',
+    // Regla: Lun-Vie máx 8h, Sáb máx 4h; excedente = extra
+    regla: 'lv8_s4',
+    percibe_extra: true,
+  },
+  {
+    id: 'MJ',
+    nombre: 'Media Jornada',
+    descripcion: '4h Lun-Sáb',
+    regla: 'fijo4',        // 4h cualquier día; excedente = extra
+    percibe_extra: true,
+  },
+  {
+    id: 'FR',
+    nombre: 'Franquero',
+    descripcion: 'Sin horas extra',
+    regla: 'sin_extra',
+    percibe_extra: false,
+  },
+];
+
+// ── PERFILES DE EMPLEADOS ──────────────────────────────
+// Se cargan desde el Sheet (hoja EMPLEADOS) y se cachean aquí
+// Formato: { nombre, empresa, categoria_id, hs_base, dias_base, foto_url, activo, regla_custom }
+let EMPLEADOS_PERFILES = {};   // clave: nombre exacto del empleado
+
+// Helper: obtener categoría de un empleado
+function getCategoriaEmpleado(nombreEmp) {
+  const perfil = EMPLEADOS_PERFILES[nombreEmp];
+  if (!perfil) return null;
+  return CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id) || null;
+}
+
+// Helper: calcular horas extra según categoría personalizada
+function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
+  const perfil = EMPLEADOS_PERFILES[nombreEmp];
+  if (!perfil) return Math.max(0, hsTotal - 8); // fallback genérico
+
+  const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
+  if (!cat || !cat.percibe_extra) return 0;
+
+  // Regla custom por empleado (ej: "lv4" = 4h Lun-Vie, excedente extra)
+  if (perfil.regla_custom) {
+    const dow = fechaDate ? fechaDate.getDay() : -1;
+    const esFinDeSemana = dow === 0 || dow === 6;
+    const limite = perfil.regla_custom === 'lv4'
+      ? (esFinDeSemana ? 0 : 4)
+      : perfil.hs_base || 8;
+    return Math.max(0, hsTotal - limite);
+  }
+
+  // Reglas predefinidas por categoría
+  const dow = fechaDate ? fechaDate.getDay() : -1;
+  if (cat.regla === 'lv8_s4') {
+    const esSab = dow === 6;
+    const limite = esSab ? 4 : 8;
+    return Math.max(0, hsTotal - limite);
+  }
+  if (cat.regla === 'fijo4') {
+    return Math.max(0, hsTotal - 4);
+  }
+  if (cat.regla === 'sin_extra') return 0;
+
+  // Regla personalizada por hs_base
+  return Math.max(0, hsTotal - (perfil.hs_base || 8));
+}
+
+// ── FERIADOS ARGENTINA 2025-2026 ───────────────────────
+const FERIADOS = new Set([
+  // 2025
+  '2025-01-01','2025-03-03','2025-03-04','2025-03-24','2025-04-02',
+  '2025-04-17','2025-04-18','2025-05-01','2025-05-25','2025-06-16',
+  '2025-06-20','2025-07-09','2025-08-17','2025-10-12','2025-11-20',
+  '2025-12-08','2025-12-25',
+  // 2026
+  '2026-01-01','2026-02-16','2026-02-17','2026-03-24','2026-04-02',
+  '2026-04-03','2026-04-04','2026-05-01','2026-05-25','2026-06-15',
+  '2026-06-20','2026-07-09','2026-08-17','2026-10-12','2026-11-20',
+  '2026-12-08','2026-12-25',
+]);
+
+function esFeriado(date) {
+  const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  return FERIADOS.has(key);
+}
+
+// ── FILTROS DE DÍA (Feriados / Sábados / Domingos) ────
+let filtrosDia = {
+  ocultarFeriados: false,
+  ocultarSabados:  false,
+  ocultarDomingos: false,
+};
+
 // URL fija del Apps Script (no requiere configuración manual)
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxfWe4uREUDqnOiMVMGQH3pGKZk1OdfNT8k0TyeYjZGyiFuNE4j5AM3pRkQWcG8Hcy6/exec';
 
@@ -196,8 +299,10 @@ function renderGrilla(datos) {
   // armar encabezados de días
   const thDias = DIAS.map((d, i) => {
     const f = new Date(lunes); f.setDate(lunes.getDate() + i);
+    if (diaFiltrado(f)) return '';
     const esHoy = f.toDateString() === hoy.toDateString();
-    return `<th class="${esHoy ? 'hoy' : ''}">${d}<br><small>${formatFecha(f)}</small></th>`;
+    const esFer = esFeriado(f);
+    return `<th class="${esHoy ? 'hoy' : ''} ${esFer ? 'th-feriado' : ''}">${d}${esFer?' 🗓':''}${f.getDay()===6?' (Sáb)':f.getDay()===0?' (Dom)':''}<br><small>${formatFecha(f)}</small></th>`;
   }).join('');
 
   let html = '';
@@ -235,6 +340,7 @@ function renderGrilla(datos) {
       let totalEmp = 0;
       const celdas = DIAS.map((_, i) => {
         const f = new Date(lunes); f.setDate(lunes.getDate() + i);
+        if (diaFiltrado(f)) return '';
         const esHoy = f.toDateString() === hoy.toDateString();
 
         // Buscar TODOS los registros del empleado en ese día (para turno cortado)
@@ -304,6 +410,7 @@ function renderEmpleados(datos) {
   const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
   const selLocal   = document.getElementById('empFiltLocal')?.value   || 'all';
   const selEmp     = document.getElementById('empFiltEmp')?.value     || 'all';
+  const selEmpresa = document.getElementById('empFiltEmpresa')?.value || 'all';
 
   // Datos filtrados
   let datosFilt = datos;
@@ -312,6 +419,12 @@ function renderEmpleados(datos) {
     datosFilt = datosFilt.filter(r => String(r.AÑO) === anio && r.MES === mes);
   }
   if (selLocal !== 'all') datosFilt = datosFilt.filter(r => r.LOCAL === selLocal);
+  if (selEmpresa !== 'all') {
+    datosFilt = datosFilt.filter(r => {
+      const perfil = EMPLEADOS_PERFILES[r.EMPLEADO];
+      return perfil && perfil.empresa === selEmpresa;
+    });
+  }
 
   // Empleados disponibles según filtros de período y local
   const empsDisp = [...new Set(datosFilt.map(r => r.EMPLEADO))].sort((a, b) => {
@@ -348,16 +461,39 @@ function renderEmpleados(datos) {
   const suc = (id) => SUCURSALES.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
 
   const empMap = {};
+  // Agrupar primero por empleado+día para calcular total diario
+  const porEmpDia = {};
+  datosFilt.forEach(r => {
+    if (selEmp !== 'all' && r.EMPLEADO !== selEmp) return;
+    const dayKey = `${r.EMPLEADO}||${r.AÑO}-${r.MES}-${r.DIA}`;
+    if (!porEmpDia[dayKey]) porEmpDia[dayKey] = { emp: r.EMPLEADO, suc: r.LOCAL, anio: r.AÑO, mes: r.MES, dia: r.DIA, hs: 0 };
+    porEmpDia[dayKey].hs += parseFloat(r.TOTAL_HS) || 0;
+  });
+
   datosFilt.forEach(r => {
     if (selEmp !== 'all' && r.EMPLEADO !== selEmp) return;
     const key = r.EMPLEADO;
-    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, suc: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set() };
+    if (!empMap[key]) {
+      const perfil = EMPLEADOS_PERFILES[r.EMPLEADO] || {};
+      const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
+      empMap[key] = { nombre: r.EMPLEADO, suc: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(),
+                      empresa: perfil.empresa || '—', categoria: cat?.nombre || '—', foto_url: perfil.foto_url || '',
+                      diasProcesados: new Set() };
+    }
     empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
     empMap[key].dias.add(`${r.DIA}-${r.MES}-${r.AÑO}`);
-    const hsDay = parseFloat(r.TOTAL_HS) || 0;
-    if (hsDay > 8) empMap[key].hsExtra += hsDay - 8;
     const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
     if (dow === 6) empMap[key].sabados.add(`${r.DIA}-${r.MES}-${r.AÑO}`);
+  });
+
+  // Calcular hsExtra por día (suma total del día vs límite de categoría)
+  Object.values(porEmpDia).forEach(d => {
+    const key = d.emp;
+    if (!empMap[key]) return;
+    if (empMap[key].diasProcesados.has(`${d.anio}-${d.mes}-${d.dia}`)) return;
+    empMap[key].diasProcesados.add(`${d.anio}-${d.mes}-${d.dia}`);
+    const fecha = new Date(d.anio, MESES_ES.indexOf(d.mes), parseInt(d.dia));
+    empMap[key].hsExtra += calcularHsExtra(d.emp, d.hs, fecha);
   });
 
   const lista = Object.values(empMap).sort((a, b) => {
@@ -372,14 +508,30 @@ function renderEmpleados(datos) {
     const nomMostrar = numMatch ? numMatch[2] : e.nombre;
     const nombrePartes = nomMostrar.split(' ');
     const iniciales = nombrePartes.slice(0,2).map(p => p[0]?.toUpperCase()).join('');
-    return `<div class="emp-card" onclick="abrirDetalleEmpleadoDesdePanel('${e.nombre.replace(/'/g,"\''")}', '${e.suc}')" style="cursor:pointer">
+
+    // Avatar: foto o iniciales
+    const avatarInner = e.foto_url
+      ? `<img src="${e.foto_url}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.parentElement.innerHTML='${iniciales}'">`
+      : (numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales);
+
+    // Badge empresa
+    const empresaBadge = e.empresa && e.empresa !== '—'
+      ? `<span class="emp-empresa-badge ${e.empresa === 'MOSHE SRL' ? 'badge-moshe' : 'badge-cromawave'}">${e.empresa}</span>`
+      : '';
+    // Badge categoría
+    const catBadge = e.categoria && e.categoria !== '—'
+      ? `<span class="emp-cat-badge">${e.categoria}</span>`
+      : '';
+
+    return `<div class="emp-card" onclick="abrirDetalleEmpleadoDesdePanel('${e.nombre.replace(/'/g,"\\'")}', '${e.suc}')" style="cursor:pointer">
       <div class="emp-card-head">
-        <div class="emp-avatar" style="background:${s.colorLight};color:${s.color}">
-          ${numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales}
+        <div class="emp-avatar ${e.foto_url ? 'emp-avatar-foto' : ''}" style="${e.foto_url ? '' : `background:${s.colorLight};color:${s.color}`}">
+          ${avatarInner}
         </div>
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="emp-nombre">${nomMostrar}</div>
           <div class="emp-suc">${s.nombre}${numVend ? ` · <span style="color:${s.color};font-weight:500">Vend. #${numVend}</span>` : ''}</div>
+          <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
         </div>
       </div>
       <div class="emp-stats">
@@ -404,12 +556,22 @@ function renderEmpleados(datos) {
     </div>`;
   }).join('');
 
+  const empresaOpts = [`<option value="all">Todas las empresas</option>`,
+    ...EMPRESAS.map(emp => `<option value="${emp}" ${emp === selEmpresa ? 'selected' : ''}>${emp}</option>`)
+  ].join('');
+
   container.innerHTML = `
     <div class="emp-filtros-panel">
       <div class="emp-filtro-grupo">
         <label class="emp-filtro-label">Período</label>
         <select class="emp-filtro-select" id="empFiltPeriodo" onchange="renderEmpleados(state.datos)">
           ${periodoOpts}
+        </select>
+      </div>
+      <div class="emp-filtro-grupo">
+        <label class="emp-filtro-label">Empresa</label>
+        <select class="emp-filtro-select" id="empFiltEmpresa" onchange="renderEmpleados(state.datos)">
+          ${empresaOpts}
         </select>
       </div>
       <div class="emp-filtro-grupo">
@@ -520,7 +682,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '—';
       const turno2  = regs[1] && regs[1].H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
       const hsTotal = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
-      const hsExtra = Math.max(0, hsTotal - 8);
+      const hsExtra = calcularHsExtra(nombreEmp, hsTotal, fecha);
       const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
       const localStr = regs.map(r => {
         const s = SUCURSALES.find(x => x.id === r.LOCAL);
@@ -1302,6 +1464,14 @@ function renderCalendario(datos) {
     const esHoy     = esEsteMes && hoy.getDate() === d;
     const dow       = new Date(anio, mes, d).getDay();
     const esFinde   = dow === 0 || dow === 6;
+    const fechaObj  = new Date(anio, mes, d);
+    const esFer     = esFeriado(fechaObj);
+
+    // Aplicar filtros de día
+    if (diaFiltrado(fechaObj)) {
+      html += `<div class="cal-celda cal-vacia"></div>`;
+      continue;
+    }
 
     // Contar tipos de turno
     const tm   = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'TM').length;
@@ -1309,9 +1479,9 @@ function renderCalendario(datos) {
     const comp = registros.filter(r => clasificarTurno(r.H_ENTRADA, r.H_SALIDA) === 'COMP').length;
 
     const diaKey = `${anio}-${mes}-${d}`;
-    html += `<div class="cal-celda ${esHoy ? 'cal-hoy' : ''} ${esFinde ? 'cal-finde' : ''} ${registros.length ? 'cal-celda-click' : ''}"
+    html += `<div class="cal-celda ${esHoy ? 'cal-hoy' : ''} ${esFinde ? 'cal-finde' : ''} ${esFer ? 'cal-feriado' : ''} ${registros.length ? 'cal-celda-click' : ''}"
       ${registros.length ? `onclick="abrirDetalleDia(${d}, ${mes}, ${anio})"` : ''}>
-      <div class="cal-num">${d}</div>
+      <div class="cal-num">${d}${esFer ? '<span class="cal-feriado-tag">F</span>' : ''}</div>
       ${registros.length ? `
         <div class="cal-emps">${emps} emp.</div>
         <div class="cal-pills-mini">
@@ -1442,7 +1612,69 @@ function poblarFiltroEmpleados(datos) {
     emps.map(e => `<option value="${e}" ${e === actual ? 'selected' : ''}>${e}</option>`).join('');
 }
 
-// ── CONEXIÓN A APPS SCRIPT ─────────────────────────────
+// ── CARGA DE PERFILES DE EMPLEADOS ────────────────────
+async function cargarPerfiles() {
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=perfiles`);
+    if (!resp.ok) return;
+    const json = await resp.json();
+
+    // Cargar categorías
+    if (json.categorias && json.categorias.length) {
+      CATEGORIAS_CONFIG = json.categorias;
+    }
+
+    // Cargar perfiles
+    if (json.empleados && json.empleados.length) {
+      EMPLEADOS_PERFILES = {};
+      json.empleados.forEach(e => {
+        EMPLEADOS_PERFILES[e.nombre] = e;
+      });
+    }
+  } catch(err) {
+    console.warn('No se pudieron cargar perfiles:', err);
+  }
+}
+
+async function guardarPerfil(perfil) {
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardar_perfil`, {
+      method: 'POST',
+      body: JSON.stringify(perfil),
+    });
+    const json = await resp.json();
+    if (json.ok) {
+      EMPLEADOS_PERFILES[perfil.nombre] = perfil;
+      showToast('✓ Perfil guardado');
+      renderAll();
+    } else {
+      showToast('Error al guardar: ' + (json.error || 'desconocido'));
+    }
+  } catch(e) {
+    showToast('Error de conexión al guardar');
+  }
+}
+
+async function guardarCategoria(cat) {
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardar_categoria`, {
+      method: 'POST',
+      body: JSON.stringify(cat),
+    });
+    const json = await resp.json();
+    if (json.ok) {
+      const idx = CATEGORIAS_CONFIG.findIndex(c => c.id === cat.id);
+      if (idx >= 0) CATEGORIAS_CONFIG[idx] = cat;
+      else CATEGORIAS_CONFIG.push(cat);
+      showToast('✓ Categoría guardada');
+      renderAdmin();
+    } else {
+      showToast('Error al guardar categoría');
+    }
+  } catch(e) {
+    showToast('Error de conexión');
+  }
+}
 // Una sola URL sirve para todas las hojas usando ?hoja=NOMBRE
 async function fetchSucursal(url, suc) {
   try {
@@ -1459,6 +1691,9 @@ async function fetchSucursal(url, suc) {
 async function cargarDatos(urls) {
   state.cargando = true;
   showToast('Cargando datos...');
+
+  // Cargar perfiles de empleados en paralelo
+  cargarPerfiles();
 
   // Si hay una URL única (clave 'unica'), la usamos para todas las hojas
   const urlUnica = urls['unica'] || null;
@@ -1592,6 +1827,394 @@ function setView(view) {
 }
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function toggleFiltroDia(tipo, activo) {
+  if (tipo === 'feriados')  filtrosDia.ocultarFeriados = activo;
+  if (tipo === 'sabados')   filtrosDia.ocultarSabados  = activo;
+  if (tipo === 'domingos')  filtrosDia.ocultarDomingos = activo;
+  renderAll();
+}
+
+function diaFiltrado(date) {
+  if (filtrosDia.ocultarFeriados && esFeriado(date)) return true;
+  if (filtrosDia.ocultarSabados  && date.getDay() === 6) return true;
+  if (filtrosDia.ocultarDomingos && date.getDay() === 0) return true;
+  return false;
+}
+
+// ── PANEL ADMIN ────────────────────────────────────────
+const ADMIN_PIN = '2811'; // PIN de acceso — cambiarlo en producción
+let adminAutenticado = false;
+
+function abrirAdmin() {
+  if (!adminAutenticado) {
+    mostrarLoginAdmin();
+  } else {
+    renderAdmin();
+  }
+}
+
+function mostrarLoginAdmin() {
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel" onclick="event.stopPropagation()" style="max-width:380px">
+      <div class="admin-header">
+        <div class="admin-titulo">🔐 Acceso Admin</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+      </div>
+      <div style="padding:2rem">
+        <p style="font-size:13px;color:#64748b;margin-bottom:1.5rem">Ingresá el PIN de administrador para continuar.</p>
+        <div style="margin-bottom:1rem">
+          <label class="emp-filtro-label" style="display:block;margin-bottom:6px">PIN</label>
+          <input type="password" id="adminPinInput" class="admin-input" placeholder="••••"
+            maxlength="8" autocomplete="off"
+            onkeydown="if(event.key==='Enter')verificarPin()" />
+        </div>
+        <p id="adminPinError" style="color:#dc2626;font-size:12px;margin-bottom:1rem;display:none">PIN incorrecto</p>
+        <button class="btn-connect" onclick="verificarPin()" style="margin-bottom:0">Ingresar</button>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+  setTimeout(() => document.getElementById('adminPinInput')?.focus(), 100);
+}
+
+function verificarPin() {
+  const val = document.getElementById('adminPinInput')?.value;
+  if (val === ADMIN_PIN) {
+    adminAutenticado = true;
+    renderAdmin();
+  } else {
+    document.getElementById('adminPinError').style.display = 'block';
+    document.getElementById('adminPinInput').value = '';
+    document.getElementById('adminPinInput').focus();
+  }
+}
+
+function renderAdmin() {
+  // Obtener todos los empleados únicos de los datos
+  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a, b) => {
+    const na = parseInt(a) || 999, nb = parseInt(b) || 999;
+    return na !== nb ? na - nb : a.localeCompare(b);
+  });
+
+  const catOpts = CATEGORIAS_CONFIG.map(c =>
+    `<option value="${c.id}">${c.nombre}</option>`
+  ).join('');
+
+  const empresaOpts = EMPRESAS.map(e =>
+    `<option value="${e}">${e}</option>`
+  ).join('');
+
+  // Tabla de empleados
+  const filasEmps = empNombres.map(nombre => {
+    const perfil = EMPLEADOS_PERFILES[nombre] || {};
+    const suc = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
+    const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
+    const nomMostrar = numMatch ? numMatch[2] : nombre;
+    const avatarUrl  = perfil.foto_url || '';
+    const iniciales  = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
+    return `<tr class="admin-emp-row" onclick="abrirEditarEmpleado('${nombre.replace(/'/g,"\\'")}')">
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="admin-avatar-mini" style="background:${avatarUrl?'transparent':'#f1f5f9'}">
+            ${avatarUrl ? `<img src="${avatarUrl}" onerror="this.parentElement.innerHTML='${iniciales}'" style="width:32px;height:32px;border-radius:50%;object-fit:cover">` : `<span style="font-size:11px;font-weight:600;color:#64748b">${iniciales}</span>`}
+          </div>
+          <span>${nomMostrar}</span>
+        </div>
+      </td>
+      <td><span class="suc-badge-mini" style="background:#f1f5f9;color:#475569">${suc.nombre}</span></td>
+      <td>${perfil.empresa ? `<span class="emp-empresa-badge ${perfil.empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}">${perfil.empresa}</span>` : '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
+      <td>${perfil.categoria_id ? `<span class="emp-cat-badge">${CATEGORIAS_CONFIG.find(c=>c.id===perfil.categoria_id)?.nombre||'—'}</span>` : '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
+      <td><span style="font-size:11px;color:#94a3b8">${perfil.foto_url ? '📷 OK' : '—'}</span></td>
+      <td><button class="btn-admin-edit" onclick="event.stopPropagation();abrirEditarEmpleado('${nombre.replace(/'/g,"\\'")}')">Editar</button></td>
+    </tr>`;
+  }).join('');
+
+  // Tabla de categorías
+  const filasCats = CATEGORIAS_CONFIG.map(cat => `
+    <tr>
+      <td><strong>${cat.nombre}</strong></td>
+      <td style="font-size:12px;color:#64748b">${cat.descripcion || '—'}</td>
+      <td>${cat.percibe_extra ? '<span class="pill pill-comp" style="font-size:10px">Sí</span>' : '<span class="pill pill-franco" style="font-size:10px">No</span>'}</td>
+      <td><button class="btn-admin-edit" onclick="abrirEditarCategoria('${cat.id}')">Editar</button></td>
+    </tr>`).join('');
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Panel Admin · Croma Horarios</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn-admin-edit" onclick="adminAutenticado=false;cerrarAdmin()">Cerrar sesión</button>
+          <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="admin-tabs" id="adminTabs">
+        <button class="admin-tab active" onclick="switchAdminTab('empleados',this)">Empleados (${empNombres.length})</button>
+        <button class="admin-tab" onclick="switchAdminTab('categorias',this)">Categorías</button>
+      </div>
+
+      <!-- TAB EMPLEADOS -->
+      <div id="adminTabEmpleados" class="admin-tab-content">
+        <div class="admin-toolbar">
+          <input type="text" class="admin-search" id="adminBuscarEmp" placeholder="Buscar empleado..." oninput="filtrarTablaAdmin(this.value)" />
+          <span style="font-size:12px;color:#94a3b8">${empNombres.length} empleados en el sistema</span>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-tabla" id="adminTablaEmps">
+            <thead>
+              <tr><th>Empleado</th><th>Sucursal</th><th>Empresa</th><th>Categoría</th><th>Foto</th><th></th></tr>
+            </thead>
+            <tbody>${filasEmps || '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8">Sin datos cargados</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB CATEGORÍAS -->
+      <div id="adminTabCategorias" class="admin-tab-content" style="display:none">
+        <div class="admin-toolbar">
+          <button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px" onclick="abrirNuevaCategoria()">+ Nueva categoría</button>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-tabla">
+            <thead><tr><th>Nombre</th><th>Descripción</th><th>Percibe extra</th><th></th></tr></thead>
+            <tbody>${filasCats}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+}
+
+function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('adminTabEmpleados').style.display = tab === 'empleados' ? 'block' : 'none';
+  document.getElementById('adminTabCategorias').style.display = tab === 'categorias' ? 'block' : 'none';
+}
+
+function filtrarTablaAdmin(q) {
+  const rows = document.querySelectorAll('#adminTablaEmps tbody tr');
+  const ql = q.toLowerCase();
+  rows.forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(ql) ? '' : 'none';
+  });
+}
+
+function abrirEditarEmpleado(nombre) {
+  const perfil = EMPLEADOS_PERFILES[nombre] || { nombre };
+  const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
+  const nomMostrar = numMatch ? numMatch[2] : nombre;
+
+  const catOpts = [
+    `<option value="">Sin categoría</option>`,
+    ...CATEGORIAS_CONFIG.map(c =>
+      `<option value="${c.id}" ${perfil.categoria_id === c.id ? 'selected' : ''}>${c.nombre}</option>`
+    )
+  ].join('');
+
+  const empOpts = [
+    `<option value="">Sin empresa</option>`,
+    ...EMPRESAS.map(e =>
+      `<option value="${e}" ${perfil.empresa === e ? 'selected' : ''}>${e}</option>`
+    )
+  ].join('');
+
+  const reglaCustomOpts = `
+    <option value="" ${!perfil.regla_custom?'selected':''}>Usar regla de la categoría</option>
+    <option value="lv4" ${perfil.regla_custom==='lv4'?'selected':''}>4h Lun-Vie (excedente = extra)</option>
+    <option value="lv8" ${perfil.regla_custom==='lv8'?'selected':''}>8h Lun-Vie (excedente = extra)</option>
+    <option value="personalizado" ${perfil.regla_custom==='personalizado'?'selected':''}>Personalizado (usar Hs base)</option>
+  `;
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Editar — ${nomMostrar}</div>
+        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <input type="hidden" id="editNombre" value="${nombre}" />
+
+        <div class="admin-foto-preview" id="adminFotoPreview">
+          ${perfil.foto_url
+            ? `<img src="${perfil.foto_url}" onerror="this.parentElement.innerHTML='Sin foto'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0">`
+            : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:#94a3b8">${nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('')}</div>`
+          }
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">URL de foto (Google Drive)</label>
+          <input type="url" class="admin-input" id="editFotoUrl" value="${perfil.foto_url || ''}"
+            placeholder="https://drive.google.com/..." oninput="previewFoto(this.value)" />
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Empresa</label>
+          <select class="admin-input" id="editEmpresa">${empOpts}</select>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Categoría</label>
+          <select class="admin-input" id="editCategoria">${catOpts}</select>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Regla personalizada de horas extra</label>
+          <select class="admin-input" id="editReglaCustom" onchange="toggleHsBase(this.value)">${reglaCustomOpts}</select>
+        </div>
+
+        <div class="admin-form-grupo" id="editHsBaseGrupo" style="${perfil.regla_custom==='personalizado'?'':'display:none'}">
+          <label class="emp-filtro-label">Horas base por día (límite para extra)</label>
+          <input type="number" class="admin-input" id="editHsBase" value="${perfil.hs_base || 8}" min="1" max="12" step="0.5" />
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarPerfilDesdeForm()">Guardar cambios</button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+}
+
+function previewFoto(url) {
+  const preview = document.getElementById('adminFotoPreview');
+  if (!preview) return;
+  if (!url) { preview.innerHTML = '<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8">Sin foto</div>'; return; }
+  // Convertir link de Drive a thumbnail si corresponde
+  const driveMatch = url.match(/\/d\/([^/]+)/);
+  const imgUrl = driveMatch ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200` : url;
+  preview.innerHTML = `<img src="${imgUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0" onerror="this.parentElement.innerHTML='URL inválida'">`;
+}
+
+function toggleHsBase(val) {
+  document.getElementById('editHsBaseGrupo').style.display = val === 'personalizado' ? 'block' : 'none';
+}
+
+async function guardarPerfilDesdeForm() {
+  const nombre      = document.getElementById('editNombre')?.value;
+  const fotoUrl     = document.getElementById('editFotoUrl')?.value.trim();
+  const empresa     = document.getElementById('editEmpresa')?.value;
+  const categoriaId = document.getElementById('editCategoria')?.value;
+  const reglaCustom = document.getElementById('editReglaCustom')?.value;
+  const hsBase      = parseFloat(document.getElementById('editHsBase')?.value) || 8;
+
+  // Convertir URL de Drive si corresponde
+  let fotoFinal = fotoUrl;
+  const driveMatch = fotoUrl.match(/\/d\/([^/]+)/);
+  if (driveMatch) {
+    fotoFinal = `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200`;
+  }
+
+  const perfil = {
+    nombre,
+    empresa,
+    categoria_id: categoriaId,
+    regla_custom: reglaCustom || '',
+    hs_base: hsBase,
+    foto_url: fotoFinal,
+    activo: true,
+  };
+
+  // Guardar localmente siempre (aunque falle el servidor)
+  EMPLEADOS_PERFILES[nombre] = perfil;
+
+  // Intentar guardar en Sheet
+  await guardarPerfil(perfil);
+  cerrarAdmin();
+  renderAdmin();
+}
+
+function abrirNuevaCategoria() { abrirEditarCategoria(null); }
+
+function abrirEditarCategoria(catId) {
+  const cat = catId ? CATEGORIAS_CONFIG.find(c => c.id === catId) : null;
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">${cat ? 'Editar categoría' : 'Nueva categoría'}</div>
+        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">ID (código corto)</label>
+          <input type="text" class="admin-input" id="catId" value="${cat?.id||''}" placeholder="Ej: JC, MJ, FR..." maxlength="10" ${cat?'readonly':''} />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Nombre</label>
+          <input type="text" class="admin-input" id="catNombre" value="${cat?.nombre||''}" placeholder="Ej: Jornada Completa" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Descripción</label>
+          <input type="text" class="admin-input" id="catDesc" value="${cat?.descripcion||''}" placeholder="Ej: 8h Lun-Vie, 4h Sáb" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Regla de cálculo</label>
+          <select class="admin-input" id="catRegla">
+            <option value="lv8_s4" ${cat?.regla==='lv8_s4'?'selected':''}>8h Lun-Vie, 4h Sáb (Jornada completa)</option>
+            <option value="fijo4" ${cat?.regla==='fijo4'?'selected':''}>4h cualquier día (Media jornada)</option>
+            <option value="sin_extra" ${cat?.regla==='sin_extra'?'selected':''}>Sin horas extra (Franquero)</option>
+            <option value="hs_base" ${cat?.regla==='hs_base'?'selected':''}>Según hs_base del empleado</option>
+          </select>
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="catPercibe" ${cat?.percibe_extra!==false?'checked':''} style="width:16px;height:16px" />
+            Percibe horas extra
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarCategoriaDesdeForm()">Guardar</button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+}
+
+async function guardarCategoriaDesdeForm() {
+  const id       = document.getElementById('catId')?.value.trim().toUpperCase();
+  const nombre   = document.getElementById('catNombre')?.value.trim();
+  const desc     = document.getElementById('catDesc')?.value.trim();
+  const regla    = document.getElementById('catRegla')?.value;
+  const percibe  = document.getElementById('catPercibe')?.checked;
+
+  if (!id || !nombre) { showToast('Completá ID y Nombre'); return; }
+
+  const cat = { id, nombre, descripcion: desc, regla, percibe_extra: percibe };
+  await guardarCategoria(cat);
+}
+
+function montarOverlayAdmin(html) {
+  const existing = document.getElementById('adminOverlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'adminOverlay';
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarAdmin(event) {
+  if (event && event.target !== event.currentTarget) return;
+  const el = document.getElementById('adminOverlay');
+  if (el) el.remove();
+  document.body.style.overflow = '';
+}
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
