@@ -1171,3 +1171,164 @@ body {
 .filtros-dia-inline .filtro-dia-check {
   font-size: 13px;
 }
+
+/* ===== PANTALLA DE LOGIN ===== */
+#loginScreen {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1.5rem;
+  background: var(--black);
+}
+
+.login-card {
+  background: #111; border: 1px solid #222;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+  padding: 3rem 2.5rem;
+  width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+}
+
+.login-logo {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 4px;
+}
+.login-tridente {
+  height: 36px; opacity: 0.9;
+  filter: brightness(0) invert(1);
+}
+.login-brand {
+  font-family: var(--font-display);
+  font-size: 36px; letter-spacing: 4px;
+  color: var(--white); line-height: 1;
+}
+.login-subtitle {
+  font-size: 10px; font-weight: 500; letter-spacing: 5px;
+  color: var(--gray-600); text-transform: uppercase;
+  margin-bottom: 2.5rem;
+}
+
+.login-form {
+  width: 100%; display: flex; flex-direction: column; gap: 1rem;
+}
+.login-grupo { display: flex; flex-direction: column; gap: 6px; }
+.login-label {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--gray-400);
+}
+.login-input {
+  height: 44px; padding: 0 14px;
+  font-family: var(--font-body); font-size: 14px;
+  background: #1a1a1a; border: 1px solid #333;
+  border-radius: var(--radius-md); color: var(--white);
+  transition: border 0.15s; width: 100%;
+}
+.login-input:focus { outline: none; border-color: #666; }
+.login-input::placeholder { color: #444; }
+
+.login-pin-wrap {
+  position: relative; display: flex; align-items: center;
+}
+.login-pin-wrap .login-input { padding-right: 44px; }
+.login-pin-toggle {
+  position: absolute; right: 12px;
+  background: none; border: none;
+  color: var(--gray-600); cursor: pointer; padding: 4px;
+  display: flex; align-items: center;
+  transition: color 0.15s;
+}
+.login-pin-toggle:hover { color: var(--gray-400); }
+
+.login-footer {
+  margin-top: 2rem;
+  font-size: 11px; color: #333; letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ===== CHIP DE SESIÓN EN TOPBAR ===== */
+.sesion-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px 4px 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid #333; border-radius: 20px;
+}
+.sesion-nombre {
+  font-size: 12px; color: var(--gray-400); white-space: nowrap;
+}
+.sesion-logout {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(255,255,255,0.05); border: 1px solid #444;
+  color: var(--gray-600); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.sesion-logout:hover {
+  background: #dc2626; border-color: #dc2626; color: white;
+}
+
+/* ===== VISTA PERSONAL DEL EMPLEADO ===== */
+.emp-vista-personal {
+  max-width: 1000px; margin: 0 auto; padding: 0 0 3rem 0;
+}
+
+.emp-vista-header {
+  background: var(--white); border-radius: var(--radius-lg);
+  border: 1px solid var(--gray-100);
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem 2rem;
+  display: flex; align-items: center; gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.emp-vista-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--gray-100);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; overflow: hidden;
+}
+
+.emp-vista-info {
+  flex: 1; min-width: 0;
+}
+.emp-vista-nombre {
+  font-family: var(--font-display);
+  font-size: 28px; letter-spacing: 1px;
+  color: var(--black); margin-bottom: 2px;
+}
+.emp-vista-suc {
+  font-size: 13px; color: var(--gray-400);
+  margin-bottom: 6px;
+}
+
+.emp-vista-stats {
+  display: flex; gap: 1.5rem; flex-wrap: wrap;
+}
+.emp-vista-stat {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 8px 16px; background: var(--gray-50);
+  border-radius: var(--radius-md); border: 1px solid var(--gray-100);
+  min-width: 70px;
+}
+.emp-vista-stat-val {
+  font-family: var(--font-display); font-size: 28px;
+  letter-spacing: 1px; line-height: 1; color: var(--black);
+}
+.emp-vista-stat-lbl {
+  font-size: 10px; color: var(--gray-400);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;
+  white-space: nowrap;
+}
+
+.emp-vista-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  .login-card { padding: 2.5rem 1.5rem; }
+  .emp-vista-header { flex-direction: column; align-items: flex-start; }
+  .emp-vista-stats { width: 100%; justify-content: space-around; }
+  .sesion-chip { padding: 4px 8px 4px 10px; }
+  .sesion-nombre { font-size: 11px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+}
