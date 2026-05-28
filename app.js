@@ -691,9 +691,6 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       porFecha[key].push(r);
     });
 
-    const totalHoras = registros.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
-    const diasUnicos = Object.keys(porFecha).length;
-
     const filas = Object.entries(porFecha).map(([key, regs]) => {
       regs.sort((a, b) => (a.H_ENTRADA || '').localeCompare(b.H_ENTRADA || ''));
       const r0 = regs[0];
@@ -728,6 +725,9 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr };
     }).filter(Boolean);
 
+    // Totales calculados desde las filas ya filtradas
+    const totalHoras   = filas.reduce((a, f) => a + f.hsTotal, 0);
+    const diasUnicos   = filas.length;
     const totalHsExtra = filas.reduce((a, f) => a + f.hsExtra, 0);
     const totalSabs    = filas.filter(f => f.esSab).length;
 
