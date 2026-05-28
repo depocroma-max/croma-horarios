@@ -1834,39 +1834,84 @@ function setView(view) {
   if (view === 'semana') {
     weekNav.style.display  = 'flex';
     mesNav.style.display   = 'none';
-    statsRow.style.display = 'grid';
+    statsRow.style.display = 'none';   // ← ocultar stats en Semana
     filters.style.display  = 'flex';
     document.getElementById('filterTurno').style.display = 'block';
+    mostrarFiltrosDiaEnBarra(true);
   } else if (view === 'mes') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'flex';
     statsRow.style.display = 'none';
     filters.style.display  = 'flex';
     document.getElementById('filterTurno').style.display = 'none';
+    mostrarFiltrosDiaEnBarra(true);
   } else if (view === 'empleados') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
+    mostrarFiltrosDiaEnBarra(false);  // empleados tiene sus propios checkboxes
   } else {
     // reportes
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
+    mostrarFiltrosDiaEnBarra(false);
   }
+}
+
+function mostrarFiltrosDiaEnBarra(visible) {
+  let barra = document.getElementById('filtrosDiaBarra');
+  if (!visible) {
+    if (barra) barra.style.display = 'none';
+    return;
+  }
+  if (!barra) {
+    // Crear el bloque y anexarlo a controls-bar
+    barra = document.createElement('div');
+    barra.id = 'filtrosDiaBarra';
+    barra.className = 'filtros-dia';
+    barra.innerHTML = `
+      <span class="filtro-dia-label">Ver solo:</span>
+      <label class="filtro-dia-check">
+        <input type="checkbox" id="chkFerBarra" onchange="toggleFiltroDia('feriados',this.checked)" />
+        <span>Feriados</span>
+      </label>
+      <label class="filtro-dia-check">
+        <input type="checkbox" id="chkSabBarra" onchange="toggleFiltroDia('sabados',this.checked)" />
+        <span>Sábados</span>
+      </label>
+      <label class="filtro-dia-check">
+        <input type="checkbox" id="chkDomBarra" onchange="toggleFiltroDia('domingos',this.checked)" />
+        <span>Domingos</span>
+      </label>`;
+    document.querySelector('.controls-bar').appendChild(barra);
+  }
+  barra.style.display = 'flex';
+  // Sincronizar estado visual
+  const chkFer = barra.querySelector('#chkFerBarra');
+  const chkSab = barra.querySelector('#chkSabBarra');
+  const chkDom = barra.querySelector('#chkDomBarra');
+  if (chkFer) chkFer.checked = filtrosDia.verSolo === 'feriados';
+  if (chkSab) chkSab.checked = filtrosDia.verSolo === 'sabados';
+  if (chkDom) chkDom.checked = filtrosDia.verSolo === 'domingos';
 }
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 function toggleFiltroDia(tipo, activo) {
-  // Si se activa uno, desactiva los demás (radio behaviour)
   filtrosDia.verSolo = activo ? tipo : 'todos';
-  // Sincronizar checkboxes
-  ['feriados','sabados','domingos'].forEach(t => {
-    const el = document.getElementById('chk' + t.charAt(0).toUpperCase() + t.slice(1));
-    if (el) el.checked = (filtrosDia.verSolo === t);
+
+  // Sincronizar todos los checkboxes (barra + panel empleados)
+  const mapa = { feriados: ['chkFeriados','chkFerBarra'], sabados: ['chkSabados','chkSabBarra'], domingos: ['chkDomingos','chkDomBarra'] };
+  Object.entries(mapa).forEach(([t, ids]) => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.checked = (filtrosDia.verSolo === t);
+    });
   });
+
   renderAll();
 }
 
