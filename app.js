@@ -1950,6 +1950,647 @@ function diaFiltrado(date) {
   return false;
 }
 
+
+// ── SISTEMA DE USUARIOS ────────────────────────────────
+// Clave localStorage para usuarios
+const LS_USUARIOS_KEY = 'croma_usuarios';
+
+// Usuario de sesión activa: { nombre, rol, empleadoNombre }
+// rol: 'admin' | 'empleado'
+let sesionActual = null;
+
+// Usuarios por defecto (admin hardcodeado, empleados se cargan desde localStorage)
+function getUsuarios() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LS_USUARIOS_KEY)) || [];
+    return stored;
+  } catch { return []; }
+}
+
+function saveUsuarios(lista) {
+  localStorage.setItem(LS_USUARIOS_KEY, JSON.stringify(lista));
+}
+
+// Verifica credenciales: retorna { ok, usuario } o { ok: false }
+function verificarCredenciales(usuario, pin) {
+  // Admin especial (hardcodeado)
+  if (usuario.trim().toUpperCase() === 'ADMIN' && pin === ADMIN_PIN) {
+    return { ok: true, usuario: { nombre: 'Admin', rol: 'admin', empleadoNombre: null } };
+  }
+  // Buscar en usuarios guardados
+  const lista = getUsuarios();
+  const u = lista.find(u =>
+    u.nombre.trim().toLowerCase() === usuario.trim().toLowerCase() && u.pin === pin
+  );
+  if (u) return { ok: true, usuario: u };
+  return { ok: false };
+}
+
+// ── PANTALLA DE LOGIN ──────────────────────────────────
+function mostrarLoginApp() {
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display     = 'none';
+
+  let loginEl = document.getElementById('loginScreen');
+  if (!loginEl) {
+    loginEl = document.createElement('div');
+    loginEl.id = 'loginScreen';
+    document.body.appendChild(loginEl);
+  }
+
+  loginEl.style.display = 'flex';
+  loginEl.innerHTML = `
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="tridente_solo.png" alt="Croma" class="login-tridente" onerror="this.style.display='none'" />
+        <span class="login-brand">CROMA</span>
+      </div>
+      <div class="login-subtitle">HORARIOS</div>
+
+      <div class="login-form">
+        <div class="login-grupo">
+          <label class="login-label">Usuario</label>
+          <input type="text" id="loginUsuario" class="login-input"
+            placeholder="Tu nombre de usuario"
+            autocomplete="off" autocapitalize="off" spellcheck="false"
+            onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()" />
+        </div>
+        <div class="login-grupo">
+          <label class="login-label">PIN</label>
+          <div class="login-pin-wrap">
+            <input type="password" id="loginPin" class="login-input"
+              placeholder="••••" maxlength="8" autocomplete="off"
+              onkeydown="if(event.key==='Enter')intentarLogin()" />
+            <button class="login-pin-toggle" type="button" onclick="togglePinVisibility()" title="Mostrar PIN">
+              <svg id="iconEye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <p id="loginError" style="color:#dc2626;font-size:12px;margin-bottom:0.5rem;display:none;text-align:center">
+          Usuario o PIN incorrecto
+        </p>
+
+        <button class="btn-connect" onclick="intentarLogin()" style="margin-top:0.5rem">
+          Ingresar
+        </button>
+      </div>
+
+      <div class="login-footer">Croma · Panel de Horarios</div>
+    </div>
+  `;
+
+  setTimeout(() => document.getElementById('loginUsuario')?.focus(), 100);
+}
+
+function togglePinVisibility() {
+  const input = document.getElementById('loginPin');
+  const icon  = document.getElementById('iconEye');
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+  } else {
+    input.type = 'password';
+    icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+  }
+}
+
+function intentarLogin() {
+  const usuario = document.getElementById('loginUsuario')?.value || '';
+  const pin     = document.getElementById('loginPin')?.value     || '';
+  const errEl   = document.getElementById('loginError');
+
+  const resultado = verificarCredenciales(usuario, pin);
+  if (resultado.ok) {
+    sesionActual = resultado.usuario;
+    errEl.style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'none';
+    // Iniciar la app según el rol
+    iniciarAppConSesion();
+  } else {
+    errEl.style.display = 'block';
+    document.getElementById('loginPin').value = '';
+    document.getElementById('loginPin').focus();
+  }
+}
+
+function cerrarSesion() {
+  sesionActual = null;
+  mostrarLoginApp();
+}
+
+// ── INICIAR APP SEGÚN ROL ──────────────────────────────
+function iniciarAppConSesion() {
+  if (sesionActual.rol === 'admin') {
+    // Admin: ver todo, mostrar botón admin, mostrar nav completa
+    document.getElementById('btnAdmin').style.display = 'flex';
+    document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
+    document.querySelectorAll('.drawer-nav-btn').forEach(b => b.style.display = '');
+    // Agregar indicador de sesión admin
+    actualizarIndicadorSesion();
+    showApp();
+    const vistaGuardada = localStorage.getItem('croma_vista') || 'mes';
+    setView(vistaGuardada);
+    cargarDatos({ unica: APPS_SCRIPT_URL });
+  } else {
+    // Empleado: ocultar admin btn y tabs de admin, cargar y mostrar solo su detalle
+    document.getElementById('btnAdmin').style.display = 'none';
+    actualizarIndicadorSesion();
+    showApp();
+    setView('mes'); // vista por defecto mientras carga
+    cargarDatosEmpleado();
+  }
+}
+
+function actualizarIndicadorSesion() {
+  // Agregar/actualizar chip de sesión en la topbar
+  let chip = document.getElementById('sesionChip');
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.id = 'sesionChip';
+    chip.className = 'sesion-chip';
+    // Insertar antes de top-actions
+    const topActions = document.querySelector('.top-actions');
+    topActions.parentNode.insertBefore(chip, topActions);
+  }
+  const esAdmin = sesionActual.rol === 'admin';
+  chip.innerHTML = `
+    <span class="sesion-nombre">${esAdmin ? '👤 Admin' : sesionActual.nombre}</span>
+    <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
+  `;
+}
+
+// ── VISTA EMPLEADO LOGUEADO ────────────────────────────
+async function cargarDatosEmpleado() {
+  showToast('Cargando tu jornada...');
+  cargarPerfiles();
+
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=horarios`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    if (json.ok === false) throw new Error(json.error || 'Error');
+
+    const rawData = json.data || [];
+    state.datos = rawData.map(r => ({
+      LOCAL:    String(r.LOCAL    || r.local    || r.HOJA || '').trim(),
+      AÑO:      String(r.AÑO     || r.anio     || ''),
+      MES:      String(r.MES     || r.mes       || '').trim().toUpperCase(),
+      DIA:      String(r.DIA     || r.dia       || '0'),
+      EMPLEADO: String(r.EMPLEADO|| r.empleado  || '').trim(),
+      H_ENTRADA:String(r.H_ENTRADA|| r.entrada  || ''),
+      H_SALIDA: String(r.H_SALIDA || r.salida   || ''),
+      NOTA:     String(r.NOTA    || r.nota      || '').trim(),
+      TOTAL_HS: parseFloat(r.TOTAL_HS || r.total) || 0,
+      MARCA_TEMPORAL: r.MARCA_TEMPORAL || r.marca || '',
+    }));
+
+    setConnected(true);
+    mostrarVistaEmpleado();
+
+  } catch(err) {
+    setConnected(false);
+    showToast('Error al cargar: ' + err.message);
+    mostrarVistaEmpleadoError();
+  }
+}
+
+function mostrarVistaEmpleado() {
+  const nombreEmp = sesionActual.empleadoNombre;
+  if (!nombreEmp) {
+    showToast('Error: usuario sin empleado vinculado');
+    return;
+  }
+
+  // Filtrar registros del empleado logueado
+  const misRegistros = state.datos.filter(r =>
+    r.EMPLEADO.trim().toLowerCase() === nombreEmp.trim().toLowerCase()
+  );
+
+  if (!misRegistros.length) {
+    mostrarVistaEmpleadoSinDatos(nombreEmp);
+    return;
+  }
+
+  // Determinar su sucursal principal (la más frecuente)
+  const sucConteo = {};
+  misRegistros.forEach(r => { sucConteo[r.LOCAL] = (sucConteo[r.LOCAL]||0) + 1; });
+  const sucId = Object.entries(sucConteo).sort((a,b)=>b[1]-a[1])[0][0];
+
+  // Ocultar la nav completa y mostrar solo la vista de empleado
+  document.querySelector('.top-nav').style.display = 'none';
+  document.querySelector('.hamburger-btn')?.style && (document.querySelector('.hamburger-btn').style.display = 'none');
+  document.querySelector('.top-search').style.display = 'none';
+  document.querySelector('.controls-bar').style.display = 'none';
+
+  // Reemplazar contenido del main por vista de empleado
+  const mainApp = document.getElementById('mainApp');
+  mainApp.innerHTML = `<div id="vistaEmpleadoContainer"></div>`;
+
+  renderVistaEmpleado(nombreEmp, sucId, misRegistros);
+}
+
+function mostrarVistaEmpleadoSinDatos(nombreEmp) {
+  const mainApp = document.getElementById('mainApp');
+  mainApp.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem">
+      <div style="font-size:48px">📋</div>
+      <h2 style="font-family:'Bebas Neue';font-size:24px;letter-spacing:2px">Sin registros</h2>
+      <p style="color:#64748b;font-size:14px">No se encontraron registros para <strong>${nombreEmp}</strong>.</p>
+      <p style="color:#94a3b8;font-size:12px">Verificá que el nombre de usuario coincida exactamente con el registro en el sistema.</p>
+    </div>
+  `;
+}
+
+function mostrarVistaEmpleadoError() {
+  const mainApp = document.getElementById('mainApp');
+  mainApp.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem">
+      <div style="font-size:48px">⚠️</div>
+      <h2 style="font-family:'Bebas Neue';font-size:24px;letter-spacing:2px">Error de conexión</h2>
+      <p style="color:#64748b;font-size:14px">No se pudo conectar con el servidor.</p>
+      <button class="btn-connect" style="width:auto;padding:10px 24px" onclick="cargarDatosEmpleado()">Reintentar</button>
+    </div>
+  `;
+}
+
+function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
+  const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
+  const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
+  const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
+
+  const numMatch   = nombreEmp.match(/^(\d+)\s+(.+)$/);
+  const numVend    = numMatch ? numMatch[1] : '';
+  const nomMostrar = numMatch ? numMatch[2] : nombreEmp;
+  const iniciales  = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
+
+  // Períodos disponibles
+  const ORDEN_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                       'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  const periodosSet = new Set();
+  misRegistros.forEach(r => periodosSet.add(r.MES + ' ' + r.AÑO));
+  const periodos = Array.from(periodosSet).sort((a, b) => {
+    const [mA, aA] = a.split(' '), [mB, aB] = b.split(' ');
+    if (aA !== aB) return parseInt(aA) - parseInt(aB);
+    return ORDEN_MESES.indexOf(mA) - ORDEN_MESES.indexOf(mB);
+  });
+
+  const periodoActual = periodos[periodos.length - 1] || 'TODOS';
+
+  // Calcular totales para el período seleccionado
+  function calcTotales(periodo) {
+    const regs = periodo === 'TODOS'
+      ? misRegistros
+      : misRegistros.filter(r => r.MES + ' ' + r.AÑO === periodo);
+
+    const porFecha = {};
+    regs.forEach(r => {
+      const key = `${r.AÑO}-${r.MES}-${r.DIA}`;
+      if (!porFecha[key]) porFecha[key] = [];
+      porFecha[key].push(r);
+    });
+
+    const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const filas = Object.entries(porFecha).map(([key, rrs]) => {
+      rrs.sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
+      const r0 = rrs[0];
+      const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
+      const fechaStr = fecha.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const diaSem = DIAS_SEMANA[fecha.getDay()];
+      const esSab  = fecha.getDay() === 6;
+      const esDom  = fecha.getDay() === 0;
+      const esFer  = esFeriado(fecha);
+      const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} – ${r0.H_SALIDA}` : '—';
+      const turno2 = rrs[1]?.H_ENTRADA ? `${rrs[1].H_ENTRADA} – ${rrs[1].H_SALIDA}` : '';
+      const hsTotal = rrs.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
+      const hsExtra = calcularHsExtra(nombreEmp, hsTotal, fecha);
+      const nota    = rrs.map(r=>r.NOTA).filter(Boolean).join(' / ');
+      let horaReg = '';
+      try { if (r0.MARCA_TEMPORAL) horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
+      return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, horaReg };
+    }).sort((a,b) => {
+      // ordenar más reciente primero
+      const da = a.fechaStr.split('/').reverse().join('-');
+      const db = b.fechaStr.split('/').reverse().join('-');
+      return db.localeCompare(da);
+    });
+
+    const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
+    const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
+    const totalSabs    = filas.filter(f=>f.esSab).length;
+    return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos: filas.length };
+  }
+
+  let { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcTotales(periodoActual);
+
+  const opcionesMes = ['<option value="TODOS">Todos los registros</option>']
+    .concat(periodos.map(p => `<option value="${p}" ${p===periodoActual?'selected':''}>${p}</option>`))
+    .join('');
+
+  const avatarInner = perfil.foto_url
+    ? `<img src="${perfil.foto_url}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.parentElement.innerHTML='${iniciales}'">`
+    : (numVend ? `<span style="font-size:18px;font-weight:700;color:${suc.color}">#${numVend}</span>` : `<span style="font-size:18px;font-weight:700;color:${suc.color}">${iniciales}</span>`);
+
+  function buildFilas(fs) {
+    return fs.map(f => `
+      <tr class="${f.esSab?'fila-sabado':''} ${f.esDom?'fila-domingo':''} ${f.esFer?'fila-feriado':''}">
+        <td>${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">${f.horaReg}</td>
+        <td class="turno-cell">${f.turno1}</td>
+        <td class="turno-cell">${f.turno2||'—'}</td>
+        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td>${f.hsExtra>0?`<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>`:'—'}</td>
+        <td>${f.esSab?'<span class="check-sab">✓</span>':''}</td>
+        <td class="nota-cell">${f.nota||''}</td>
+      </tr>`).join('');
+  }
+
+  const empresaBadge = perfil.empresa
+    ? `<span class="emp-empresa-badge ${perfil.empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}">${perfil.empresa}</span>`
+    : '';
+  const catBadge = cat
+    ? `<span class="emp-cat-badge">${cat.nombre}</span>`
+    : '';
+
+  document.getElementById('vistaEmpleadoContainer').innerHTML = `
+    <div class="emp-vista-personal">
+
+      <!-- HEADER EMPLEADO -->
+      <div class="emp-vista-header" style="border-left:4px solid ${suc.color}">
+        <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
+             style="${perfil.foto_url?'':'background:'+suc.colorLight}">
+          ${avatarInner}
+        </div>
+        <div class="emp-vista-info">
+          <h1 class="emp-vista-nombre">${nomMostrar}</h1>
+          <div class="emp-vista-suc">${suc.nombre}</div>
+          <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+        </div>
+        <div class="emp-vista-stats">
+          <div class="emp-vista-stat">
+            <span class="emp-vista-stat-val" id="evDias">${diasUnicos}</span>
+            <span class="emp-vista-stat-lbl">Días</span>
+          </div>
+          <div class="emp-vista-stat">
+            <span class="emp-vista-stat-val" id="evHoras">${totalHoras.toFixed(1)}</span>
+            <span class="emp-vista-stat-lbl">Hs totales</span>
+          </div>
+          <div class="emp-vista-stat">
+            <span class="emp-vista-stat-val" id="evExtra">${totalHsExtra.toFixed(1)}</span>
+            <span class="emp-vista-stat-lbl">Hs extra</span>
+          </div>
+          <div class="emp-vista-stat">
+            <span class="emp-vista-stat-val" id="evSabs">${totalSabs}</span>
+            <span class="emp-vista-stat-lbl">Sábados</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SELECTOR DE PERÍODO -->
+      <div class="emp-vista-toolbar">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:13px;color:#64748b;font-weight:500">Período:</label>
+          <select id="evSelectMes" class="filter-select" style="font-size:13px">
+            ${opcionesMes}
+          </select>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-detalle-accion" onclick="imprimirVistaEmpleado()" title="Imprimir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Imprimir
+          </button>
+        </div>
+      </div>
+
+      <!-- TABLA -->
+      <div class="detalle-tabla-wrap" id="evTablaWrap">
+        <table class="detalle-tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Día</th><th>Hora reg.</th>
+              <th>Turno 1</th><th>Turno 2</th>
+              <th>Hs total</th><th>Hs extra</th><th>Sáb.</th><th>Nota</th>
+            </tr>
+          </thead>
+          <tbody id="evTbody">${buildFilas(filas)}</tbody>
+          <tfoot id="evTfoot">
+            <tr>
+              <td colspan="2"><strong>TOTALES</strong></td>
+              <td><strong>${diasUnicos}</strong></td>
+              <td colspan="2"></td>
+              <td><strong>${totalHoras.toFixed(1)}</strong></td>
+              <td>${totalHsExtra>0?`<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>`:'—'}</td>
+              <td><strong>${totalSabs}</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Evento cambio de período
+  document.getElementById('evSelectMes').addEventListener('change', function() {
+    const p = this.value;
+    const t = calcTotales(p);
+    document.getElementById('evDias').textContent  = t.diasUnicos;
+    document.getElementById('evHoras').textContent = t.totalHoras.toFixed(1);
+    document.getElementById('evExtra').textContent = t.totalHsExtra.toFixed(1);
+    document.getElementById('evSabs').textContent  = t.totalSabs;
+    document.getElementById('evTbody').innerHTML   = buildFilas(t.filas);
+    document.getElementById('evTfoot').innerHTML   = `
+      <tr>
+        <td colspan="2"><strong>TOTALES</strong></td>
+        <td><strong>${t.diasUnicos}</strong></td>
+        <td colspan="2"></td>
+        <td><strong>${t.totalHoras.toFixed(1)}</strong></td>
+        <td>${t.totalHsExtra>0?`<span class="hs-extra">${t.totalHsExtra.toFixed(1)}</span>`:'—'}</td>
+        <td><strong>${t.totalSabs}</strong></td>
+        <td></td>
+      </tr>`;
+  });
+}
+
+function imprimirVistaEmpleado() {
+  window.print();
+}
+
+// ── GESTIÓN DE USUARIOS EN ADMIN ───────────────────────
+function renderAdminUsuarios() {
+  const lista = getUsuarios();
+
+  // Todos los empleados únicos en el sistema para el select
+  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a,b)=>{
+    const na = parseInt(a)||999, nb = parseInt(b)||999;
+    return na!==nb ? na-nb : a.localeCompare(b);
+  });
+
+  const filas = lista.map((u, i) => {
+    const numMatch = (u.empleadoNombre||'').match(/^(\d+)\s+(.+)$/);
+    const empLabel = numMatch ? `#${numMatch[1]} ${numMatch[2]}` : (u.empleadoNombre || '—');
+    return `<tr>
+      <td><strong>${u.nombre}</strong></td>
+      <td>${empLabel}</td>
+      <td><span class="pill ${u.rol==='admin'?'pill-comp':'pill-tm'}" style="font-size:10px">${u.rol}</span></td>
+      <td><code style="font-size:12px;background:#f1f5f9;padding:2px 8px;border-radius:4px">${'•'.repeat(u.pin.length)}</code></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn-admin-edit" onclick="abrirEditarUsuario(${i})">Editar</button>
+          <button class="btn-admin-edit" style="color:#dc2626;border-color:#fecaca" onclick="eliminarUsuario(${i})">Eliminar</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div id="adminTabUsuarios" class="admin-tab-content">
+      <div class="admin-toolbar">
+        <button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px" onclick="abrirNuevoUsuario()">+ Nuevo usuario</button>
+        <span style="font-size:12px;color:#94a3b8">${lista.length} usuario${lista.length!==1?'s':''} + Admin</span>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-tabla">
+          <thead>
+            <tr><th>Usuario</th><th>Empleado vinculado</th><th>Rol</th><th>PIN</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr style="background:#fafafa">
+              <td><strong>Admin</strong></td>
+              <td><span style="color:#94a3b8;font-size:12px">—</span></td>
+              <td><span class="pill pill-falta" style="font-size:10px">admin</span></td>
+              <td><code style="font-size:12px;background:#f1f5f9;padding:2px 8px;border-radius:4px">${'•'.repeat(ADMIN_PIN.length)}</code></td>
+              <td><span style="font-size:11px;color:#94a3b8">PIN fijo en código</span></td>
+            </tr>
+            ${filas || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8">Sin usuarios creados aún</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function abrirNuevoUsuario() { abrirEditarUsuario(null); }
+
+function abrirEditarUsuario(idx) {
+  const lista = getUsuarios();
+  const u = idx !== null ? lista[idx] : null;
+
+  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a,b)=>{
+    const na = parseInt(a)||999, nb = parseInt(b)||999;
+    return na!==nb ? na-nb : a.localeCompare(b);
+  });
+
+  const empOpts = ['<option value="">Sin empleado vinculado</option>']
+    .concat(empNombres.map(e => {
+      const nm = e.match(/^(\d+)\s+(.+)$/);
+      const lbl = nm ? `#${nm[1]} ${nm[2]}` : e;
+      return `<option value="${e}" ${u?.empleadoNombre===e?'selected':''}>${lbl}</option>`;
+    })).join('');
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">${u ? 'Editar usuario' : 'Nuevo usuario'}</div>
+        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <input type="hidden" id="editUsuarioIdx" value="${idx !== null ? idx : ''}" />
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Nombre de usuario</label>
+          <input type="text" class="admin-input" id="editUsuarioNombre"
+            value="${u?.nombre||''}" placeholder="Ej: maria.garcia"
+            autocomplete="off" autocapitalize="off" />
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            El empleado va a ingresar con este nombre
+          </span>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Empleado vinculado</label>
+          <select class="admin-input" id="editUsuarioEmp">${empOpts}</select>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            El empleado solo verá sus propios datos
+          </span>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">PIN de acceso</label>
+          <input type="text" class="admin-input" id="editUsuarioPin"
+            value="${u?.pin||''}" placeholder="Ej: 1234" maxlength="8"
+            inputmode="numeric" autocomplete="off" />
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarUsuarioDesdeForm()">
+            ${u ? 'Guardar cambios' : 'Crear usuario'}
+          </button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+}
+
+function guardarUsuarioDesdeForm() {
+  const idxStr = document.getElementById('editUsuarioIdx')?.value;
+  const idx    = idxStr !== '' ? parseInt(idxStr) : null;
+  const nombre = document.getElementById('editUsuarioNombre')?.value.trim();
+  const emp    = document.getElementById('editUsuarioEmp')?.value;
+  const pin    = document.getElementById('editUsuarioPin')?.value.trim();
+
+  if (!nombre) { showToast('Ingresá un nombre de usuario'); return; }
+  if (!pin || pin.length < 4) { showToast('El PIN debe tener al menos 4 caracteres'); return; }
+
+  const lista = getUsuarios();
+
+  // Verificar que el nombre no esté duplicado (salvo que sea el mismo registro)
+  const existe = lista.find((u, i) => u.nombre.toLowerCase() === nombre.toLowerCase() && i !== idx);
+  if (existe) { showToast('Ya existe un usuario con ese nombre'); return; }
+
+  const usuario = {
+    nombre,
+    pin,
+    rol: 'empleado',
+    empleadoNombre: emp || null,
+  };
+
+  if (idx !== null) {
+    lista[idx] = usuario;
+  } else {
+    lista.push(usuario);
+  }
+
+  saveUsuarios(lista);
+  showToast(idx !== null ? '✓ Usuario actualizado' : '✓ Usuario creado');
+  cerrarAdmin();
+  renderAdmin();
+}
+
+function eliminarUsuario(idx) {
+  const lista = getUsuarios();
+  const u = lista[idx];
+  if (!u) return;
+  if (!confirm(`¿Eliminar el usuario "${u.nombre}"?`)) return;
+  lista.splice(idx, 1);
+  saveUsuarios(lista);
+  showToast('Usuario eliminado');
+  renderAdmin();
+}
 // ── PANEL ADMIN ────────────────────────────────────────
 const ADMIN_PIN = '2811'; // PIN de acceso — cambiarlo en producción
 let adminAutenticado = false;
@@ -2063,6 +2704,7 @@ function renderAdmin() {
       <div class="admin-tabs" id="adminTabs">
         <button class="admin-tab active" onclick="switchAdminTab('empleados',this)">Empleados (${empNombres.length})</button>
         <button class="admin-tab" onclick="switchAdminTab('categorias',this)">Categorías</button>
+        <button class="admin-tab" onclick="switchAdminTab('usuarios',this)">Usuarios</button>
       </div>
 
       <!-- TAB EMPLEADOS -->
@@ -2093,6 +2735,10 @@ function renderAdmin() {
           </table>
         </div>
       </div>
+
+      <!-- TAB USUARIOS -->
+      ${renderAdminUsuarios()}
+
     </div>
   </div>`;
 
@@ -2104,6 +2750,7 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('adminTabEmpleados').style.display = tab === 'empleados' ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display = tab === 'categorias' ? 'block' : 'none';
+  document.getElementById('adminTabUsuarios').style.display = tab === 'usuarios' ? 'block' : 'none';
 }
 
 function filtrarTablaAdmin(q) {
@@ -2326,13 +2973,8 @@ function cerrarAdmin(event) {
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // Mostrar app directamente (sin pantalla de setup)
-  showApp();
-  // Recuperar última vista visitada (o mes por defecto)
-  const vistaGuardada = localStorage.getItem('croma_vista') || 'mes';
-  setView(vistaGuardada);
-  // Cargar datos en segundo plano
-  cargarDatos({ unica: APPS_SCRIPT_URL });
+  // Arrancar con pantalla de login
+  mostrarLoginApp();
 
   // Semana
   document.getElementById('weekRange').textContent = getWeekRange(0);
