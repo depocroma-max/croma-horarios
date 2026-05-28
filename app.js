@@ -2783,6 +2783,14 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabEmpleados').style.display = tab === 'empleados' ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display = tab === 'categorias' ? 'block' : 'none';
   document.getElementById('adminTabUsuarios').style.display = tab === 'usuarios' ? 'block' : 'none';
+
+  // Cuando se abre el tab de usuarios, recargar desde el Sheet y redibujar
+  if (tab === 'usuarios') {
+    cargarUsuarios().then(() => {
+      const tabEl = document.getElementById('adminTabUsuarios');
+      if (tabEl) tabEl.outerHTML = renderAdminUsuarios();
+    });
+  }
 }
 
 function filtrarTablaAdmin(q) {
