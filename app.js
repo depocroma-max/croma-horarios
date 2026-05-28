@@ -366,15 +366,12 @@ function renderGrilla(datos) {
         regsDelDia.forEach(r => {
           const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
           if (turno !== 'all' && tipo !== turno) return;
-          // Mostrar hora si hay más de un turno
-          if (regsDelDia.length > 1) {
-            pillsHtml += `<div class="turno-doble">
-              ${pillHTML(tipo)}
-              <span class="turno-hora">${r.H_ENTRADA}–${r.H_SALIDA}</span>
-            </div>`;
-          } else {
-            pillsHtml += pillHTML(tipo);
-          }
+          // Siempre mostrar hora debajo de la pill
+          const tieneHora = r.H_ENTRADA && r.H_SALIDA;
+          pillsHtml += `<div class="turno-doble">
+            ${pillHTML(tipo)}
+            ${tieneHora ? `<span class="turno-hora">${r.H_ENTRADA}–${r.H_SALIDA}</span>` : ''}
+          </div>`;
         });
 
         if (!pillsHtml) pillsHtml = '<span class="empty-dash">·</span>';
@@ -426,6 +423,17 @@ function renderEmpleados(datos) {
     datosFilt = datosFilt.filter(r => {
       const perfil = EMPLEADOS_PERFILES[r.EMPLEADO];
       return perfil && perfil.empresa === selEmpresa;
+    });
+  }
+
+  // Aplicar filtro de día (ver solo sábados / feriados / domingos)
+  if (filtrosDia.verSolo !== 'todos') {
+    datosFilt = datosFilt.filter(r => {
+      const fecha = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA));
+      if (filtrosDia.verSolo === 'sabados')  return fecha.getDay() === 6;
+      if (filtrosDia.verSolo === 'domingos') return fecha.getDay() === 0;
+      if (filtrosDia.verSolo === 'feriados') return esFeriado(fecha);
+      return true;
     });
   }
 
@@ -559,12 +567,33 @@ function renderEmpleados(datos) {
     </div>`;
   }).join('');
 
+  const chkFer = filtrosDia.verSolo === 'feriados';
+  const chkSab = filtrosDia.verSolo === 'sabados';
+  const chkDom = filtrosDia.verSolo === 'domingos';
+
   const empresaOpts = [`<option value="all">Todas las empresas</option>`,
     ...EMPRESAS.map(emp => `<option value="${emp}" ${emp === selEmpresa ? 'selected' : ''}>${emp}</option>`)
   ].join('');
 
   container.innerHTML = `
     <div class="emp-filtros-panel">
+      <div class="emp-filtro-grupo" style="flex:0 0 auto;justify-content:flex-end;border-right:1px solid var(--gray-100);padding-right:1.5rem;min-width:unset">
+        <label class="emp-filtro-label">Ver solo</label>
+        <div class="filtros-dia-inline">
+          <label class="filtro-dia-check">
+            <input type="checkbox" id="chkFeriados" ${chkFer?'checked':''} onchange="toggleFiltroDia('feriados',this.checked)" />
+            <span>Feriados</span>
+          </label>
+          <label class="filtro-dia-check">
+            <input type="checkbox" id="chkSabados" ${chkSab?'checked':''} onchange="toggleFiltroDia('sabados',this.checked)" />
+            <span>Sábados</span>
+          </label>
+          <label class="filtro-dia-check">
+            <input type="checkbox" id="chkDomingos" ${chkDom?'checked':''} onchange="toggleFiltroDia('domingos',this.checked)" />
+            <span>Domingos</span>
+          </label>
+        </div>
+      </div>
       <div class="emp-filtro-grupo">
         <label class="emp-filtro-label">Período</label>
         <select class="emp-filtro-select" id="empFiltPeriodo" onchange="renderEmpleados(state.datos)">
