@@ -2619,7 +2619,7 @@ function eliminarUsuario(idx) {
 }
 // ── PANEL ADMIN ────────────────────────────────────────
 const ADMIN_PIN = '2811'; // PIN de acceso — cambiarlo en producción
-let adminAutenticado = false;
+let adminAutenticado = sessionStorage.getItem('croma_admin_auth') === '1';
 
 function abrirAdmin() {
   if (!adminAutenticado) {
@@ -2658,6 +2658,7 @@ function verificarPin() {
   const val = document.getElementById('adminPinInput')?.value;
   if (val === ADMIN_PIN) {
     adminAutenticado = true;
+    sessionStorage.setItem('croma_admin_auth', '1');
     renderAdmin();
   } else {
     document.getElementById('adminPinError').style.display = 'block';
@@ -2721,7 +2722,7 @@ function renderAdmin() {
       <div class="admin-header">
         <div class="admin-titulo">Panel Admin · Croma Horarios</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn-admin-edit" onclick="adminAutenticado=false;cerrarAdmin()">Cerrar sesión</button>
+          <button class="btn-admin-edit" onclick="adminAutenticado=false;sessionStorage.removeItem('croma_admin_auth');cerrarAdmin()">Cerrar sesión</button>
           <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
         </div>
       </div>
