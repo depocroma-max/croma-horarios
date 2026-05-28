@@ -1952,33 +1952,57 @@ function diaFiltrado(date) {
 
 
 // ── SISTEMA DE USUARIOS ────────────────────────────────
-// Clave localStorage para usuarios
-const LS_USUARIOS_KEY = 'croma_usuarios';
+// Los usuarios se guardan en el Sheet (hoja USUARIOS), NO en localStorage.
+// Cache en memoria para la sesión actual.
+let _usuariosCache = null;      // null = no cargado todavía
+let _usuariosCargando = false;
 
 // Usuario de sesión activa: { nombre, rol, empleadoNombre }
 // rol: 'admin' | 'empleado'
 let sesionActual = null;
 
-// Usuarios por defecto (admin hardcodeado, empleados se cargan desde localStorage)
-function getUsuarios() {
+// ── Cargar usuarios desde el Sheet ──
+async function cargarUsuarios() {
   try {
-    const stored = JSON.parse(localStorage.getItem(LS_USUARIOS_KEY)) || [];
-    return stored;
-  } catch { return []; }
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    if (!json.ok) return [];
+    _usuariosCache = json.usuarios || [];
+    return _usuariosCache;
+  } catch(e) {
+    console.warn('No se pudieron cargar usuarios:', e);
+    return [];
+  }
 }
 
-function saveUsuarios(lista) {
-  localStorage.setItem(LS_USUARIOS_KEY, JSON.stringify(lista));
+// Devuelve cache (o array vacío si aún no cargó)
+function getUsuarios() {
+  return _usuariosCache || [];
 }
 
-// Verifica credenciales: retorna { ok, usuario } o { ok: false }
-function verificarCredenciales(usuario, pin) {
-  // Admin especial (hardcodeado)
+// Guarda la lista completa en el Sheet
+async function saveUsuarios(lista) {
+  _usuariosCache = lista;
+  // Persistir en Sheet: reemplazar toda la hoja
+  try {
+    await fetch(`${APPS_SCRIPT_URL}?accion=guardar_usuarios`, {
+      method: 'POST',
+      body: JSON.stringify({ usuarios: lista }),
+    });
+  } catch(e) {
+    console.warn('Error guardando usuarios:', e);
+  }
+}
+
+// ── Login: carga usuarios del Sheet y verifica ──
+async function verificarCredencialesAsync(usuario, pin) {
+  // Admin especial (hardcodeado, no necesita Sheet)
   if (usuario.trim().toUpperCase() === 'ADMIN' && pin === ADMIN_PIN) {
     return { ok: true, usuario: { nombre: 'Admin', rol: 'admin', empleadoNombre: null } };
   }
-  // Buscar en usuarios guardados
-  const lista = getUsuarios();
+  // Cargar desde Sheet si no está en cache
+  const lista = _usuariosCache !== null ? _usuariosCache : await cargarUsuarios();
   const u = lista.find(u =>
     u.nombre.trim().toLowerCase() === usuario.trim().toLowerCase() && u.pin === pin
   );
@@ -2059,12 +2083,20 @@ function togglePinVisibility() {
   }
 }
 
-function intentarLogin() {
+async function intentarLogin() {
   const usuario = document.getElementById('loginUsuario')?.value || '';
   const pin     = document.getElementById('loginPin')?.value     || '';
   const errEl   = document.getElementById('loginError');
+  const btnEl   = document.querySelector('#loginScreen .btn-connect');
 
-  const resultado = verificarCredenciales(usuario, pin);
+  // Deshabilitar botón mientras verifica
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Verificando...'; }
+  errEl.style.display = 'none';
+
+  const resultado = await verificarCredencialesAsync(usuario, pin);
+
+  if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Ingresar'; }
+
   if (resultado.ok) {
     sesionActual = resultado.usuario;
     errEl.style.display = 'none';
