@@ -128,7 +128,7 @@ let filtrosDia = {
 };
 
 // URL fija del Apps Script (no requiere configuración manual)
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxIV_QdP2kRRjBD4osvt1jSA6uRUbgqvW46pY_PRBgT7qPTs4FHHNxzGaY68GTJj9R8/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_AXJIDka-Yg-SDQ7o8_Jp6oeawb2kq6lT43LDHhQ4d_Fxzzs8aO70LqefRCRJ7THp/exec';
 
 // Claves de localStorage para URLs de Apps Script
 const LS_URLS_KEY = 'croma_horarios_urls';
@@ -1736,24 +1736,25 @@ async function cargarDatos(urls) {
     const resp = await fetch(`${urlUnica}?accion=horarios`);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const json = await resp.json();
-    if (!json.ok) throw new Error(json.error || 'Error en servidor');
+    // Compatible con formato nuevo (ok:true) y viejo (sin ok)
+    if (json.ok === false) throw new Error(json.error || 'Error en servidor');
 
-    // Normalizar campos del nuevo formato del Apps Script:
-    // { local, anio, mes, dia (número), diaTexto, empleado, entrada, salida, nota, total }
-    // → al formato interno que usa la app:
-    // { LOCAL, AÑO, MES, DIA (número del día del mes), EMPLEADO, H_ENTRADA, H_SALIDA, NOTA, TOTAL_HS }
-    state.datos = (json.data || []).map(r => ({
-      LOCAL:          String(r.local  || '').trim(),
-      AÑO:            r.anio,
-      MES:            String(r.mes    || '').trim().toUpperCase(),
-      DIA:            r.dia,          // número del día del mes (derivado de MARCA_TEMPORAL en Code.gs)
-      DIA_TEXTO:      r.diaTexto,     // "LUNES", "MARTES", etc. (disponible para uso futuro)
-      EMPLEADO:       String(r.empleado || '').trim(),
-      H_ENTRADA:      r.entrada || '',
-      H_SALIDA:       r.salida  || '',
-      NOTA:           r.nota    || '',
-      TOTAL_HS:       r.total   || 0,
-      MARCA_TEMPORAL: r.marca   || '',
+    const rawData = json.data || [];
+    if (!rawData.length) throw new Error('Sin datos');
+
+    // Normalizar: el formato nuevo usa minúsculas, el viejo usa mayúsculas
+    // El resto del app espera mayúsculas, así que normalizamos a mayúsculas
+    state.datos = rawData.map(r => ({
+      LOCAL:    String(r.LOCAL    || r.local    || r.HOJA || '').trim(),
+      AÑO:      String(r.AÑO     || r.anio     || ''),
+      MES:      String(r.MES     || r.mes       || '').trim().toUpperCase(),
+      DIA:      String(r.DIA     || r.dia       || '0'),
+      EMPLEADO: String(r.EMPLEADO|| r.empleado  || '').trim(),
+      H_ENTRADA:String(r.H_ENTRADA|| r.entrada  || ''),
+      H_SALIDA: String(r.H_SALIDA || r.salida   || ''),
+      NOTA:     String(r.NOTA    || r.nota      || '').trim(),
+      TOTAL_HS: parseFloat(r.TOTAL_HS || r.total) || 0,
+      MARCA_TEMPORAL: r.MARCA_TEMPORAL || r.marca || '',
     }));
     state.cargando = false;
 
