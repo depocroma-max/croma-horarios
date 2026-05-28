@@ -1984,12 +1984,10 @@ function getUsuarios() {
 // Guarda la lista completa en el Sheet
 async function saveUsuarios(lista) {
   _usuariosCache = lista;
-  // Persistir en Sheet: reemplazar toda la hoja
+  // Pasar datos como parámetro en la URL (Apps Script no acepta POST cross-origin)
   try {
-    await fetch(`${APPS_SCRIPT_URL}?accion=guardar_usuarios`, {
-      method: 'POST',
-      body: JSON.stringify({ usuarios: lista }),
-    });
+    const datos = encodeURIComponent(JSON.stringify(lista));
+    await fetch(`${APPS_SCRIPT_URL}?accion=guardar_usuarios&datos=${datos}`);
   } catch(e) {
     console.warn('Error guardando usuarios:', e);
   }
