@@ -66,6 +66,9 @@ function getCategoriaEmpleado(nombreEmp) {
 
 // Helper: calcular horas extra según categoría personalizada
 function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
+  // Feriado: todo lo trabajado es hora extra, sin excepción (incluso franqueros)
+  if (fechaDate && esFeriado(fechaDate)) return hsTotal;
+
   const perfil = EMPLEADOS_PERFILES[nombreEmp];
   if (!perfil) return Math.max(0, hsTotal - 8); // fallback genérico
 
