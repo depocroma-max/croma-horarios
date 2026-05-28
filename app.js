@@ -1667,10 +1667,8 @@ async function cargarPerfiles() {
 async function guardarPerfil(perfil) {
   const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
   try {
-    const resp = await fetch(`${url}?accion=guardar_perfil`, {
-      method: 'POST',
-      body: JSON.stringify(perfil),
-    });
+    const datos = encodeURIComponent(JSON.stringify(perfil));
+    const resp = await fetch(`${url}?accion=guardar_perfil&datos=${datos}`);
     const json = await resp.json();
     if (json.ok) {
       EMPLEADOS_PERFILES[perfil.nombre] = perfil;
@@ -1687,10 +1685,8 @@ async function guardarPerfil(perfil) {
 async function guardarCategoria(cat) {
   const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
   try {
-    const resp = await fetch(`${url}?accion=guardar_categoria`, {
-      method: 'POST',
-      body: JSON.stringify(cat),
-    });
+    const datos = encodeURIComponent(JSON.stringify(cat));
+    const resp = await fetch(`${url}?accion=guardar_categoria&datos=${datos}`);
     const json = await resp.json();
     if (json.ok) {
       const idx = CATEGORIAS_CONFIG.findIndex(c => c.id === cat.id);
