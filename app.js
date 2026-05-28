@@ -2106,12 +2106,17 @@ async function intentarLogin() {
 
 function cerrarSesion() {
   sesionActual = null;
+  adminAutenticado = false;
+  sessionStorage.removeItem('croma_admin_auth');
   mostrarLoginApp();
 }
 
 // ── INICIAR APP SEGÚN ROL ──────────────────────────────
 function iniciarAppConSesion() {
   if (sesionActual.rol === 'admin') {
+    // Admin: marcar adminAutenticado para no pedir PIN de nuevo
+    adminAutenticado = true;
+    sessionStorage.setItem('croma_admin_auth', '1');
     // Admin: ver todo, mostrar botón admin, mostrar nav completa
     document.getElementById('btnAdmin').style.display = 'flex';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
