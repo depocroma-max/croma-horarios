@@ -1644,22 +1644,20 @@ function poblarFiltroEmpleados(datos) {
 
 // ── CARGA DE PERFILES DE EMPLEADOS ────────────────────
 async function cargarPerfiles() {
+  const urls = getSavedUrls();
+  const url  = urls['unica'] || APPS_SCRIPT_URL;
+  if (!url) return;
+
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=perfiles`);
+    const resp = await fetch(`${url}?accion=perfiles`);
     if (!resp.ok) return;
     const json = await resp.json();
+    if (!json.ok) return;
 
-    // Cargar categorías
-    if (json.categorias && json.categorias.length) {
-      CATEGORIAS_CONFIG = json.categorias;
-    }
-
-    // Cargar perfiles
-    if (json.empleados && json.empleados.length) {
+    if (json.categorias?.length) CATEGORIAS_CONFIG = json.categorias;
+    if (json.empleados?.length) {
       EMPLEADOS_PERFILES = {};
-      json.empleados.forEach(e => {
-        EMPLEADOS_PERFILES[e.nombre] = e;
-      });
+      json.empleados.forEach(e => { EMPLEADOS_PERFILES[e.nombre] = e; });
     }
   } catch(err) {
     console.warn('No se pudieron cargar perfiles:', err);
@@ -1667,8 +1665,9 @@ async function cargarPerfiles() {
 }
 
 async function guardarPerfil(perfil) {
+  const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardar_perfil`, {
+    const resp = await fetch(`${url}?accion=guardar_perfil`, {
       method: 'POST',
       body: JSON.stringify(perfil),
     });
@@ -1686,8 +1685,9 @@ async function guardarPerfil(perfil) {
 }
 
 async function guardarCategoria(cat) {
+  const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardar_categoria`, {
+    const resp = await fetch(`${url}?accion=guardar_categoria`, {
       method: 'POST',
       body: JSON.stringify(cat),
     });
@@ -1722,27 +1722,53 @@ async function cargarDatos(urls) {
   state.cargando = true;
   showToast('Cargando datos...');
 
-  // Cargar perfiles de empleados en paralelo
+  // Cargar perfiles en paralelo
   cargarPerfiles();
 
-  // Si hay una URL única (clave 'unica'), la usamos para todas las hojas
   const urlUnica = urls['unica'] || null;
+  if (!urlUnica) {
+    showToast('Falta la URL del Apps Script');
+    state.cargando = false;
+    return;
+  }
 
-  const promises = SUCURSALES.map(suc => {
-    const url = urlUnica || urls[suc.id];
-    return url ? fetchSucursal(url, suc) : Promise.resolve([]);
-  });
+  try {
+    const resp = await fetch(`${urlUnica}?accion=horarios`);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error en servidor');
 
-  const resultados = await Promise.all(promises);
-  state.datos = resultados.flat();
-  state.cargando = false;
+    // Normalizar campos del nuevo formato del Apps Script:
+    // { local, anio, mes, dia (número), diaTexto, empleado, entrada, salida, nota, total }
+    // → al formato interno que usa la app:
+    // { LOCAL, AÑO, MES, DIA (número del día del mes), EMPLEADO, H_ENTRADA, H_SALIDA, NOTA, TOTAL_HS }
+    state.datos = (json.data || []).map(r => ({
+      LOCAL:          String(r.local  || '').trim(),
+      AÑO:            r.anio,
+      MES:            String(r.mes    || '').trim().toUpperCase(),
+      DIA:            r.dia,          // número del día del mes (derivado de MARCA_TEMPORAL en Code.gs)
+      DIA_TEXTO:      r.diaTexto,     // "LUNES", "MARTES", etc. (disponible para uso futuro)
+      EMPLEADO:       String(r.empleado || '').trim(),
+      H_ENTRADA:      r.entrada || '',
+      H_SALIDA:       r.salida  || '',
+      NOTA:           r.nota    || '',
+      TOTAL_HS:       r.total   || 0,
+      MARCA_TEMPORAL: r.marca   || '',
+    }));
+    state.cargando = false;
 
-  const total = state.datos.length;
-  showToast(`${total} registros cargados`);
-  setConnected(true);
-  showApp();
-  renderAll();
-  iniciarAutoRefresh();
+    showToast(`✓ ${state.datos.length} registros cargados`);
+    setConnected(true);
+    showApp();
+    renderAll();
+    iniciarAutoRefresh();
+
+  } catch (err) {
+    state.cargando = false;
+    setConnected(false);
+    showToast('Error al cargar: ' + err.message);
+    console.error('cargarDatos error:', err);
+  }
 }
 
 // ── SETUP SCREEN ───────────────────────────────────────
