@@ -121,10 +121,10 @@ function esFeriado(date) {
 }
 
 // ── FILTROS DE DÍA (Feriados / Sábados / Domingos) ────
+// Filtros de día para el detalle de empleado
+// 'ver': sin filtro | 'feriados' | 'sabados' | 'domingos'
 let filtrosDia = {
-  ocultarFeriados: false,
-  ocultarSabados:  false,
-  ocultarDomingos: false,
+  verSolo: 'todos',   // 'todos' | 'feriados' | 'sabados' | 'domingos'
 };
 
 // URL fija del Apps Script (no requiere configuración manual)
@@ -673,6 +673,10 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       const diaSem  = DIAS_SEMANA[fecha.getDay()];
       const esSab   = fecha.getDay() === 6;
       const esDom   = fecha.getDay() === 0;
+      const esFer   = esFeriado(fecha);
+
+      // Aplicar filtro de día
+      if (diaFiltrado(fecha)) return null;
 
       let horaReg = '';
       if (r0.MARCA_TEMPORAL) {
@@ -692,8 +696,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         return s ? s.nombre : r.LOCAL;
       }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
-      return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, nota, localStr };
-    });
+      return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr };
+    }).filter(Boolean);
 
     const totalHsExtra = filas.reduce((a, f) => a + f.hsExtra, 0);
     const totalSabs    = filas.filter(f => f.esSab).length;
@@ -713,8 +717,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     document.getElementById('detalleSub').textContent       = suc.nombre + ' · ' + periodoLabel;
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => `
-      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''}">
-        <td>${f.fechaStr}</td>
+      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}">
+        <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">${f.horaReg}</td>
         <td class="turno-cell">${f.turno1}</td>
@@ -797,8 +801,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
             </tr>
           </thead>
           <tbody id="detalleTbody">
-            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''}">
-              <td>${f.fechaStr}</td>
+            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}">
+              <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
               <td class="turno-cell">${f.turno1}</td>
@@ -1511,26 +1515,25 @@ function renderResumenMes(datos) {
   const empMap = {};
   datosMes.forEach(r => {
     const key = `${r.EMPLEADO}||${r.LOCAL}`;
-    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(), tm: 0, tt: 0, comp: 0 };
+    if (!empMap[key]) empMap[key] = { nombre: r.EMPLEADO, local: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(), feriados: new Set(), hsPorDia: {} };
     const hs = parseFloat(r.TOTAL_HS) || 0;
     empMap[key].horas += hs;
-    empMap[key].dias.add(r.DIA);
-    // Acumular horas por día para calcular extra correctamente (turnos cortados)
-    if (!empMap[key].hsPorDia) empMap[key].hsPorDia = {};
     const diaKey = r.AÑO + '-' + r.MES + '-' + r.DIA;
+    empMap[key].dias.add(diaKey);
     empMap[key].hsPorDia[diaKey] = (empMap[key].hsPorDia[diaKey] || 0) + hs;
     const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
-    if (dow === 6) empMap[key].sabados.add(r.DIA);
-    const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
-    if (tipo === 'TM') empMap[key].tm++;
-    else if (tipo === 'TT') empMap[key].tt++;
-    else if (tipo === 'COMP') empMap[key].comp++;
+    if (dow === 6) empMap[key].sabados.add(diaKey);
+    const fechaObj = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA));
+    if (esFeriado(fechaObj)) empMap[key].feriados.add(diaKey);
   });
 
-  // Calcular hsExtra correctamente agrupando por día
+  // Calcular hsExtra por día usando categoría del empleado
   Object.values(empMap).forEach(e => {
-    e.hsExtra = Object.values(e.hsPorDia || {})
-      .reduce((acc, hsDia) => acc + Math.max(0, hsDia - 8), 0);
+    e.hsExtra = Object.entries(e.hsPorDia).reduce((acc, [diaKey, hsDia]) => {
+      const [anio, mes, dia] = diaKey.split('-');
+      const fecha = new Date(parseInt(anio), MESES_ES.indexOf(mes), parseInt(dia));
+      return acc + calcularHsExtra(e.nombre, hsDia, fecha);
+    }, 0);
   });
 
   const lista = Object.values(empMap).sort((a, b) => b.horas - a.horas);
@@ -1555,9 +1558,7 @@ function renderResumenMes(datos) {
           <th>Horas</th>
           <th>Hs extra</th>
           <th>Sábados</th>
-          <th>Mañana</th>
-          <th>Tarde</th>
-          <th>Completo</th>
+          <th>Feriados</th>
         </tr>
       </thead>
       <tbody>`;
@@ -1573,9 +1574,7 @@ function renderResumenMes(datos) {
       <td><strong>${e.horas.toFixed(1)}</strong></td>
       <td>${e.hsExtra > 0 ? `<span class="hs-extra">${e.hsExtra.toFixed(1)}</span>` : '—'}</td>
       <td>${e.sabados.size || '—'}</td>
-      <td>${e.tm || '—'}</td>
-      <td>${e.tt || '—'}</td>
-      <td>${e.comp || '—'}</td>
+      <td>${e.feriados.size ? `<span class="tag-feriado">${e.feriados.size}</span>` : '—'}</td>
     </tr>`;
   });
 
@@ -1585,7 +1584,7 @@ function renderResumenMes(datos) {
         <tr>
           <td colspan="3"><strong>TOTAL</strong></td>
           <td><strong>${totalHoras.toFixed(1)}</strong></td>
-          <td colspan="5"></td>
+          <td colspan="3"></td>
         </tr>
       </tfoot>
     </table></div></div>`;
@@ -1832,16 +1831,22 @@ function setView(view) {
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 function toggleFiltroDia(tipo, activo) {
-  if (tipo === 'feriados')  filtrosDia.ocultarFeriados = activo;
-  if (tipo === 'sabados')   filtrosDia.ocultarSabados  = activo;
-  if (tipo === 'domingos')  filtrosDia.ocultarDomingos = activo;
+  // Si se activa uno, desactiva los demás (radio behaviour)
+  filtrosDia.verSolo = activo ? tipo : 'todos';
+  // Sincronizar checkboxes
+  ['feriados','sabados','domingos'].forEach(t => {
+    const el = document.getElementById('chk' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (el) el.checked = (filtrosDia.verSolo === t);
+  });
   renderAll();
 }
 
+// Devuelve true si el día NO debe mostrarse según el filtro activo
 function diaFiltrado(date) {
-  if (filtrosDia.ocultarFeriados && esFeriado(date)) return true;
-  if (filtrosDia.ocultarSabados  && date.getDay() === 6) return true;
-  if (filtrosDia.ocultarDomingos && date.getDay() === 0) return true;
+  if (filtrosDia.verSolo === 'todos') return false;
+  if (filtrosDia.verSolo === 'feriados')  return !esFeriado(date);
+  if (filtrosDia.verSolo === 'sabados')   return date.getDay() !== 6;
+  if (filtrosDia.verSolo === 'domingos')  return date.getDay() !== 0;
   return false;
 }
 
