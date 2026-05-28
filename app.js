@@ -1631,7 +1631,6 @@ function renderAll() {
   renderCalendario(datos);
   renderResumenMes(datos);
   renderEmpleados(datos);
-  renderReportes(datos);
   poblarFiltroEmpleados(datos);
 }
 
@@ -1852,7 +1851,7 @@ function setView(view) {
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);  // empleados tiene sus propios checkboxes
   } else {
-    // reportes
+    // empleados u otras vistas sin barra
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
