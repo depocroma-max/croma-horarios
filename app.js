@@ -1760,20 +1760,31 @@ async function cargarDatos(urls) {
     const rawData = json.data || [];
     if (!rawData.length) throw new Error('Sin datos');
 
+    // Mapa de nombre de hoja → ID de sucursal
+    const NOMBRE_A_ID = {
+      'PASEO': '01', 'WAVE': '05', 'CIPO': '09', 'CIPO SAN MARTIN': '09',
+      'PERITO': '10', 'PERITO MORENO': '10', 'CENTE': '12', 'CENTENARIO': '12',
+      'ROCA180': '14', 'ROCA': '14', 'DEPO': 'DEPO', 'OFICINA': 'OFICINA',
+    };
+
     // Normalizar: el formato nuevo usa minúsculas, el viejo usa mayúsculas
     // El resto del app espera mayúsculas, así que normalizamos a mayúsculas
-    state.datos = rawData.map(r => ({
-      LOCAL:    String(r.LOCAL    || r.local    || r.HOJA || '').trim(),
-      AÑO:      String(r.AÑO     || r.anio     || ''),
-      MES:      String(r.MES     || r.mes       || '').trim().toUpperCase(),
-      DIA:      String(r.DIA     || r.dia       || '0'),
-      EMPLEADO: String(r.EMPLEADO|| r.empleado  || '').trim(),
-      H_ENTRADA:String(r.H_ENTRADA|| r.entrada  || ''),
-      H_SALIDA: String(r.H_SALIDA || r.salida   || ''),
-      NOTA:     String(r.NOTA    || r.nota      || '').trim(),
-      TOTAL_HS: parseFloat(r.TOTAL_HS || r.total) || 0,
-      MARCA_TEMPORAL: r.MARCA_TEMPORAL || r.marca || '',
-    }));
+    state.datos = rawData.map(r => {
+      const localRaw = String(r.LOCAL || r.local || r.HOJA || '').trim().toUpperCase();
+      const localId  = NOMBRE_A_ID[localRaw] || localRaw;
+      return {
+        LOCAL:    localId,
+        AÑO:      String(r.AÑO     || r.anio     || ''),
+        MES:      String(r.MES     || r.mes       || '').trim().toUpperCase(),
+        DIA:      String(r.DIA     || r.dia       || '0'),
+        EMPLEADO: String(r.EMPLEADO|| r.empleado  || '').trim(),
+        H_ENTRADA:String(r.H_ENTRADA|| r.entrada  || ''),
+        H_SALIDA: String(r.H_SALIDA || r.salida   || ''),
+        NOTA:     String(r.NOTA    || r.nota      || '').trim(),
+        TOTAL_HS: parseFloat(r.TOTAL_HS || r.total) || 0,
+        MARCA_TEMPORAL: r.MARCA_TEMPORAL || r.marca || '',
+      };
+    });
     state.cargando = false;
 
     showToast(`✓ ${state.datos.length} registros cargados`);
@@ -2201,18 +2212,26 @@ async function cargarDatosEmpleado() {
     if (json.ok === false) throw new Error(json.error || 'Error');
 
     const rawData = json.data || [];
-    state.datos = rawData.map(r => ({
-      LOCAL:    String(r.LOCAL    || r.local    || r.HOJA || '').trim(),
-      AÑO:      String(r.AÑO     || r.anio     || ''),
-      MES:      String(r.MES     || r.mes       || '').trim().toUpperCase(),
-      DIA:      String(r.DIA     || r.dia       || '0'),
-      EMPLEADO: String(r.EMPLEADO|| r.empleado  || '').trim(),
-      H_ENTRADA:String(r.H_ENTRADA|| r.entrada  || ''),
-      H_SALIDA: String(r.H_SALIDA || r.salida   || ''),
-      NOTA:     String(r.NOTA    || r.nota      || '').trim(),
-      TOTAL_HS: parseFloat(r.TOTAL_HS || r.total) || 0,
-      MARCA_TEMPORAL: r.MARCA_TEMPORAL || r.marca || '',
-    }));
+    state.datos = rawData.map(r => {
+      const NOMBRE_A_ID = {
+        'PASEO': '01', 'WAVE': '05', 'CIPO': '09', 'CIPO SAN MARTIN': '09',
+        'PERITO': '10', 'PERITO MORENO': '10', 'CENTE': '12', 'CENTENARIO': '12',
+        'ROCA180': '14', 'ROCA': '14', 'DEPO': 'DEPO', 'OFICINA': 'OFICINA',
+      };
+      const localRaw = String(r.LOCAL || r.local || r.HOJA || '').trim().toUpperCase();
+      return {
+        LOCAL:    NOMBRE_A_ID[localRaw] || localRaw,
+        AÑO:      String(r.AÑO     || r.anio     || ''),
+        MES:      String(r.MES     || r.mes       || '').trim().toUpperCase(),
+        DIA:      String(r.DIA     || r.dia       || '0'),
+        EMPLEADO: String(r.EMPLEADO|| r.empleado  || '').trim(),
+        H_ENTRADA:String(r.H_ENTRADA|| r.entrada  || ''),
+        H_SALIDA: String(r.H_SALIDA || r.salida   || ''),
+        NOTA:     String(r.NOTA    || r.nota      || '').trim(),
+        TOTAL_HS: parseFloat(r.TOTAL_HS || r.total) || 0,
+        MARCA_TEMPORAL: r.MARCA_TEMPORAL || r.marca || '',
+      };
+    });
 
     setConnected(true);
     mostrarVistaEmpleado();
