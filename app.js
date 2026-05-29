@@ -534,6 +534,20 @@ function renderEmpleados(datos) {
       ? `<span class="emp-cat-badge">${e.categoria}</span>`
       : '';
 
+    // WhatsApp: buscar celular del usuario vinculado a este empleado
+    const usuarioVinculado = getUsuarios().find(u => u.empleadoNombre === e.nombre);
+    const celular = usuarioVinculado?.celular;
+    const waBtn = celular
+      ? `<a href="https://wa.me/549${celular}" target="_blank" onclick="event.stopPropagation()"
+           class="wa-btn" title="WhatsApp de ${nomMostrar}">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+             <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.855L.057 23.07a.75.75 0 0 0 .918.908l5.339-1.453A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.896 0-3.67-.52-5.188-1.428l-.372-.22-3.867 1.052 1.081-3.775-.242-.389A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+           </svg>
+           WhatsApp
+         </a>`
+      : '';
+
     return `<div class="emp-card" onclick="abrirDetalleEmpleadoDesdePanel('${e.nombre.replace(/'/g,"\\'")}', '${e.suc}')" style="cursor:pointer">
       <div class="emp-card-head">
         <div class="emp-avatar ${e.foto_url ? 'emp-avatar-foto' : ''}" style="${e.foto_url ? '' : `background:${s.colorLight};color:${s.color}`}">
@@ -563,7 +577,10 @@ function renderEmpleados(datos) {
           <div class="emp-stat-label">Sábados</div>
         </div>
       </div>
-      <div class="emp-card-footer">Ver jornada completa →</div>
+      <div class="emp-card-footer">
+        ${waBtn}
+        <span>Ver jornada completa →</span>
+      </div>
     </div>`;
   }).join('');
 
@@ -2397,6 +2414,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           </select>
         </div>
         <div style="display:flex;gap:6px">
+          <button class="btn-detalle-accion" onclick="abrirMiPerfil()" title="Mi perfil">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg>
+            Mi perfil
+          </button>
           <button class="btn-detalle-accion" onclick="imprimirVistaEmpleado()" title="Imprimir">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             Imprimir
@@ -2455,6 +2476,121 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 
 function imprimirVistaEmpleado() {
   window.print();
+}
+
+// ── MI PERFIL (vista empleado) ─────────────────────────
+function abrirMiPerfil() {
+  const lista = getUsuarios();
+  const u = lista.find(u => u.nombre.toLowerCase() === sesionActual.nombre.toLowerCase());
+  if (!u) { showToast('No se encontró tu usuario'); return; }
+
+  // Crear overlay
+  let overlay = document.getElementById('miPerfilOverlay');
+  if (overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'miPerfilOverlay';
+  overlay.className = 'admin-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) cerrarMiPerfil(); };
+  overlay.innerHTML = `
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Mi perfil</div>
+        <button class="detalle-close" onclick="cerrarMiPerfil()">✕</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Usuario</label>
+          <div style="padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:14px;color:#374151;border:1px solid #e2e8f0">
+            ${u.nombre}
+          </div>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Celular (WhatsApp)</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
+            <input type="text" class="admin-input" id="miPerfilCelular"
+              value="${u.celular||''}" placeholder="2994123456"
+              inputmode="numeric" style="flex:1" />
+          </div>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            Sin el 0 ni el 15 — solo los 10 dígitos
+          </span>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Cambiar PIN</label>
+          <input type="password" class="admin-input" id="miPerfilPinActual"
+            placeholder="PIN actual" maxlength="8" autocomplete="off" />
+        </div>
+        <div class="admin-form-grupo">
+          <input type="password" class="admin-input" id="miPerfilPinNuevo"
+            placeholder="PIN nuevo (mínimo 4 dígitos)" maxlength="8" autocomplete="off" />
+        </div>
+        <div class="admin-form-grupo">
+          <input type="password" class="admin-input" id="miPerfilPinRepetir"
+            placeholder="Repetir PIN nuevo" maxlength="8" autocomplete="off" />
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            Dejá los campos de PIN vacíos si no querés cambiarlo
+          </span>
+        </div>
+
+        <p id="miPerfilError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
+
+        <div style="display:flex;gap:10px;margin-top:1rem">
+          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarMiPerfil()">
+            Guardar cambios
+          </button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarMiPerfil()">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function cerrarMiPerfil() {
+  document.getElementById('miPerfilOverlay')?.remove();
+}
+
+async function guardarMiPerfil() {
+  const celular    = document.getElementById('miPerfilCelular')?.value.trim().replace(/\D/g,'');
+  const pinActual  = document.getElementById('miPerfilPinActual')?.value;
+  const pinNuevo   = document.getElementById('miPerfilPinNuevo')?.value;
+  const pinRepetir = document.getElementById('miPerfilPinRepetir')?.value;
+  const errEl      = document.getElementById('miPerfilError');
+
+  const lista = getUsuarios();
+  const idx   = lista.findIndex(u => u.nombre.toLowerCase() === sesionActual.nombre.toLowerCase());
+  if (idx < 0) { showToast('Error: usuario no encontrado'); return; }
+
+  const u = { ...lista[idx] };
+
+  // Validar cambio de PIN si se intentó
+  if (pinActual || pinNuevo || pinRepetir) {
+    if (pinActual !== u.pin) {
+      errEl.textContent = 'El PIN actual es incorrecto';
+      errEl.style.display = 'block'; return;
+    }
+    if (!pinNuevo || pinNuevo.length < 4) {
+      errEl.textContent = 'El PIN nuevo debe tener al menos 4 caracteres';
+      errEl.style.display = 'block'; return;
+    }
+    if (pinNuevo !== pinRepetir) {
+      errEl.textContent = 'Los PINs nuevos no coinciden';
+      errEl.style.display = 'block'; return;
+    }
+    u.pin = pinNuevo;
+  }
+
+  u.celular = celular || null;
+  lista[idx] = u;
+
+  await saveUsuarios(lista);
+  cerrarMiPerfil();
+  showToast('✓ Perfil actualizado');
 }
 
 // ── GESTIÓN DE USUARIOS EN ADMIN ───────────────────────
@@ -2565,6 +2701,19 @@ function abrirEditarUsuario(idx) {
             inputmode="numeric" autocomplete="off" />
         </div>
 
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Celular (WhatsApp)</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
+            <input type="text" class="admin-input" id="editUsuarioCelular"
+              value="${u?.celular||''}" placeholder="2994123456"
+              inputmode="numeric" autocomplete="off" style="flex:1" />
+          </div>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            Sin el 0 ni el 15 — solo los 10 dígitos
+          </span>
+        </div>
+
         <div style="display:flex;gap:10px;margin-top:1.5rem">
           <button class="btn-connect" style="margin:0;flex:1" onclick="guardarUsuarioDesdeForm()">
             ${u ? 'Guardar cambios' : 'Crear usuario'}
@@ -2581,16 +2730,16 @@ function abrirEditarUsuario(idx) {
 function guardarUsuarioDesdeForm() {
   const idxStr = document.getElementById('editUsuarioIdx')?.value;
   const idx    = idxStr !== '' ? parseInt(idxStr) : null;
-  const nombre = document.getElementById('editUsuarioNombre')?.value.trim();
-  const emp    = document.getElementById('editUsuarioEmp')?.value;
-  const pin    = document.getElementById('editUsuarioPin')?.value.trim();
+  const nombre   = document.getElementById('editUsuarioNombre')?.value.trim();
+  const emp      = document.getElementById('editUsuarioEmp')?.value;
+  const pin      = document.getElementById('editUsuarioPin')?.value.trim();
+  const celular  = document.getElementById('editUsuarioCelular')?.value.trim().replace(/\D/g,'');
 
   if (!nombre) { showToast('Ingresá un nombre de usuario'); return; }
   if (!pin || pin.length < 4) { showToast('El PIN debe tener al menos 4 caracteres'); return; }
 
   const lista = getUsuarios();
 
-  // Verificar que el nombre no esté duplicado (salvo que sea el mismo registro)
   const existe = lista.find((u, i) => u.nombre.toLowerCase() === nombre.toLowerCase() && i !== idx);
   if (existe) { showToast('Ya existe un usuario con ese nombre'); return; }
 
@@ -2599,6 +2748,7 @@ function guardarUsuarioDesdeForm() {
     pin,
     rol: 'empleado',
     empleadoNombre: emp || null,
+    celular: celular || null,
   };
 
   if (idx !== null) {
