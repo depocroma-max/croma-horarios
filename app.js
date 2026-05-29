@@ -2143,18 +2143,22 @@ function iniciarAppConSesion() {
     document.getElementById('btnAdmin').style.display = 'flex';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
     document.querySelectorAll('.drawer-nav-btn').forEach(b => b.style.display = '');
-    // Agregar indicador de sesión admin
     actualizarIndicadorSesion();
     showApp();
     const vistaGuardada = localStorage.getItem('croma_vista') || 'mes';
     setView(vistaGuardada);
     cargarDatos({ unica: APPS_SCRIPT_URL });
   } else {
-    // Empleado: ocultar admin btn y tabs de admin, cargar y mostrar solo su detalle
-    document.getElementById('btnAdmin').style.display = 'none';
+    // Empleado: preparar el DOM ANTES de showApp para evitar flash
+    document.getElementById('btnAdmin').style.display     = 'none';
+    document.getElementById('btnRefresh').style.display   = 'none';
+    document.getElementById('btnPrint').style.display     = 'none';
+    document.querySelector('.top-nav').style.display      = 'none';
+    document.querySelector('.top-search').style.display   = 'none';
+    document.querySelector('.controls-bar').style.display = 'none';
+    document.querySelector('.hamburger-btn') && (document.querySelector('.hamburger-btn').style.display = 'none');
     actualizarIndicadorSesion();
     showApp();
-    setView('mes'); // vista por defecto mientras carga
     cargarDatosEmpleado();
   }
 }
@@ -2225,7 +2229,6 @@ function mostrarVistaEmpleado() {
     return;
   }
 
-  // Filtrar registros del empleado logueado
   const misRegistros = state.datos.filter(r =>
     r.EMPLEADO.trim().toLowerCase() === nombreEmp.trim().toLowerCase()
   );
@@ -2235,16 +2238,9 @@ function mostrarVistaEmpleado() {
     return;
   }
 
-  // Determinar su sucursal principal (la más frecuente)
   const sucConteo = {};
   misRegistros.forEach(r => { sucConteo[r.LOCAL] = (sucConteo[r.LOCAL]||0) + 1; });
   const sucId = Object.entries(sucConteo).sort((a,b)=>b[1]-a[1])[0][0];
-
-  // Ocultar la nav completa y mostrar solo la vista de empleado
-  document.querySelector('.top-nav').style.display = 'none';
-  document.querySelector('.hamburger-btn')?.style && (document.querySelector('.hamburger-btn').style.display = 'none');
-  document.querySelector('.top-search').style.display = 'none';
-  document.querySelector('.controls-bar').style.display = 'none';
 
   // Reemplazar contenido del main por vista de empleado
   const mainApp = document.getElementById('mainApp');
