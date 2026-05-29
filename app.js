@@ -2542,11 +2542,11 @@ function abrirMiPerfil() {
 
         <p id="miPerfilError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
 
-        <div style="display:flex;gap:10px;margin-top:1rem">
-          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarMiPerfil()">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1rem">
+          <button class="btn-connect" style="margin:0;width:100%" onclick="guardarMiPerfil()">
             Guardar cambios
           </button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarMiPerfil()">
+          <button class="btn-demo" style="width:100%;padding:11px 16px" onclick="cerrarMiPerfil()">
             Cancelar
           </button>
         </div>
