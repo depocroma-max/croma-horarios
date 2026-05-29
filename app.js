@@ -2049,14 +2049,14 @@ function mostrarLoginApp() {
 
       <div class="login-form">
         <div class="login-grupo">
-          <label class="login-label">Usuario</label>
+          <label class="login-label" for="loginUsuario">Usuario</label>
           <input type="text" id="loginUsuario" class="login-input"
             placeholder="Tu nombre de usuario"
             autocomplete="off" autocapitalize="off" spellcheck="false"
             onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()" />
         </div>
         <div class="login-grupo">
-          <label class="login-label">PIN</label>
+          <label class="login-label" for="loginPin">PIN</label>
           <div class="login-pin-wrap">
             <input type="password" id="loginPin" class="login-input"
               placeholder="••••" maxlength="8" autocomplete="off"
