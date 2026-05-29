@@ -2157,6 +2157,8 @@ function iniciarAppConSesion() {
     document.querySelector('.top-search').style.display   = 'none';
     document.querySelector('.controls-bar').style.display = 'none';
     document.querySelector('.hamburger-btn') && (document.querySelector('.hamburger-btn').style.display = 'none');
+    // Vaciar el mainApp para que no se vean los stats y vistas de admin
+    document.getElementById('mainApp').innerHTML = '<div id="vistaEmpleadoContainer" style="padding:1rem"></div>';
     actualizarIndicadorSesion();
     showApp();
     cargarDatosEmpleado();
@@ -2242,10 +2244,12 @@ function mostrarVistaEmpleado() {
   misRegistros.forEach(r => { sucConteo[r.LOCAL] = (sucConteo[r.LOCAL]||0) + 1; });
   const sucId = Object.entries(sucConteo).sort((a,b)=>b[1]-a[1])[0][0];
 
-  // Reemplazar contenido del main por vista de empleado
-  const mainApp = document.getElementById('mainApp');
-  mainApp.innerHTML = `<div id="vistaEmpleadoContainer"></div>`;
-
+  // El contenedor ya fue creado en iniciarAppConSesion
+  const container = document.getElementById('vistaEmpleadoContainer');
+  if (container) container.innerHTML = '';
+  else {
+    document.getElementById('mainApp').innerHTML = '<div id="vistaEmpleadoContainer" style="padding:1rem"></div>';
+  }
   renderVistaEmpleado(nombreEmp, sucId, misRegistros);
 }
 
