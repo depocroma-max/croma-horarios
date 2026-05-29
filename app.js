@@ -2458,10 +2458,9 @@ function imprimirVistaEmpleado() {
 }
 
 // ── GESTIÓN DE USUARIOS EN ADMIN ───────────────────────
-function renderAdminUsuarios() {
+function renderAdminUsuariosInner() {
   const lista = getUsuarios();
 
-  // Todos los empleados únicos en el sistema para el select
   const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a,b)=>{
     const na = parseInt(a)||999, nb = parseInt(b)||999;
     return na!==nb ? na-nb : a.localeCompare(b);
@@ -2485,30 +2484,32 @@ function renderAdminUsuarios() {
   }).join('');
 
   return `
-    <div id="adminTabUsuarios" class="admin-tab-content">
-      <div class="admin-toolbar">
-        <button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px" onclick="abrirNuevoUsuario()">+ Nuevo usuario</button>
-        <span style="font-size:12px;color:#94a3b8">${lista.length} usuario${lista.length!==1?'s':''} + Admin</span>
-      </div>
-      <div class="admin-table-wrap">
-        <table class="admin-tabla">
-          <thead>
-            <tr><th>Usuario</th><th>Empleado vinculado</th><th>Rol</th><th>PIN</th><th></th></tr>
-          </thead>
-          <tbody>
-            <tr style="background:#fafafa">
-              <td><strong>Admin</strong></td>
-              <td><span style="color:#94a3b8;font-size:12px">—</span></td>
-              <td><span class="pill pill-falta" style="font-size:10px">admin</span></td>
-              <td><code style="font-size:12px;background:#f1f5f9;padding:2px 8px;border-radius:4px">${'•'.repeat(ADMIN_PIN.length)}</code></td>
-              <td><span style="font-size:11px;color:#94a3b8">PIN fijo en código</span></td>
-            </tr>
-            ${filas || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8">Sin usuarios creados aún</td></tr>'}
-          </tbody>
-        </table>
-      </div>
+    <div class="admin-toolbar">
+      <button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px" onclick="abrirNuevoUsuario()">+ Nuevo usuario</button>
+      <span style="font-size:12px;color:#94a3b8">${lista.length} usuario${lista.length!==1?'s':''} + Admin</span>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-tabla">
+        <thead>
+          <tr><th>Usuario</th><th>Empleado vinculado</th><th>Rol</th><th>PIN</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fafafa">
+            <td><strong>Admin</strong></td>
+            <td><span style="color:#94a3b8;font-size:12px">—</span></td>
+            <td><span class="pill pill-falta" style="font-size:10px">admin</span></td>
+            <td><code style="font-size:12px;background:#f1f5f9;padding:2px 8px;border-radius:4px">${'•'.repeat(ADMIN_PIN.length)}</code></td>
+            <td><span style="font-size:11px;color:#94a3b8">PIN fijo en código</span></td>
+          </tr>
+          ${filas || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8">Sin usuarios creados aún</td></tr>'}
+        </tbody>
+      </table>
     </div>
   `;
+}
+
+function renderAdminUsuarios() {
+  return `<div id="adminTabUsuarios" class="admin-tab-content" style="display:none">${renderAdminUsuariosInner()}</div>`;
 }
 
 function abrirNuevoUsuario() { abrirEditarUsuario(null); }
@@ -2609,7 +2610,9 @@ function guardarUsuarioDesdeForm() {
   saveUsuarios(lista);
   showToast(idx !== null ? '✓ Usuario actualizado' : '✓ Usuario creado');
   cerrarAdmin();
-  renderAdmin();
+  // Actualizar solo el tab de usuarios sin rerenderizar todo el panel
+  const tabEl = document.getElementById('adminTabUsuarios');
+  if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
 }
 
 function eliminarUsuario(idx) {
@@ -2620,7 +2623,8 @@ function eliminarUsuario(idx) {
   lista.splice(idx, 1);
   saveUsuarios(lista);
   showToast('Usuario eliminado');
-  renderAdmin();
+  const tabEl = document.getElementById('adminTabUsuarios');
+  if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
 }
 // ── PANEL ADMIN ────────────────────────────────────────
 const ADMIN_PIN = '2811'; // PIN de acceso — cambiarlo en producción
@@ -2788,7 +2792,7 @@ function switchAdminTab(tab, btn) {
   if (tab === 'usuarios') {
     cargarUsuarios().then(() => {
       const tabEl = document.getElementById('adminTabUsuarios');
-      if (tabEl) tabEl.outerHTML = renderAdminUsuarios();
+      if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
     });
   }
 }
