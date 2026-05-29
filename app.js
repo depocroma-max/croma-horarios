@@ -2369,6 +2369,35 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       </tr>`).join('');
   }
 
+  function buildCards(fs) {
+    return fs.map(f => {
+      const clases = [f.esSab?'ev-card-sabado':'', f.esDom?'ev-card-domingo':'', f.esFer?'ev-card-feriado':''].filter(Boolean).join(' ');
+      const turno2html = f.turno2 && f.turno2 !== '—' ? `<span class="ev-card-turno">${f.turno2}</span>` : '';
+      const extraHtml  = f.hsExtra > 0 ? `<span class="ev-card-extra">+${f.hsExtra.toFixed(1)} extra</span>` : '';
+      const sabHtml    = f.esSab ? `<span class="ev-card-sab">Sáb ✓</span>` : '';
+      const notaHtml   = f.nota  ? `<div class="ev-card-nota">${f.nota}</div>` : '';
+      return `
+        <div class="ev-card ${clases}">
+          <div class="ev-card-top">
+            <div class="ev-card-fecha">
+              <span class="ev-card-dia-sem">${f.diaSem}</span>
+              <span class="ev-card-fecha-str">${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</span>
+            </div>
+            <div class="ev-card-hs">
+              <span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span>
+              ${extraHtml}${sabHtml}
+            </div>
+          </div>
+          <div class="ev-card-turnos">
+            <span class="ev-card-turno">${f.turno1}</span>
+            ${turno2html}
+            ${f.horaReg ? `<span class="ev-card-hora-reg">Reg. ${f.horaReg}</span>` : ''}
+          </div>
+          ${notaHtml}
+        </div>`;
+    }).join('');
+  }
+
   const empresaBadge = perfil.empresa
     ? `<span class="emp-empresa-badge ${perfil.empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}">${perfil.empresa}</span>`
     : '';
@@ -2430,8 +2459,8 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
       </div>
 
-      <!-- TABLA -->
-      <div class="detalle-tabla-wrap" id="evTablaWrap">
+      <!-- TABLA (desktop) / CARDS (mobile) -->
+      <div class="detalle-tabla-wrap ev-tabla-desktop" id="evTablaWrap">
         <table class="detalle-tabla">
           <thead>
             <tr>
@@ -2454,6 +2483,15 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           </tfoot>
         </table>
       </div>
+      <div class="ev-cards-mobile" id="evCardsWrap">
+        ${buildCards(filas)}
+        <div class="ev-card-totales">
+          <span>${diasUnicos} días</span>
+          <span>${totalHoras.toFixed(1)} hs totales</span>
+          ${totalHsExtra>0?`<span class="ev-card-extra">+${totalHsExtra.toFixed(1)} extra</span>`:''}
+          <span>${totalSabs} sábados</span>
+        </div>
+      </div>
     </div>
   `;
 
@@ -2466,6 +2504,15 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     document.getElementById('evExtra').textContent = t.totalHsExtra.toFixed(1);
     document.getElementById('evSabs').textContent  = t.totalSabs;
     document.getElementById('evTbody').innerHTML   = buildFilas(t.filas);
+    // Actualizar cards mobile
+    const cardsWrap = document.getElementById('evCardsWrap');
+    if (cardsWrap) cardsWrap.innerHTML = buildCards(t.filas) + `
+      <div class="ev-card-totales">
+        <span>${t.diasUnicos} días</span>
+        <span>${t.totalHoras.toFixed(1)} hs totales</span>
+        ${t.totalHsExtra>0?`<span class="ev-card-extra">+${t.totalHsExtra.toFixed(1)} extra</span>`:''}
+        <span>${t.totalSabs} sábados</span>
+      </div>`;
     document.getElementById('evTfoot').innerHTML   = `
       <tr>
         <td colspan="2"><strong>TOTALES</strong></td>
