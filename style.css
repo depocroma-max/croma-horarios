@@ -1127,7 +1127,7 @@ body {
 
 /* Form Admin */
 .admin-form {
-  padding: 1.5rem; overflow-y: auto; max-height: calc(90vh - 120px);
+  padding: 1.5rem; overflow-y: auto; max-height: calc(85vh - 80px);
 }
 .admin-form-grupo {
   display: flex; flex-direction: column; gap: 6px; margin-bottom: 1rem;
@@ -1351,4 +1351,19 @@ body {
 }
 .wa-btn:hover {
   background: #16a34a; color: white; border-color: #16a34a;
+}
+
+/* ===== MI PERFIL OVERLAY ===== */
+#miPerfilOverlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+#miPerfilOverlay .admin-panel {
+  max-height: 92vh;
+}
+#miPerfilOverlay .admin-form {
+  max-height: calc(92vh - 70px);
+  overflow-y: auto;
 }
