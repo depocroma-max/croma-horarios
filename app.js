@@ -1640,9 +1640,14 @@ function renderResumenMes(datos) {
 
 
 function renderAll() {
+  // Si hay sesión de empleado activa, no renderizar la vista admin
+  if (sesionActual && sesionActual.rol === 'empleado') return;
+
   const datos = state.datos.length ? state.datos : [];
-  document.getElementById('weekRange').textContent = getWeekRange(state.semanaOffset);
-  document.getElementById('mesRange').textContent  = getMesLabel(state.mesOffset);
+  const wrEl = document.getElementById('weekRange');
+  const mrEl = document.getElementById('mesRange');
+  if (wrEl) wrEl.textContent = getWeekRange(state.semanaOffset);
+  if (mrEl) mrEl.textContent = getMesLabel(state.mesOffset);
   renderStats(datos);
   renderGrilla(datos);
   renderCalendario(datos);
