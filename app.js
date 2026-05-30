@@ -763,7 +763,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
       return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr,
-               anioNum: parseInt(r0.AÑO), mesNum: MESES_ES.indexOf(r0.MES) + 1, diaNum: parseInt(r0.DIA) };
+               fechaISO: `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-${String(fecha.getDate()).padStart(2,'0')}` };
     }).filter(Boolean);
 
     // Totales calculados desde las filas ya filtradas
@@ -787,7 +787,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     document.getElementById('detalleSub').textContent       = suc.nombre + ' · ' + periodoLabel;
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => `
-      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.anioNum}-${String(f.mesNum).padStart(2,'0')}-${String(f.diaNum).padStart(2,'0')}">
+      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
         <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">${f.horaReg}</td>
@@ -883,7 +883,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
             </tr>
           </thead>
           <tbody id="detalleTbody">
-            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.anioNum}-${String(f.mesNum).padStart(2,'0')}-${String(f.diaNum).padStart(2,'0')}">
+            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
@@ -2029,21 +2029,24 @@ function actualizarTablaDetalle() {
 
   // Filtrar y ordenar
   rows.forEach(tr => {
-    const fecha = tr.dataset.fecha;
-    if (!fecha) return;
-    const d = new Date(fecha);
+    const fechaStr = tr.dataset.fecha;
+    if (!fechaStr) return;
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    const fecha = new Date(y, m - 1, d); // mes 0-based, sin timezone
     let visible = true;
-    if (detalleFiltro === 'feriados')  visible = esFeriado(d);
-    if (detalleFiltro === 'sabados')   visible = d.getDay() === 6;
-    if (detalleFiltro === 'domingos')  visible = d.getDay() === 0;
-    if (detalleFiltro === 'laborales') visible = d.getDay() !== 0 && d.getDay() !== 6 && !esFeriado(d);
+    if (detalleFiltro === 'feriados')  visible = esFeriado(fecha);
+    if (detalleFiltro === 'sabados')   visible = fecha.getDay() === 6;
+    if (detalleFiltro === 'domingos')  visible = fecha.getDay() === 0;
+    if (detalleFiltro === 'laborales') visible = fecha.getDay() !== 0 && fecha.getDay() !== 6 && !esFeriado(fecha);
     tr.style.display = visible ? '' : 'none';
   });
 
   const visibles = rows.filter(tr => tr.style.display !== 'none');
   visibles.sort((a, b) => {
-    const da = new Date(a.dataset.fecha), db = new Date(b.dataset.fecha);
-    return detalleOrdenAsc ? da - db : db - da;
+    const [ya,ma,da] = a.dataset.fecha.split('-').map(Number);
+    const [yb,mb,db] = b.dataset.fecha.split('-').map(Number);
+    const fa = new Date(ya, ma-1, da), fb = new Date(yb, mb-1, db);
+    return detalleOrdenAsc ? fa - fb : fb - fa;
   });
   visibles.forEach(tr => tbody.appendChild(tr));
 
