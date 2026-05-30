@@ -1453,3 +1453,26 @@ body {
   transition: all 0.15s; white-space: nowrap;
 }
 .wa-btn:hover { background: #16a34a; color: white; border-color: #16a34a; }
+
+/* ===== FOOTER ===== */
+.app-footer {
+  text-align: center;
+  padding: 1.5rem;
+  font-size: 11px;
+  color: var(--gray-400);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-top: 1px solid var(--gray-100);
+  margin-top: 2rem;
+}
+
+/* ===== FILTROS EMPLEADOS — UNA SOLA FILA ===== */
+.emp-filtros-panel {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 1rem;
+}
+.emp-filtro-select { font-size: 13px; }
+@media (max-width: 900px) {
+  .emp-filtros-panel { flex-wrap: wrap; }
+}
