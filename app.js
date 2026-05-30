@@ -2027,7 +2027,7 @@ function actualizarTablaDetalle() {
   if (!tbody) return;
   const rows = Array.from(tbody.querySelectorAll('tr'));
 
-  // Filtrar
+  // Filtrar y ordenar
   rows.forEach(tr => {
     const fecha = tr.dataset.fecha;
     if (!fecha) return;
@@ -2040,13 +2040,49 @@ function actualizarTablaDetalle() {
     tr.style.display = visible ? '' : 'none';
   });
 
-  // Ordenar
   const visibles = rows.filter(tr => tr.style.display !== 'none');
   visibles.sort((a, b) => {
     const da = new Date(a.dataset.fecha), db = new Date(b.dataset.fecha);
     return detalleOrdenAsc ? da - db : db - da;
   });
   visibles.forEach(tr => tbody.appendChild(tr));
+
+  // Recalcular stats desde las filas visibles
+  let dias = 0, hs = 0, extra = 0, sabs = 0;
+  visibles.forEach(tr => {
+    dias++;
+    // Hs total: columna índice 5 (td:nth-child(6))
+    const tdHs    = tr.querySelector('td:nth-child(6)');
+    const tdExtra = tr.querySelector('td:nth-child(7)');
+    const tdSab   = tr.querySelector('td:nth-child(8)');
+    if (tdHs)    hs    += parseFloat(tdHs.textContent)    || 0;
+    if (tdExtra) extra += parseFloat(tdExtra.textContent)  || 0;
+    if (tdSab && tdSab.textContent.includes('✓')) sabs++;
+  });
+
+  // Actualizar stats del header
+  const elDias  = document.getElementById('detalleStatDias');
+  const elHs    = document.getElementById('detalleStatHs');
+  const elExtra = document.getElementById('detalleStatExtra');
+  const elSabs  = document.getElementById('detalleStatSabs');
+  if (elDias)  elDias.textContent  = dias;
+  if (elHs)    elHs.textContent    = hs.toFixed(1);
+  if (elExtra) elExtra.textContent = extra.toFixed(1);
+  if (elSabs)  elSabs.textContent  = sabs;
+
+  // Actualizar tfoot
+  const tfoot = document.getElementById('detalleTfoot');
+  if (tfoot) {
+    tfoot.innerHTML = `<tr>
+      <td colspan="2"><strong>TOTALES</strong></td>
+      <td>${dias}</td>
+      <td colspan="2"></td>
+      <td><strong>${hs.toFixed(1)}</strong></td>
+      <td>${extra > 0 ? `<span class="hs-extra">${extra.toFixed(1)}</span>` : '—'}</td>
+      <td>${sabs}</td>
+      <td colspan="2"></td>
+    </tr>`;
+  }
 }
 
 function toggleFiltroDia(tipo, activo) {
