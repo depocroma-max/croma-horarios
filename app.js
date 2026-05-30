@@ -2025,7 +2025,7 @@ async function saveUsuarios(lista) {
 // ── Login: carga usuarios del Sheet y verifica ──
 async function verificarCredencialesAsync(usuario, pin) {
   // Admin especial (hardcodeado, no necesita Sheet)
-  if (usuario.trim().toUpperCase() === 'ADMIN' && pin === ADMIN_PIN) {
+  if (usuario.trim().toUpperCase() === 'ADMINHORAS' && pin === ADMIN_PIN) {
     return { ok: true, usuario: { nombre: 'Admin', rol: 'admin', empleadoNombre: null } };
   }
   // Cargar desde Sheet si no está en cache
@@ -2848,7 +2848,7 @@ function eliminarUsuario(idx) {
   if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
 }
 // ── PANEL ADMIN ────────────────────────────────────────
-const ADMIN_PIN = '2811'; // PIN de acceso — cambiarlo en producción
+const ADMIN_PIN = '4268';
 let adminAutenticado = sessionStorage.getItem('croma_admin_auth') === '1';
 
 function abrirAdmin() {
