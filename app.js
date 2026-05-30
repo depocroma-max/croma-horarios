@@ -2156,7 +2156,7 @@ function iniciarAppConSesion() {
     document.querySelectorAll('.drawer-nav-btn').forEach(b => b.style.display = '');
     actualizarIndicadorSesion();
     showApp();
-    const vistaGuardada = localStorage.getItem('croma_vista') || 'mes';
+    const vistaGuardada = localStorage.getItem('croma_vista') || 'empleados';
     setView(vistaGuardada);
     cargarDatos({ unica: APPS_SCRIPT_URL });
   } else {
