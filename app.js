@@ -407,10 +407,11 @@ function renderEmpleados(datos) {
   });
 
   // Leer filtros del panel de empleados
-  const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
-  const selLocal   = document.getElementById('empFiltLocal')?.value   || 'all';
-  const selEmp     = document.getElementById('empFiltEmp')?.value     || 'all';
-  const selEmpresa = document.getElementById('empFiltEmpresa')?.value || 'all';
+  const selPeriodo  = document.getElementById('empFiltPeriodo')?.value  || 'all';
+  const selLocal    = document.getElementById('empFiltLocal')?.value    || 'all';
+  const selEmp      = document.getElementById('empFiltEmp')?.value      || 'all';
+  const selEmpresa  = document.getElementById('empFiltEmpresa')?.value  || 'all';
+  const selCategoria= document.getElementById('empFiltCategoria')?.value|| 'all';
 
   // Datos filtrados
   let datosFilt = datos;
@@ -423,6 +424,12 @@ function renderEmpleados(datos) {
     datosFilt = datosFilt.filter(r => {
       const perfil = EMPLEADOS_PERFILES[r.EMPLEADO];
       return perfil && perfil.empresa === selEmpresa;
+    });
+  }
+  if (selCategoria !== 'all') {
+    datosFilt = datosFilt.filter(r => {
+      const perfil = EMPLEADOS_PERFILES[r.EMPLEADO];
+      return perfil && perfil.categoria_id === selCategoria;
     });
   }
 
@@ -592,6 +599,10 @@ function renderEmpleados(datos) {
     ...EMPRESAS.map(emp => `<option value="${emp}" ${emp === selEmpresa ? 'selected' : ''}>${emp}</option>`)
   ].join('');
 
+  const categoriaOpts = [`<option value="all">Todas las categorías</option>`,
+    ...CATEGORIAS_CONFIG.map(c => `<option value="${c.id}" ${c.id === selCategoria ? 'selected' : ''}>${c.nombre}</option>`)
+  ].join('');
+
   container.innerHTML = `
     <div class="emp-filtros-panel">
       <div class="emp-filtro-grupo" style="flex:0 0 auto;justify-content:flex-end;border-right:1px solid var(--gray-100);padding-right:1.5rem;min-width:unset">
@@ -621,6 +632,12 @@ function renderEmpleados(datos) {
         <label class="emp-filtro-label">Empresa</label>
         <select class="emp-filtro-select" id="empFiltEmpresa" onchange="renderEmpleados(state.datos)">
           ${empresaOpts}
+        </select>
+      </div>
+      <div class="emp-filtro-grupo">
+        <label class="emp-filtro-label">Categoría</label>
+        <select class="emp-filtro-select" id="empFiltCategoria" onchange="renderEmpleados(state.datos)">
+          ${categoriaOpts}
         </select>
       </div>
       <div class="emp-filtro-grupo">
