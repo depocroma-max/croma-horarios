@@ -56,6 +56,12 @@ let CATEGORIAS_CONFIG = [
 // Se cargan desde el Sheet (hoja EMPLEADOS) y se cachean aquí
 // Formato: { nombre, empresa, categoria_id, hs_base, dias_base, foto_url, activo, regla_custom }
 let EMPLEADOS_PERFILES = {};   // clave: nombre exacto del empleado
+let CERTIFICADOS_CACHE = [];   // lista de certificados cargados del Sheet
+
+const TIPOS_CERTIFICADO = [
+  'Médico', 'Estudio', 'Maternidad / Paternidad', 'Duelo',
+  'Casamiento', 'Mudanza', 'Trámite', 'Accidente laboral', 'Personalizado'
+];
 
 // Helper: obtener categoría de un empleado
 function getCategoriaEmpleado(nombreEmp) {
@@ -766,6 +772,46 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                fechaISO: `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-${String(fecha.getDate()).padStart(2,'0')}` };
     }).filter(Boolean);
 
+    // Agregar filas de certificados
+    const certs = getCertificadosDe(nombreEmp);
+    certs.forEach(c => {
+      // Filtrar por período
+      if (periodo !== 'TODOS') {
+        const [cy, cm, cd] = c.fecha.split('-').map(Number);
+        const fechaCert = new Date(cy, cm-1, cd);
+        const mesAnio = `${MESES_ES[fechaCert.getMonth()]} ${fechaCert.getFullYear()}`;
+        if (mesAnio !== periodo) return;
+      }
+      const [cy, cm, cd] = c.fecha.split('-').map(Number);
+      const fechaCert = new Date(cy, cm-1, cd);
+      if (diaFiltrado(fechaCert)) return;
+      filas.push({
+        fechaStr: fechaCert.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
+        diaSem:   DIAS_SEMANA[fechaCert.getDay()],
+        horaReg:  '—',
+        turno1:   `CERTIFICADO`,
+        turno2:   '',
+        hsTotal:  c.hs,
+        hsExtra:  0,
+        esSab:    fechaCert.getDay() === 6,
+        esDom:    fechaCert.getDay() === 0,
+        esFer:    esFeriado(fechaCert),
+        nota:     c.nota || c.tipo,
+        localStr: '—',
+        esCert:   true,
+        certId:   c.id,
+        certTipo: c.tipo,
+        fechaISO: c.fecha,
+      });
+    });
+
+    // Ordenar todas las filas por fecha desc
+    filas.sort((a, b) => {
+      const [ya,ma,da] = a.fechaISO.split('-').map(Number);
+      const [yb,mb,db] = b.fechaISO.split('-').map(Number);
+      return new Date(yb,mb-1,db) - new Date(ya,ma-1,da);
+    });
+
     // Totales calculados desde las filas ya filtradas
     const totalHoras   = filas.reduce((a, f) => a + f.hsTotal, 0);
     const diasUnicos   = filas.length;
@@ -786,7 +832,20 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     document.getElementById('detalleStatSabs').textContent  = totalSabs;
     document.getElementById('detalleSub').textContent       = suc.nombre + ' · ' + periodoLabel;
 
-    document.getElementById('detalleTbody').innerHTML = filas.map(f => `
+    document.getElementById('detalleTbody').innerHTML = filas.map(f => {
+      if (f.esCert) return `
+      <tr class="fila-certificado" data-fecha="${f.fechaISO}">
+        <td>${f.fechaStr}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">—</td>
+        <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
+        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td>—</td>
+        <td></td>
+        <td>—</td>
+        <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar certificado">✕</button></td>
+      </tr>`;
+      return `
       <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
         <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
@@ -798,7 +857,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
         <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
         <td class="nota-cell">${f.nota || ''}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     actualizarTablaDetalle();
 
     document.getElementById('detalleTfoot').innerHTML = `
@@ -847,6 +907,10 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
               Excel
             </button>
+            <button class="btn-detalle-accion" style="color:#2563eb;border-color:#93c5fd" onclick="abrirFormCertificado(this.dataset.emp)" data-emp="${nombreEmp}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              + Certificado
+            </button>
             <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
           </div>
         </div>
@@ -883,7 +947,14 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
             </tr>
           </thead>
           <tbody id="detalleTbody">
-            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
+            ${filasIni.map(f => {
+              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}">
+                <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
+                <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
+                <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td></td><td>—</td>
+                <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar">✕</button></td>
+              </tr>`;
+              return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
@@ -894,7 +965,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
               <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
               <td class="nota-cell">${f.nota || ''}</td>
-            </tr>`).join('')}
+            </tr>`;}).join('')}
           </tbody>
           <tfoot id="detalleTfoot">
             <tr>
@@ -1776,9 +1847,10 @@ async function cargarDatos(urls) {
   state.cargando = true;
   showToast('Cargando datos...');
 
-  // Cargar perfiles y usuarios en paralelo
+  // Cargar perfiles, usuarios y certificados en paralelo
   cargarPerfiles();
   cargarUsuarios();
+  cargarCertificados();
 
   const urlUnica = urls['unica'] || null;
   if (!urlUnica) {
@@ -2157,6 +2229,162 @@ async function saveUsuarios(lista) {
     await fetch(`${APPS_SCRIPT_URL}?accion=guardar_usuarios&datos=${datos}`);
   } catch(e) {
     console.warn('Error guardando usuarios:', e);
+  }
+}
+
+// ── CERTIFICADOS ──────────────────────────────────────
+async function cargarCertificados() {
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
+    const json = await resp.json();
+    if (json.ok) CERTIFICADOS_CACHE = json.certificados || [];
+    return CERTIFICADOS_CACHE;
+  } catch(e) {
+    console.warn('Error cargando certificados:', e);
+    return [];
+  }
+}
+
+function getCertificadosDe(nombreEmp) {
+  return CERTIFICADOS_CACHE.filter(c =>
+    c.empleado.trim().toLowerCase() === nombreEmp.trim().toLowerCase()
+  );
+}
+
+async function guardarCertificado(cert) {
+  try {
+    const datos = encodeURIComponent(JSON.stringify(cert));
+    const resp  = await fetch(`${APPS_SCRIPT_URL}?accion=guardar_certificado&datos=${datos}`);
+    const json  = await resp.json();
+    if (json.ok) {
+      CERTIFICADOS_CACHE.push({ ...cert, id: json.id });
+      return { ok: true, id: json.id };
+    }
+    return { ok: false };
+  } catch(e) { return { ok: false }; }
+}
+
+async function borrarCertificado(id) {
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=borrar_certificado&id=${encodeURIComponent(id)}`);
+    const json = await resp.json();
+    if (json.ok) CERTIFICADOS_CACHE = CERTIFICADOS_CACHE.filter(c => c.id !== id);
+    return json.ok;
+  } catch(e) { return false; }
+}
+
+function abrirFormCertificado(nombreEmp) {
+  const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
+  const cat    = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
+  // Determinar horas por defecto según categoría
+  const hsPorDefecto = cat?.regla === 'fijo4' ? 4 : 8;
+
+  const tiposOpts = TIPOS_CERTIFICADO.map(t =>
+    `<option value="${t}">${t}</option>`
+  ).join('');
+
+  const nomMatch  = nombreEmp.match(/^(\d+)\s+(.+)$/);
+  const nomMostrar = nomMatch ? nomMatch[2] : nombreEmp;
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Agregar certificado — ${nomMostrar}</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Fecha</label>
+          <input type="date" class="admin-input" id="certFecha" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Tipo de certificado</label>
+          <select class="admin-input" id="certTipo" onchange="onCertTipoChange()">
+            ${tiposOpts}
+          </select>
+        </div>
+        <div class="admin-form-grupo" id="certNotaGrupo" style="display:none">
+          <label class="emp-filtro-label">Descripción</label>
+          <input type="text" class="admin-input" id="certNotaPersonalizada" placeholder="Ej: Trámite migratorio" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Horas que cubre</label>
+          <div style="display:flex;gap:10px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer">
+              <input type="radio" name="certHs" value="4" ${hsPorDefecto===4?'checked':''} /> 4 horas (Media jornada)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer">
+              <input type="radio" name="certHs" value="8" ${hsPorDefecto===8?'checked':''} /> 8 horas (Jornada completa)
+            </label>
+          </div>
+        </div>
+        <p id="certError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1rem">
+          <button class="btn-connect" style="margin:0" onclick="confirmarCertificado('${nombreEmp.replace(/'/g,"\\'")}')">
+            Guardar certificado
+          </button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+
+  // Fecha por defecto: hoy
+  const hoy = new Date();
+  document.getElementById('certFecha').value =
+    `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+}
+
+function onCertTipoChange() {
+  const tipo = document.getElementById('certTipo')?.value;
+  const grupo = document.getElementById('certNotaGrupo');
+  if (grupo) grupo.style.display = tipo === 'Personalizado' ? 'block' : 'none';
+}
+
+async function confirmarCertificado(nombreEmp) {
+  const fecha = document.getElementById('certFecha')?.value;
+  const tipo  = document.getElementById('certTipo')?.value;
+  const hsEl  = document.querySelector('input[name="certHs"]:checked');
+  const notaP = document.getElementById('certNotaPersonalizada')?.value.trim();
+  const errEl = document.getElementById('certError');
+
+  if (!fecha) { errEl.textContent = 'Seleccioná una fecha'; errEl.style.display='block'; return; }
+  if (!hsEl)  { errEl.textContent = 'Seleccioná las horas'; errEl.style.display='block'; return; }
+  if (tipo === 'Personalizado' && !notaP) {
+    errEl.textContent = 'Escribí una descripción'; errEl.style.display='block'; return;
+  }
+
+  const hs   = parseFloat(hsEl.value);
+  const nota = tipo === 'Personalizado' ? notaP : tipo;
+
+  const btn = document.querySelector('#adminOverlay .btn-connect');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  const resultado = await guardarCertificado({ empleado: nombreEmp, fecha, tipo, hs, nota });
+
+  if (resultado.ok) {
+    cerrarAdmin();
+    showToast('✓ Certificado guardado');
+    // Reabrir la ficha del empleado para ver el certificado
+    const suc = state.datos.find(r => r.EMPLEADO === nombreEmp);
+    if (suc) abrirDetalleEmpleado(nombreEmp, suc.LOCAL);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar certificado'; }
+    errEl.textContent = 'Error al guardar'; errEl.style.display='block';
+  }
+}
+
+async function eliminarCertificado(id, nombreEmp, mesAnio) {
+  if (!confirm('¿Borrar este certificado?')) return;
+  const ok = await borrarCertificado(id);
+  if (ok) {
+    showToast('✓ Certificado eliminado');
+    const suc = state.datos.find(r => r.EMPLEADO === nombreEmp);
+    if (suc) abrirDetalleEmpleado(nombreEmp, suc.LOCAL);
+  } else {
+    showToast('Error al eliminar');
   }
 }
 
