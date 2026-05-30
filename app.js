@@ -622,31 +622,31 @@ function renderEmpleados(datos) {
           </label>
         </div>
       </div>
-      <div class="emp-filtro-grupo">
+      <div class="emp-filtro-grupo" style="min-width:130px;flex:1">
         <label class="emp-filtro-label">Período</label>
         <select class="emp-filtro-select" id="empFiltPeriodo" onchange="renderEmpleados(state.datos)">
           ${periodoOpts}
         </select>
       </div>
-      <div class="emp-filtro-grupo">
+      <div class="emp-filtro-grupo" style="min-width:130px;flex:1">
         <label class="emp-filtro-label">Empresa</label>
         <select class="emp-filtro-select" id="empFiltEmpresa" onchange="renderEmpleados(state.datos)">
           ${empresaOpts}
         </select>
       </div>
-      <div class="emp-filtro-grupo">
+      <div class="emp-filtro-grupo" style="min-width:130px;flex:1">
         <label class="emp-filtro-label">Categoría</label>
         <select class="emp-filtro-select" id="empFiltCategoria" onchange="renderEmpleados(state.datos)">
           ${categoriaOpts}
         </select>
       </div>
-      <div class="emp-filtro-grupo">
+      <div class="emp-filtro-grupo" style="min-width:120px;flex:1">
         <label class="emp-filtro-label">Local</label>
         <select class="emp-filtro-select" id="empFiltLocal" onchange="empCambioLocal()">
           ${localOpts}
         </select>
       </div>
-      <div class="emp-filtro-grupo">
+      <div class="emp-filtro-grupo" style="min-width:140px;flex:2">
         <label class="emp-filtro-label">Empleado/a</label>
         <select class="emp-filtro-select" id="empFiltEmp" onchange="renderEmpleados(state.datos)">
           ${empOpts}
