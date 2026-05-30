@@ -124,7 +124,7 @@ function esFeriado(date) {
 // Filtros de día para el detalle de empleado
 // 'ver': sin filtro | 'feriados' | 'sabados' | 'domingos'
 let filtrosDia = {
-  verSolo: 'todos',   // 'todos' | 'feriados' | 'sabados' | 'domingos'
+  verSolo: 'todos',   // 'todos' | 'feriados' | 'sabados' | 'domingos' | 'laborales'
 };
 
 // URL fija del Apps Script (no requiere configuración manual)
@@ -437,9 +437,10 @@ function renderEmpleados(datos) {
   if (filtrosDia.verSolo !== 'todos') {
     datosFilt = datosFilt.filter(r => {
       const fecha = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA));
-      if (filtrosDia.verSolo === 'sabados')  return fecha.getDay() === 6;
-      if (filtrosDia.verSolo === 'domingos') return fecha.getDay() === 0;
-      if (filtrosDia.verSolo === 'feriados') return esFeriado(fecha);
+      if (filtrosDia.verSolo === 'sabados')   return fecha.getDay() === 6;
+      if (filtrosDia.verSolo === 'domingos')  return fecha.getDay() === 0;
+      if (filtrosDia.verSolo === 'feriados')  return esFeriado(fecha);
+      if (filtrosDia.verSolo === 'laborales') return fecha.getDay() !== 0 && fecha.getDay() !== 6 && !esFeriado(fecha);
       return true;
     });
   }
@@ -594,6 +595,7 @@ function renderEmpleados(datos) {
   const chkFer = filtrosDia.verSolo === 'feriados';
   const chkSab = filtrosDia.verSolo === 'sabados';
   const chkDom = filtrosDia.verSolo === 'domingos';
+  const chkLab = filtrosDia.verSolo === 'laborales';
 
   const empresaOpts = [`<option value="all">Todas las empresas</option>`,
     ...EMPRESAS.map(emp => `<option value="${emp}" ${emp === selEmpresa ? 'selected' : ''}>${emp}</option>`)
@@ -619,6 +621,10 @@ function renderEmpleados(datos) {
           <label class="filtro-dia-check">
             <input type="checkbox" id="chkDomingos" ${chkDom?'checked':''} onchange="toggleFiltroDia('domingos',this.checked)" />
             <span>Domingos</span>
+          </label>
+          <label class="filtro-dia-check">
+            <input type="checkbox" id="chkLaborales" ${chkLab?'checked':''} onchange="toggleFiltroDia('laborales',this.checked)" />
+            <span>Solo laborales</span>
           </label>
         </div>
       </div>
@@ -756,7 +762,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         return s ? s.nombre : r.LOCAL;
       }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
-      return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr };
+      return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr,
+               anioNum: parseInt(r0.AÑO), mesNum: MESES_ES.indexOf(r0.MES) + 1, diaNum: parseInt(r0.DIA) };
     }).filter(Boolean);
 
     // Totales calculados desde las filas ya filtradas
@@ -780,7 +787,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     document.getElementById('detalleSub').textContent       = suc.nombre + ' · ' + periodoLabel;
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => `
-      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}">
+      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.anioNum}-${String(f.mesNum).padStart(2,'0')}-${String(f.diaNum).padStart(2,'0')}">
         <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">${f.horaReg}</td>
@@ -792,6 +799,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
         <td class="nota-cell">${f.nota || ''}</td>
       </tr>`).join('');
+    actualizarTablaDetalle();
 
     document.getElementById('detalleTfoot').innerHTML = `
       <tr>
@@ -854,17 +862,28 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <button class="detalle-tab" onclick="switchDetalleTab('evolucion', this)">Evolución mensual</button>
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabJornada">
+        <div class="detalle-filtros-bar">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span class="filtro-dia-label">Ver solo:</span>
+            <label class="filtro-dia-check"><input type="checkbox" id="dchkFer" onchange="toggleDetalleFiltro('feriados',this.checked)"/><span>Feriados</span></label>
+            <label class="filtro-dia-check"><input type="checkbox" id="dchkSab" onchange="toggleDetalleFiltro('sabados',this.checked)"/><span>Sábados</span></label>
+            <label class="filtro-dia-check"><input type="checkbox" id="dchkDom" onchange="toggleDetalleFiltro('domingos',this.checked)"/><span>Domingos</span></label>
+            <label class="filtro-dia-check"><input type="checkbox" id="dchkLab" onchange="toggleDetalleFiltro('laborales',this.checked)"/><span>Solo laborales</span></label>
+          </div>
+        </div>
         <table class="detalle-tabla">
           <thead>
             <tr>
-              <th>Fecha</th><th>Día</th><th>Hora reg.</th>
+              <th style="cursor:pointer;user-select:none" onclick="toggleOrdenDetalle()" title="Ordenar por fecha">
+                Fecha <span id="detalleOrdenIcon">↓</span>
+              </th><th>Día</th><th>Hora reg.</th>
               <th>Turno 1</th><th>Turno 2</th>
               <th>Hs total</th><th>Hs extra</th>
               <th>Sáb.</th><th>Local</th><th>Nota</th>
             </tr>
           </thead>
           <tbody id="detalleTbody">
-            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}">
+            ${filasIni.map(f => `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.anioNum}-${String(f.mesNum).padStart(2,'0')}-${String(f.diaNum).padStart(2,'0')}">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
@@ -1958,6 +1977,10 @@ function mostrarFiltrosDiaEnBarra(visible) {
       <label class="filtro-dia-check">
         <input type="checkbox" id="chkDomBarra" onchange="toggleFiltroDia('domingos',this.checked)" />
         <span>Domingos</span>
+      </label>
+      <label class="filtro-dia-check">
+        <input type="checkbox" id="chkLabBarra" onchange="toggleFiltroDia('laborales',this.checked)" />
+        <span>Solo laborales</span>
       </label>`;
     document.querySelector('.controls-bar').appendChild(barra);
   }
@@ -1973,11 +1996,68 @@ function mostrarFiltrosDiaEnBarra(visible) {
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+// Estado filtros y orden del detalle
+let detalleFiltro = 'todos'; // 'todos' | 'feriados' | 'sabados' | 'domingos' | 'laborales'
+let detalleOrdenAsc = false; // false = más reciente primero
+
+function toggleDetalleFiltro(tipo, activo) {
+  detalleFiltro = activo ? tipo : 'todos';
+  // Desmarcar los demás
+  ['dchkFer','dchkSab','dchkDom','dchkLab'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+  if (activo) {
+    const mapa = { feriados:'dchkFer', sabados:'dchkSab', domingos:'dchkDom', laborales:'dchkLab' };
+    const el = document.getElementById(mapa[tipo]);
+    if (el) el.checked = true;
+  }
+  actualizarTablaDetalle();
+}
+
+function toggleOrdenDetalle() {
+  detalleOrdenAsc = !detalleOrdenAsc;
+  const icon = document.getElementById('detalleOrdenIcon');
+  if (icon) icon.textContent = detalleOrdenAsc ? '↑' : '↓';
+  actualizarTablaDetalle();
+}
+
+function actualizarTablaDetalle() {
+  const tbody = document.getElementById('detalleTbody');
+  if (!tbody) return;
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+
+  // Filtrar
+  rows.forEach(tr => {
+    const fecha = tr.dataset.fecha;
+    if (!fecha) return;
+    const d = new Date(fecha);
+    let visible = true;
+    if (detalleFiltro === 'feriados')  visible = esFeriado(d);
+    if (detalleFiltro === 'sabados')   visible = d.getDay() === 6;
+    if (detalleFiltro === 'domingos')  visible = d.getDay() === 0;
+    if (detalleFiltro === 'laborales') visible = d.getDay() !== 0 && d.getDay() !== 6 && !esFeriado(d);
+    tr.style.display = visible ? '' : 'none';
+  });
+
+  // Ordenar
+  const visibles = rows.filter(tr => tr.style.display !== 'none');
+  visibles.sort((a, b) => {
+    const da = new Date(a.dataset.fecha), db = new Date(b.dataset.fecha);
+    return detalleOrdenAsc ? da - db : db - da;
+  });
+  visibles.forEach(tr => tbody.appendChild(tr));
+}
+
 function toggleFiltroDia(tipo, activo) {
   filtrosDia.verSolo = activo ? tipo : 'todos';
 
-  // Sincronizar todos los checkboxes (barra + panel empleados)
-  const mapa = { feriados: ['chkFeriados','chkFerBarra'], sabados: ['chkSabados','chkSabBarra'], domingos: ['chkDomingos','chkDomBarra'] };
+  const mapa = {
+    feriados:  ['chkFeriados','chkFerBarra'],
+    sabados:   ['chkSabados','chkSabBarra'],
+    domingos:  ['chkDomingos','chkDomBarra'],
+    laborales: ['chkLaborales','chkLabBarra'],
+  };
   Object.entries(mapa).forEach(([t, ids]) => {
     ids.forEach(id => {
       const el = document.getElementById(id);
@@ -1994,6 +2074,7 @@ function diaFiltrado(date) {
   if (filtrosDia.verSolo === 'feriados')  return !esFeriado(date);
   if (filtrosDia.verSolo === 'sabados')   return date.getDay() !== 6;
   if (filtrosDia.verSolo === 'domingos')  return date.getDay() !== 0;
+  if (filtrosDia.verSolo === 'laborales') return date.getDay() === 0 || date.getDay() === 6 || esFeriado(date);
   return false;
 }
 
