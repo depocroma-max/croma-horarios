@@ -1757,8 +1757,9 @@ async function cargarDatos(urls) {
   state.cargando = true;
   showToast('Cargando datos...');
 
-  // Cargar perfiles en paralelo
+  // Cargar perfiles y usuarios en paralelo
   cargarPerfiles();
+  cargarUsuarios();
 
   const urlUnica = urls['unica'] || null;
   if (!urlUnica) {
