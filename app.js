@@ -2239,7 +2239,24 @@ async function cargarCertificados() {
   try {
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
     const json = await resp.json();
-    if (json.ok) CERTIFICADOS_CACHE = json.certificados || [];
+    if (json.ok) {
+      CERTIFICADOS_CACHE = (json.certificados || []).map(c => {
+        // La fecha puede venir como Date object o string — normalizar a "YYYY-MM-DD"
+        let fecha = c.fecha;
+        if (fecha instanceof Date || (typeof fecha === 'object' && fecha !== null)) {
+          const d = new Date(fecha);
+          fecha = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        } else if (typeof fecha === 'string' && fecha.includes('/')) {
+          // formato DD/MM/YYYY
+          const [dd,mm,yyyy] = fecha.split('/');
+          fecha = `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+        } else {
+          // ya es string YYYY-MM-DD, limpiar
+          fecha = String(fecha).substring(0,10);
+        }
+        return { ...c, fecha };
+      });
+    }
     return CERTIFICADOS_CACHE;
   } catch(e) {
     console.warn('Error cargando certificados:', e);
