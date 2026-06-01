@@ -806,11 +806,11 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       });
     });
 
-    // Ordenar todas las filas por fecha desc
+    // Ordenar todas las filas por fecha asc (más viejo primero)
     filas.sort((a, b) => {
       const [ya,ma,da] = a.fechaISO.split('-').map(Number);
       const [yb,mb,db] = b.fechaISO.split('-').map(Number);
-      return new Date(yb,mb-1,db) - new Date(ya,ma-1,da);
+      return new Date(ya,ma-1,da) - new Date(yb,mb-1,db);
     });
 
     // Totales calculados desde las filas ya filtradas
@@ -941,7 +941,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
           <thead>
             <tr>
               <th style="cursor:pointer;user-select:none" onclick="toggleOrdenDetalle()" title="Ordenar por fecha">
-                Fecha <span id="detalleOrdenIcon">↓</span>
+                Fecha <span id="detalleOrdenIcon">↑</span>
               </th><th>Día</th><th>Hora reg.</th>
               <th>Turno 1</th><th>Turno 2</th>
               <th>Hs total</th><th>Hs extra</th>
@@ -2072,7 +2072,7 @@ function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // Estado filtros y orden del detalle
 let detalleFiltro = 'todos'; // 'todos' | 'feriados' | 'sabados' | 'domingos' | 'laborales'
-let detalleOrdenAsc = false; // false = más reciente primero
+let detalleOrdenAsc = true; // true = más viejo primero
 
 function toggleDetalleFiltro(tipo, activo) {
   detalleFiltro = activo ? tipo : 'todos';
@@ -2592,7 +2592,7 @@ function actualizarIndicadorSesion() {
 async function cargarDatosEmpleado() {
   showToast('Cargando tu jornada...');
   cargarPerfiles();
-  cargarCertificados();
+  await cargarCertificados();
 
   try {
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=horarios`);
@@ -2740,10 +2740,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       try { if (r0.MARCA_TEMPORAL) horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
       return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, horaReg };
     }).sort((a,b) => {
-      // ordenar más reciente primero
+      // ordenar más viejo primero
       const da = a.fechaStr.split('/').reverse().join('-');
       const db = b.fechaStr.split('/').reverse().join('-');
-      return db.localeCompare(da);
+      return da.localeCompare(db);
     });
 
     // Agregar certificados del empleado
@@ -2772,7 +2772,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     filas.sort((a,b) => {
       const da = a.fechaISO || a.fechaStr.split('/').reverse().join('-');
       const db = b.fechaISO || b.fechaStr.split('/').reverse().join('-');
-      return db.localeCompare(da);
+      return da.localeCompare(db);
     });
     const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
     const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
