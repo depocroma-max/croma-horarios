@@ -676,18 +676,19 @@ function empCambioLocal() {
 }
 
 // ── DETALLE EMPLEADO ───────────────────────────────────
-function abrirDetalleEmpleado(nombreEmp, sucId) {
+async function abrirDetalleEmpleado(nombreEmp, sucId) {
+  if (CERTIFICADOS_CACHE.length === 0) await cargarCertificados();
   abrirDetalleEmpleadoConDatos(nombreEmp, sucId, state.datos.filter(r => r.EMPLEADO === nombreEmp));
 }
 
-function abrirDetalleEmpleadoDesdePanel(nombreEmp, sucId) {
-  // Leer el período seleccionado en el panel de empleados (formato: "2026||ABRIL")
+async function abrirDetalleEmpleadoDesdePanel(nombreEmp, sucId) {
+  if (CERTIFICADOS_CACHE.length === 0) await cargarCertificados();
   const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
   const registros  = state.datos.filter(r => r.EMPLEADO === nombreEmp);
   let periodoForzado = null;
   if (selPeriodo !== 'all') {
     const [anio, mes] = selPeriodo.split('||');
-    periodoForzado = mes + ' ' + anio; // convierte a "ABRIL 2026"
+    periodoForzado = mes + ' ' + anio;
   }
   abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registros, periodoForzado);
 }
@@ -933,6 +934,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
             <label class="filtro-dia-check"><input type="checkbox" id="dchkSab" onchange="toggleDetalleFiltro('sabados',this.checked)"/><span>Sábados</span></label>
             <label class="filtro-dia-check"><input type="checkbox" id="dchkDom" onchange="toggleDetalleFiltro('domingos',this.checked)"/><span>Domingos</span></label>
             <label class="filtro-dia-check"><input type="checkbox" id="dchkLab" onchange="toggleDetalleFiltro('laborales',this.checked)"/><span>Solo laborales</span></label>
+            <label class="filtro-dia-check"><input type="checkbox" id="dchkCert" onchange="toggleDetalleFiltro('certificados',this.checked)"/><span>Certificados</span></label>
           </div>
         </div>
         <table class="detalle-tabla">
@@ -2074,13 +2076,12 @@ let detalleOrdenAsc = false; // false = más reciente primero
 
 function toggleDetalleFiltro(tipo, activo) {
   detalleFiltro = activo ? tipo : 'todos';
-  // Desmarcar los demás
-  ['dchkFer','dchkSab','dchkDom','dchkLab'].forEach(id => {
+  ['dchkFer','dchkSab','dchkDom','dchkLab','dchkCert'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.checked = false;
   });
   if (activo) {
-    const mapa = { feriados:'dchkFer', sabados:'dchkSab', domingos:'dchkDom', laborales:'dchkLab' };
+    const mapa = { feriados:'dchkFer', sabados:'dchkSab', domingos:'dchkDom', laborales:'dchkLab', certificados:'dchkCert' };
     const el = document.getElementById(mapa[tipo]);
     if (el) el.checked = true;
   }
@@ -2097,45 +2098,49 @@ function toggleOrdenDetalle() {
 function actualizarTablaDetalle() {
   const tbody = document.getElementById('detalleTbody');
   if (!tbody) return;
-  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const rows = Array.from(tbody.querySelectorAll('tr[data-fecha]'));
 
-  // Filtrar y ordenar
+  // 1. Determinar visibilidad de cada fila
   rows.forEach(tr => {
-    const fechaStr = tr.dataset.fecha;
-    if (!fechaStr) return;
-    const [y, m, d] = fechaStr.split('-').map(Number);
-    const fecha = new Date(y, m - 1, d); // mes 0-based, sin timezone
+    const [y, m, d] = tr.dataset.fecha.split('-').map(Number);
+    const fecha = new Date(y, m - 1, d);
+    const esCert = tr.classList.contains('fila-certificado');
     let visible = true;
-    if (detalleFiltro === 'feriados')  visible = esFeriado(fecha);
-    if (detalleFiltro === 'sabados')   visible = fecha.getDay() === 6;
-    if (detalleFiltro === 'domingos')  visible = fecha.getDay() === 0;
-    if (detalleFiltro === 'laborales') visible = fecha.getDay() !== 0 && fecha.getDay() !== 6 && !esFeriado(fecha);
+    if (detalleFiltro === 'feriados')    visible = esFeriado(fecha);
+    if (detalleFiltro === 'sabados')     visible = fecha.getDay() === 6;
+    if (detalleFiltro === 'domingos')    visible = fecha.getDay() === 0;
+    if (detalleFiltro === 'laborales')   visible = fecha.getDay() !== 0 && fecha.getDay() !== 6 && !esFeriado(fecha);
+    if (detalleFiltro === 'certificados') visible = esCert;
     tr.style.display = visible ? '' : 'none';
   });
 
-  const visibles = rows.filter(tr => tr.style.display !== 'none');
-  visibles.sort((a, b) => {
-    const [ya,ma,da] = a.dataset.fecha.split('-').map(Number);
-    const [yb,mb,db] = b.dataset.fecha.split('-').map(Number);
-    const fa = new Date(ya, ma-1, da), fb = new Date(yb, mb-1, db);
-    return detalleOrdenAsc ? fa - fb : fb - fa;
-  });
-  visibles.forEach(tr => tbody.appendChild(tr));
+  // 2. Ordenar: remover todas las filas y reinsertarlas en el orden correcto
+  const visibles = rows
+    .filter(tr => tr.style.display !== 'none')
+    .sort((a, b) => {
+      const [ya,ma,da] = a.dataset.fecha.split('-').map(Number);
+      const [yb,mb,db] = b.dataset.fecha.split('-').map(Number);
+      const fa = new Date(ya, ma-1, da), fb = new Date(yb, mb-1, db);
+      return detalleOrdenAsc ? fa - fb : fb - fa;
+    });
+  const ocultas = rows.filter(tr => tr.style.display === 'none');
 
-  // Recalcular stats desde las filas visibles
+  // Limpiar tbody y reinsertar: primero visibles ordenadas, luego ocultas al final
+  visibles.forEach(tr => tbody.appendChild(tr));
+  ocultas.forEach(tr => tbody.appendChild(tr));
+
+  // 3. Recalcular stats
   let dias = 0, hs = 0, extra = 0, sabs = 0;
   visibles.forEach(tr => {
     dias++;
-    // Hs total: columna índice 5 (td:nth-child(6))
     const tdHs    = tr.querySelector('td:nth-child(6)');
     const tdExtra = tr.querySelector('td:nth-child(7)');
     const tdSab   = tr.querySelector('td:nth-child(8)');
-    if (tdHs)    hs    += parseFloat(tdHs.textContent)    || 0;
-    if (tdExtra) extra += parseFloat(tdExtra.textContent)  || 0;
+    if (tdHs)    hs    += parseFloat(tdHs.textContent)   || 0;
+    if (tdExtra) extra += parseFloat(tdExtra.textContent) || 0;
     if (tdSab && tdSab.textContent.includes('✓')) sabs++;
   });
 
-  // Actualizar stats del header
   const elDias  = document.getElementById('detalleStatDias');
   const elHs    = document.getElementById('detalleStatHs');
   const elExtra = document.getElementById('detalleStatExtra');
@@ -2145,17 +2150,14 @@ function actualizarTablaDetalle() {
   if (elExtra) elExtra.textContent = extra.toFixed(1);
   if (elSabs)  elSabs.textContent  = sabs;
 
-  // Actualizar tfoot
   const tfoot = document.getElementById('detalleTfoot');
   if (tfoot) {
     tfoot.innerHTML = `<tr>
       <td colspan="2"><strong>TOTALES</strong></td>
-      <td>${dias}</td>
-      <td colspan="2"></td>
+      <td>${dias}</td><td colspan="2"></td>
       <td><strong>${hs.toFixed(1)}</strong></td>
       <td>${extra > 0 ? `<span class="hs-extra">${extra.toFixed(1)}</span>` : '—'}</td>
-      <td>${sabs}</td>
-      <td colspan="2"></td>
+      <td>${sabs}</td><td colspan="2"></td>
     </tr>`;
   }
 }
