@@ -2746,10 +2746,6 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       return db.localeCompare(da);
     });
 
-    const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
-    const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
-    const totalSabs    = filas.filter(f=>f.esSab).length;
-
     // Agregar certificados del empleado
     const certs = getCertificadosDe(nombreEmp);
     certs.forEach(c => {
@@ -2778,6 +2774,9 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       const db = b.fechaISO || b.fechaStr.split('/').reverse().join('-');
       return db.localeCompare(da);
     });
+    const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
+    const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
+    const totalSabs    = filas.filter(f=>f.esSab).length;
     return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos: filas.length };
   }
 
