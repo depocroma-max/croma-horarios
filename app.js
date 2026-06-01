@@ -837,7 +837,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => {
       if (f.esCert) return `
-      <tr class="fila-certificado" data-fecha="${f.fechaISO}">
+      <tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="0" data-cert="1">
         <td>${f.fechaStr}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
@@ -849,7 +849,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar certificado">✕</button></td>
       </tr>`;
       return `
-      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
+      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-sab="${f.esSab?1:0}" data-cert="0">
         <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">${f.horaReg}</td>
@@ -953,13 +953,13 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
           </thead>
           <tbody id="detalleTbody">
             ${filasIni.map(f => {
-              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}">
+              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="0" data-cert="1">
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
                 <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td></td><td>—</td>
                 <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar">✕</button></td>
               </tr>`;
-              return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}">
+              return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-sab="${f.esSab?1:0}" data-cert="0">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
@@ -2132,16 +2132,14 @@ function actualizarTablaDetalle() {
   visibles.forEach(tr => tbody.appendChild(tr));
   ocultas.forEach(tr => tbody.appendChild(tr));
 
-  // 3. Recalcular stats
-  let dias = 0, hs = 0, extra = 0, sabs = 0;
+  // 3. Recalcular stats desde data attributes
+  let dias = 0, hs = 0, extra = 0, sabs = 0, certs = 0;
   visibles.forEach(tr => {
     dias++;
-    const tdHs    = tr.querySelector('td:nth-child(6)');
-    const tdExtra = tr.querySelector('td:nth-child(7)');
-    const tdSab   = tr.querySelector('td:nth-child(8)');
-    if (tdHs)    hs    += parseFloat(tdHs.textContent)   || 0;
-    if (tdExtra) extra += parseFloat(tdExtra.textContent) || 0;
-    if (tdSab && tdSab.textContent.includes('✓')) sabs++;
+    hs    += parseFloat(tr.dataset.hs)    || 0;
+    extra += parseFloat(tr.dataset.extra) || 0;
+    sabs  += parseInt(tr.dataset.sab)     || 0;
+    certs += parseInt(tr.dataset.cert)    || 0;
   });
 
   const elDias  = document.getElementById('detalleStatDias');
@@ -2153,7 +2151,7 @@ function actualizarTablaDetalle() {
   if (elHs)    elHs.textContent    = hs.toFixed(1);
   if (elExtra) elExtra.textContent = extra.toFixed(1);
   if (elSabs)  elSabs.textContent  = sabs;
-  if (elCerts) elCerts.textContent = visibles.filter(tr => tr.classList.contains('fila-certificado')).length;
+  if (elCerts) elCerts.textContent = certs;
 
   const tfoot = document.getElementById('detalleTfoot');
   if (tfoot) {
