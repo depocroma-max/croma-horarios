@@ -2780,6 +2780,8 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos: filas.length };
   }
 
+  let { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcTotales(periodoActual);
+
   const opcionesMes = ['<option value="TODOS">Todos los registros</option>']
     .concat(periodos.map(p => `<option value="${p}" ${p===periodoActual?'selected':''}>${p}</option>`))
     .join('');
