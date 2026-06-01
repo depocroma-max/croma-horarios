@@ -2248,9 +2248,10 @@ async function cargarCertificados() {
 }
 
 function getCertificadosDe(nombreEmp) {
-  return CERTIFICADOS_CACHE.filter(c =>
-    c.empleado.trim().toLowerCase() === nombreEmp.trim().toLowerCase()
-  );
+  // Normalizar: quitar número del principio si existe (ej: "38 BRUNO ALONSO" → "BRUNO ALONSO")
+  const normalizar = n => n.trim().toLowerCase().replace(/^\d+\s+/, '');
+  const empNorm = normalizar(nombreEmp);
+  return CERTIFICADOS_CACHE.filter(c => normalizar(c.empleado) === empNorm);
 }
 
 async function guardarCertificado(cert) {
@@ -2364,7 +2365,9 @@ async function confirmarCertificado(nombreEmp) {
   const btn = document.querySelector('#adminOverlay .btn-connect');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
 
-  const resultado = await guardarCertificado({ empleado: nombreEmp, fecha, tipo, hs, nota });
+  // Guardar nombre sin número (ej: "38 BRUNO ALONSO" → "BRUNO ALONSO")
+  const empLimpio = nombreEmp.trim().replace(/^\d+\s+/, '');
+  const resultado = await guardarCertificado({ empleado: empLimpio, fecha, tipo, hs, nota });
 
   if (resultado.ok) {
     cerrarAdmin();
