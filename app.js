@@ -837,7 +837,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => {
       if (f.esCert) return `
-      <tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="0" data-cert="1">
+      <tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="${f.esSab?1:0}" data-cert="1">
         <td>${f.fechaStr}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
@@ -953,7 +953,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
           </thead>
           <tbody id="detalleTbody">
             ${filasIni.map(f => {
-              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="0" data-cert="1">
+              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="${f.esSab?1:0}" data-cert="1">
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
                 <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td></td><td>—</td>
@@ -999,6 +999,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
   document.body.appendChild(div);
   document.body.style.overflow = 'hidden';
 
+  actualizarTablaDetalle();
   // Evento del selector de mes — actualiza tabla y stats en tiempo real
   document.getElementById('detalleSelectMes').addEventListener('change', function() {
     renderDetalle(this.value);
