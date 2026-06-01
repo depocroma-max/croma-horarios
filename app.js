@@ -831,6 +831,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     document.getElementById('detalleStatHs').textContent    = totalHoras.toFixed(1);
     document.getElementById('detalleStatExtra').textContent = totalHsExtra.toFixed(1);
     document.getElementById('detalleStatSabs').textContent  = totalSabs;
+    const certEl = document.getElementById('detalleStatCerts');
+    if (certEl) certEl.textContent = filas.filter(f => f.esCert).length;
     document.getElementById('detalleSub').textContent       = suc.nombre + ' · ' + periodoLabel;
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => {
@@ -920,6 +922,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
           <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatHs">${thIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs totales</span></div>
           <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatExtra">${theIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
           <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatSabs">${tsIni}</span><span class="detalle-stat-lbl">Sábados</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb" id="detalleStatCerts">${filasIni.filter(f=>f.esCert).length}</span><span class="detalle-stat-lbl">Certificados</span></div>
         </div>
       </div>
       <div class="detalle-tabs">
@@ -2145,10 +2148,12 @@ function actualizarTablaDetalle() {
   const elHs    = document.getElementById('detalleStatHs');
   const elExtra = document.getElementById('detalleStatExtra');
   const elSabs  = document.getElementById('detalleStatSabs');
+  const elCerts = document.getElementById('detalleStatCerts');
   if (elDias)  elDias.textContent  = dias;
   if (elHs)    elHs.textContent    = hs.toFixed(1);
   if (elExtra) elExtra.textContent = extra.toFixed(1);
   if (elSabs)  elSabs.textContent  = sabs;
+  if (elCerts) elCerts.textContent = visibles.filter(tr => tr.classList.contains('fila-certificado')).length;
 
   const tfoot = document.getElementById('detalleTfoot');
   if (tfoot) {
