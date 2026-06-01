@@ -2248,8 +2248,8 @@ async function cargarCertificados() {
 }
 
 function getCertificadosDe(nombreEmp) {
-  // Normalizar: quitar número del principio si existe (ej: "38 BRUNO ALONSO" → "BRUNO ALONSO")
-  const normalizar = n => n.trim().toLowerCase().replace(/^\d+\s+/, '');
+  // Normalizar: quitar número del principio y colapsar espacios múltiples
+  const normalizar = n => n.trim().toLowerCase().replace(/^\d+\s+/, '').replace(/\s+/g, ' ');
   const empNorm = normalizar(nombreEmp);
   return CERTIFICADOS_CACHE.filter(c => normalizar(c.empleado) === empNorm);
 }
