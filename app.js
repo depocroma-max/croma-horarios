@@ -2592,6 +2592,7 @@ function actualizarIndicadorSesion() {
 async function cargarDatosEmpleado() {
   showToast('Cargando tu jornada...');
   cargarPerfiles();
+  cargarCertificados();
 
   try {
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=horarios`);
@@ -2748,10 +2749,37 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
     const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
     const totalSabs    = filas.filter(f=>f.esSab).length;
+
+    // Agregar certificados del empleado
+    const certs = getCertificadosDe(nombreEmp);
+    certs.forEach(c => {
+      if (periodo !== 'TODOS') {
+        const [cy,cm,cd] = c.fecha.split('-').map(Number);
+        const fechaCert = new Date(cy, cm-1, cd);
+        const mesAnio = MESES_ES[fechaCert.getMonth()] + ' ' + fechaCert.getFullYear();
+        if (mesAnio !== periodo) return;
+      }
+      const [cy,cm,cd] = c.fecha.split('-').map(Number);
+      const fechaCert = new Date(cy, cm-1, cd);
+      filas.push({
+        fechaStr: fechaCert.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}),
+        diaSem:   ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fechaCert.getDay()],
+        turno1:   'CERTIFICADO', turno2: '',
+        hsTotal:  c.hs, hsExtra: 0,
+        esSab:    fechaCert.getDay() === 6,
+        esDom:    fechaCert.getDay() === 0,
+        esFer:    esFeriado(fechaCert),
+        nota:     c.nota || c.tipo,
+        horaReg:  '—', esCert: true, fechaISO: c.fecha,
+      });
+    });
+    filas.sort((a,b) => {
+      const da = a.fechaISO || a.fechaStr.split('/').reverse().join('-');
+      const db = b.fechaISO || b.fechaStr.split('/').reverse().join('-');
+      return db.localeCompare(da);
+    });
     return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos: filas.length };
   }
-
-  let { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcTotales(periodoActual);
 
   const opcionesMes = ['<option value="TODOS">Todos los registros</option>']
     .concat(periodos.map(p => `<option value="${p}" ${p===periodoActual?'selected':''}>${p}</option>`))
@@ -2762,7 +2790,19 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     : (numVend ? `<span style="font-size:18px;font-weight:700;color:${suc.color}">#${numVend}</span>` : `<span style="font-size:18px;font-weight:700;color:${suc.color}">${iniciales}</span>`);
 
   function buildFilas(fs) {
-    return fs.map(f => `
+    return fs.map(f => {
+      if (f.esCert) return `
+      <tr class="fila-certificado">
+        <td>${f.fechaStr}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">—</td>
+        <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
+        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td>—</td>
+        <td></td>
+        <td></td>
+      </tr>`;
+      return `
       <tr class="${f.esSab?'fila-sabado':''} ${f.esDom?'fila-domingo':''} ${f.esFer?'fila-feriado':''}">
         <td>${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</td>
         <td>${f.diaSem}</td>
@@ -2773,11 +2813,28 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td>${f.hsExtra>0?`<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>`:'—'}</td>
         <td>${f.esSab?'<span class="check-sab">✓</span>':''}</td>
         <td class="nota-cell">${f.nota||''}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   }
 
   function buildCards(fs) {
     return fs.map(f => {
+      if (f.esCert) return `
+        <div class="ev-card" style="border-left:3px solid #2563eb;background:#eff6ff">
+          <div class="ev-card-top">
+            <div class="ev-card-fecha">
+              <span class="ev-card-dia-sem">${f.diaSem}</span>
+              <span class="ev-card-fecha-str">${f.fechaStr}</span>
+            </div>
+            <div class="ev-card-hs">
+              <span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span>
+            </div>
+          </div>
+          <div class="ev-card-turnos">
+            <span class="tag-cert">CERT</span>
+            <span class="ev-card-turno">${f.nota}</span>
+          </div>
+        </div>`;
       const clases = [f.esSab?'ev-card-sabado':'', f.esDom?'ev-card-domingo':'', f.esFer?'ev-card-feriado':''].filter(Boolean).join(' ');
       const turno2html = f.turno2 && f.turno2 !== '—' ? `<span class="ev-card-turno">${f.turno2}</span>` : '';
       const extraHtml  = f.hsExtra > 0 ? `<span class="ev-card-extra">+${f.hsExtra.toFixed(1)} extra</span>` : '';
