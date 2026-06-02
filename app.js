@@ -76,7 +76,7 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
   if (fechaDate && esFeriado(fechaDate)) return hsTotal;
 
   const perfil = EMPLEADOS_PERFILES[nombreEmp];
-  if (!perfil) return Math.max(0, hsTotal - 8); // fallback genérico
+  if (!perfil) return Math.max(0, Math.round((hsTotal - 8) * 100) / 100); // fallback genérico
 
   const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
   if (!cat || !cat.percibe_extra) return 0;
@@ -88,7 +88,7 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
     const limite = perfil.regla_custom === 'lv4'
       ? (esFinDeSemana ? 0 : 4)
       : perfil.hs_base || 8;
-    return Math.max(0, hsTotal - limite);
+    return Math.max(0, Math.round((hsTotal - limite) * 100) / 100);
   }
 
   // Reglas predefinidas por categoría
@@ -96,15 +96,15 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
   if (cat.regla === 'lv8_s4') {
     const esSab = dow === 6;
     const limite = esSab ? 4 : 8;
-    return Math.max(0, hsTotal - limite);
+    return Math.max(0, Math.round((hsTotal - limite) * 100) / 100);
   }
   if (cat.regla === 'fijo4') {
-    return Math.max(0, hsTotal - 4);
+    return Math.max(0, Math.round((hsTotal - 4) * 100) / 100);
   }
   if (cat.regla === 'sin_extra') return 0;
 
   // Regla personalizada por hs_base
-  return Math.max(0, hsTotal - (perfil.hs_base || 8));
+  return Math.max(0, Math.round((hsTotal - (perfil.hs_base || 8)) * 100) / 100);
 }
 
 // ── FERIADOS ARGENTINA 2025-2026 ───────────────────────
@@ -748,6 +748,9 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       const esDom   = fecha.getDay() === 0;
       const esFer   = esFeriado(fecha);
 
+      // Aplicar filtro de día
+      if (diaFiltrado(fecha)) return null;
+
       let horaReg = '';
       if (r0.MARCA_TEMPORAL) {
         try {
@@ -782,6 +785,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       }
       const [cy, cm, cd] = c.fecha.split('-').map(Number);
       const fechaCert = new Date(cy, cm-1, cd);
+      if (diaFiltrado(fechaCert)) return;
       filas.push({
         fechaStr: fechaCert.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
         diaSem:   DIAS_SEMANA[fechaCert.getDay()],
@@ -1188,7 +1192,7 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
     const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '';
     const turno2  = regs[1]?.H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
     const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
-    const hsExtra = Math.max(0, hsTotal - 8);
+    const hsExtra = Math.max(0, Math.round((hsTotal - 8) * 100) / 100);
     const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
     const local   = regs.map(r => {
       const s = SUCURSALES.find(x => x.id === r.LOCAL);
