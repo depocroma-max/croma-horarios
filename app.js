@@ -2887,7 +2887,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           </div>
           <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
           <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
-                 onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')" >
+                 onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
         </div>
         <div class="emp-vista-info">
           <h1 class="emp-vista-nombre">${nomMostrar}</h1>
@@ -3952,7 +3952,9 @@ function iniciarAutoRefresh() {
   }, AUTO_REFRESH_MIN * 60 * 1000);
 }
 
-// ── CAMBIO DE FOTO DE EMPLEADO ─────────────────────────
+// ── CAMBIO DE FOTO DE EMPLEADO (ImgBB) ────────────────
+const IMGBB_API_KEY = 'ffe26c9576b3bfbe561fc8c078b69b27';
+
 function triggerCambiarFoto(nombreEmp) {
   const input = document.getElementById('inputFotoEmpleado');
   if (input) input.click();
@@ -3962,7 +3964,6 @@ async function subirFotoEmpleado(input, nombreEmp) {
   const file = input.files[0];
   if (!file) return;
 
-  // Validar tamaño máximo 3MB
   if (file.size > 3 * 1024 * 1024) {
     showToast('La foto no puede superar 3MB', 'error');
     input.value = '';
@@ -3972,38 +3973,42 @@ async function subirFotoEmpleado(input, nombreEmp) {
   showToast('Subiendo foto…');
 
   try {
-    // Convertir a base64
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+    // 1 — Subir a ImgBB
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('key', IMGBB_API_KEY);
+
+    const imgbbResp = await fetch('https://api.imgbb.com/1/upload', {
+      method: 'POST',
+      body: formData
     });
+    const imgbbData = await imgbbResp.json();
+    if (!imgbbData.success) throw new Error('Error subiendo a ImgBB');
 
-    const mime = file.type || 'image/jpeg';
-    const url  = `${APPS_SCRIPT_URL}?accion=subir_foto` +
-                 `&empleado=${encodeURIComponent(nombreEmp)}` +
-                 `&mime=${encodeURIComponent(mime)}` +
-                 `&base64=${encodeURIComponent(base64)}`;
+    const fotoUrl = imgbbData.data.url;
 
-    const resp = await fetch(url);
+    // 2 — Guardar URL en el Apps Script (GET simple, sin base64)
+    const scriptUrl = `${APPS_SCRIPT_URL}?accion=guardar_foto_url` +
+      `&empleado=${encodeURIComponent(nombreEmp)}` +
+      `&foto_url=${encodeURIComponent(fotoUrl)}`;
+
+    const resp = await fetch(scriptUrl);
     const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error guardando URL');
 
-    if (!json.ok) throw new Error(json.error || 'Error desconocido');
-
-    // Actualizar avatar en pantalla inmediatamente
+    // 3 — Actualizar avatar en pantalla
     const avatarDiv = document.getElementById('empVistaAvatarDiv');
     if (avatarDiv) {
       avatarDiv.className = 'emp-vista-avatar emp-avatar-foto';
       avatarDiv.style.background = '';
-      avatarDiv.innerHTML = `<img src="${json.foto_url}" alt="${nombreEmp}"
+      avatarDiv.innerHTML = `<img src="${fotoUrl}" alt="${nombreEmp}"
         style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
         onerror="this.parentElement.innerHTML='?'">`;
     }
 
-    // Actualizar el cache local del perfil para que otras vistas lo reflejen
+    // 4 — Actualizar cache local
     if (EMPLEADOS_PERFILES[nombreEmp]) {
-      EMPLEADOS_PERFILES[nombreEmp].foto_url = json.foto_url;
+      EMPLEADOS_PERFILES[nombreEmp].foto_url = fotoUrl;
     }
 
     showToast('✓ Foto actualizada');
