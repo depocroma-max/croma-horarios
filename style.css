@@ -1496,3 +1496,31 @@ body {
   padding: 1px 7px; border-radius: 20px;
   letter-spacing: 0.5px; margin-right: 4px;
 }
+
+/* ── CAMBIO DE FOTO DE EMPLEADO ─────────────────────── */
+.emp-vista-avatar-wrap {
+  position: relative;
+  width: 72px; height: 72px;
+  flex-shrink: 0;
+}
+.emp-vista-avatar-wrap .emp-vista-avatar {
+  width: 72px; height: 72px;
+}
+.btn-cambiar-foto {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  transition: transform .15s, box-shadow .15s;
+}
+.btn-cambiar-foto:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}

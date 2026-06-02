@@ -76,7 +76,7 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
   if (fechaDate && esFeriado(fechaDate)) return hsTotal;
 
   const perfil = EMPLEADOS_PERFILES[nombreEmp];
-  if (!perfil) return Math.max(0, Math.round((hsTotal - 8) * 100) / 100); // fallback genérico
+  if (!perfil) return Math.max(0, hsTotal - 8); // fallback genérico
 
   const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
   if (!cat || !cat.percibe_extra) return 0;
@@ -88,7 +88,7 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
     const limite = perfil.regla_custom === 'lv4'
       ? (esFinDeSemana ? 0 : 4)
       : perfil.hs_base || 8;
-    return Math.max(0, Math.round((hsTotal - limite) * 100) / 100);
+    return Math.max(0, hsTotal - limite);
   }
 
   // Reglas predefinidas por categoría
@@ -96,15 +96,15 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
   if (cat.regla === 'lv8_s4') {
     const esSab = dow === 6;
     const limite = esSab ? 4 : 8;
-    return Math.max(0, Math.round((hsTotal - limite) * 100) / 100);
+    return Math.max(0, hsTotal - limite);
   }
   if (cat.regla === 'fijo4') {
-    return Math.max(0, Math.round((hsTotal - 4) * 100) / 100);
+    return Math.max(0, hsTotal - 4);
   }
   if (cat.regla === 'sin_extra') return 0;
 
   // Regla personalizada por hs_base
-  return Math.max(0, Math.round((hsTotal - (perfil.hs_base || 8)) * 100) / 100);
+  return Math.max(0, hsTotal - (perfil.hs_base || 8));
 }
 
 // ── FERIADOS ARGENTINA 2025-2026 ───────────────────────
@@ -1192,7 +1192,7 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
     const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '';
     const turno2  = regs[1]?.H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
     const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
-    const hsExtra = Math.max(0, Math.round((hsTotal - 8) * 100) / 100);
+    const hsExtra = Math.max(0, hsTotal - 8);
     const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
     const local   = regs.map(r => {
       const s = SUCURSALES.find(x => x.id === r.LOCAL);
@@ -2879,9 +2879,15 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 
       <!-- HEADER EMPLEADO -->
       <div class="emp-vista-header" style="border-left:4px solid ${suc.color}">
-        <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
-             style="${perfil.foto_url?'':'background:'+suc.colorLight}">
-          ${avatarInner}
+        <div class="emp-vista-avatar-wrap">
+          <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
+               id="empVistaAvatarDiv"
+               style="${perfil.foto_url?'':'background:'+suc.colorLight}">
+            ${avatarInner}
+          </div>
+          <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
+          <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
+                 onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')" >
         </div>
         <div class="emp-vista-info">
           <h1 class="emp-vista-nombre">${nomMostrar}</h1>
@@ -3944,4 +3950,66 @@ function iniciarAutoRefresh() {
     cargarDatos({ unica: APPS_SCRIPT_URL });
     showToast(`↻ Datos actualizados automáticamente`);
   }, AUTO_REFRESH_MIN * 60 * 1000);
+}
+
+// ── CAMBIO DE FOTO DE EMPLEADO ─────────────────────────
+function triggerCambiarFoto(nombreEmp) {
+  const input = document.getElementById('inputFotoEmpleado');
+  if (input) input.click();
+}
+
+async function subirFotoEmpleado(input, nombreEmp) {
+  const file = input.files[0];
+  if (!file) return;
+
+  // Validar tamaño máximo 3MB
+  if (file.size > 3 * 1024 * 1024) {
+    showToast('La foto no puede superar 3MB', 'error');
+    input.value = '';
+    return;
+  }
+
+  showToast('Subiendo foto…');
+
+  try {
+    // Convertir a base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const mime = file.type || 'image/jpeg';
+    const url  = `${APPS_SCRIPT_URL}?accion=subir_foto` +
+                 `&empleado=${encodeURIComponent(nombreEmp)}` +
+                 `&mime=${encodeURIComponent(mime)}` +
+                 `&base64=${encodeURIComponent(base64)}`;
+
+    const resp = await fetch(url);
+    const json = await resp.json();
+
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+
+    // Actualizar avatar en pantalla inmediatamente
+    const avatarDiv = document.getElementById('empVistaAvatarDiv');
+    if (avatarDiv) {
+      avatarDiv.className = 'emp-vista-avatar emp-avatar-foto';
+      avatarDiv.style.background = '';
+      avatarDiv.innerHTML = `<img src="${json.foto_url}" alt="${nombreEmp}"
+        style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
+        onerror="this.parentElement.innerHTML='?'">`;
+    }
+
+    // Actualizar el cache local del perfil para que otras vistas lo reflejen
+    if (EMPLEADOS_PERFILES[nombreEmp]) {
+      EMPLEADOS_PERFILES[nombreEmp].foto_url = json.foto_url;
+    }
+
+    showToast('✓ Foto actualizada');
+  } catch(err) {
+    showToast('Error al subir la foto: ' + err.message, 'error');
+  } finally {
+    input.value = '';
+  }
 }
