@@ -4354,9 +4354,9 @@ function abrirModalAjusteAdmin(empEnc, anio) {
           <input type="text" class="admin-input" id="ajusteNota" placeholder="Ej: Acuerdo especial" />
         </div>
         <p id="ajusteError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
-        <div style="display:flex;gap:10px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0;flex:1" onclick="confirmarAjusteAdmin('${empEnc}',${anio})">Guardar ajuste</button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin()">Cancelar</button>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" onclick="confirmarAjusteAdmin('${empEnc}',${anio})">Guardar ajuste</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -4411,12 +4411,11 @@ function abrirModalRespuesta(solicitudId, estado, empEnc) {
           <label class="emp-filtro-label">Nota para el empleado (opcional)</label>
           <input type="text" class="admin-input" id="respuestaNota" placeholder="Ej: Reagendar para enero" />
         </div>
-        <div style="display:flex;gap:10px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0;flex:1;${estado==='rechazada'?'background:#dc2626;':'background:#059669;'}"
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
             onclick="responderSolicitudAdmin('${solicitudId}','${estado}',document.getElementById('respuestaNota').value)">
             ${estado === 'rechazada' ? '✗ Confirmar rechazo' : '✓ Confirmar aprobación'}
           </button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin()">Cancelar</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -4482,9 +4481,9 @@ function abrirModalSolicitudVac(empEnc) {
           </span>
         </div>
         <p id="vacSolError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
-        <div style="display:flex;gap:10px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0;flex:1" onclick="confirmarSolicitudVac('${empEnc}')">Enviar solicitud</button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin()">Cancelar</button>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" onclick="confirmarSolicitudVac('${empEnc}')">Enviar solicitud</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
     </div>
