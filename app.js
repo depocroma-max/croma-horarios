@@ -928,6 +928,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       <div class="detalle-tabs">
         <button class="detalle-tab active" onclick="switchDetalleTab('jornada', this)">Jornada</button>
         <button class="detalle-tab" onclick="switchDetalleTab('evolucion', this)">Evolución mensual</button>
+        <button class="detalle-tab" onclick="switchDetalleTab('vacaciones', this)" id="tabVacBtn_${nombreEmp.replace(/[^a-zA-Z0-9]/g,'_')}">🏖 Vacaciones</button>
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabJornada">
         <div class="detalle-filtros-bar">
@@ -987,6 +988,11 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabEvolucion" style="display:none;padding:1.5rem">
         ${generarEvolucionHTML(state.datos, nombreEmp, suc)}
+      </div>
+      <div class="detalle-tabla-wrap" id="detalleTabVacaciones" style="display:none;padding:1.5rem">
+        <div id="vacAdminContent_inner">
+          <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+        </div>
       </div>
     </div>
   </div>`;
@@ -1287,8 +1293,26 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
 function switchDetalleTab(tab, btn) {
   document.querySelectorAll('.detalle-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('detalleTabJornada').style.display  = tab === 'jornada'   ? 'block' : 'none';
-  document.getElementById('detalleTabEvolucion').style.display = tab === 'evolucion' ? 'block' : 'none';
+  document.getElementById('detalleTabJornada').style.display  = tab === 'jornada'    ? 'block' : 'none';
+  document.getElementById('detalleTabEvolucion').style.display = tab === 'evolucion'  ? 'block' : 'none';
+  const vacEl = document.getElementById('detalleTabVacaciones');
+  if (vacEl) vacEl.style.display = tab === 'vacaciones' ? 'block' : 'none';
+  if (tab === 'vacaciones') {
+    // Obtener nombre del empleado desde el título del detalle
+    const tituloEl = document.querySelector('.detalle-titulo');
+    if (tituloEl) {
+      const numSpan = tituloEl.querySelector('.detalle-num');
+      const numVend = numSpan ? numSpan.textContent.replace('#','').trim() : '';
+      // Reconstruir nombre completo para buscar en datos
+      const nomDiv = tituloEl.textContent.trim().replace(/^#\d+\s*/,'').trim();
+      // Buscar en state.datos el nombre completo que contenga ese nomDiv
+      const empNombre = state.datos.find(r => {
+        const n = r.EMPLEADO.replace(/^\d+\s+/,'').trim();
+        return n.toLowerCase() === nomDiv.toLowerCase();
+      })?.EMPLEADO || nomDiv;
+      cargarVacacionesAdmin(empNombre);
+    }
+  }
 }
 
 function generarEvolucionHTML(datos, nombreEmp, suc) {
@@ -2914,6 +2938,14 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
       </div>
 
+      <!-- TABS EMPLEADO -->
+      <div class="detalle-tabs" style="margin:0 0 0 0;border-bottom:1px solid var(--gray-100)">
+        <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Jornada</button>
+        <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">🏖 Vacaciones</button>
+      </div>
+
+      <!-- CONTENIDO JORNADA -->
+      <div id="evTabJornada">
       <!-- SELECTOR DE PERÍODO -->
       <div class="emp-vista-toolbar">
         <div style="display:flex;align-items:center;gap:8px">
@@ -2967,6 +2999,13 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <span>${totalSabs} sábados</span>
         </div>
       </div>
+      </div><!-- fin evTabJornada -->
+
+      <!-- CONTENIDO VACACIONES EMPLEADO -->
+      <div id="evTabVacaciones" style="display:none;padding:1.5rem">
+        <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+      </div>
+
     </div>
   `;
 
@@ -2999,6 +3038,9 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td></td>
       </tr>`;
   });
+
+  // Cargar vacaciones del empleado en background
+  cargarVacacionesEmpleado(nombreEmp);
 }
 
 function imprimirVistaEmpleado() {
@@ -3418,6 +3460,8 @@ function renderAdmin() {
         <button class="admin-tab active" onclick="switchAdminTab('empleados',this)">Empleados (${empNombres.length})</button>
         <button class="admin-tab" onclick="switchAdminTab('categorias',this)">Categorías</button>
         <button class="admin-tab" onclick="switchAdminTab('usuarios',this)">Usuarios</button>
+        <button class="admin-tab" id="adminTabSolicitudesBtn" onclick="switchAdminTab('solicitudes',this)">🏖 Solicitudes</button>
+        <button class="admin-tab" onclick="switchAdminTab('configuracion',this)">Configuración</button>
       </div>
 
       <!-- TAB EMPLEADOS -->
@@ -3452,6 +3496,31 @@ function renderAdmin() {
       <!-- TAB USUARIOS -->
       ${renderAdminUsuarios()}
 
+      <!-- TAB SOLICITUDES VACACIONES -->
+      <div id="adminTabSolicitudes" class="admin-tab-content" style="display:none">
+        <div style="padding:1.5rem">
+          <p style="color:#94a3b8;font-size:13px">Cargando solicitudes...</p>
+        </div>
+      </div>
+
+      <!-- TAB CONFIGURACIÓN -->
+      <div id="adminTabConfiguracion" class="admin-tab-content" style="display:none">
+        <div style="padding:1.5rem;max-width:500px">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:1.5rem;color:#1e293b">Configuración general</h3>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Email del administrador (para notificaciones)</label>
+            <input type="email" class="admin-input" id="cfgEmailAdmin" placeholder="admin@croma.com" />
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+              Se envía un email a esta dirección cuando llega una solicitud de vacaciones
+            </span>
+          </div>
+          <div style="margin-top:1rem;display:flex;gap:8px">
+            <button class="btn-connect" style="margin:0;width:auto;padding:10px 24px" onclick="guardarConfigAdmin()">Guardar</button>
+          </div>
+          <p id="cfgStatus" style="font-size:12px;margin-top:8px;display:none"></p>
+        </div>
+      </div>
+
     </div>
   </div>`;
 
@@ -3461,16 +3530,23 @@ function renderAdmin() {
 function switchAdminTab(tab, btn) {
   document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('adminTabEmpleados').style.display = tab === 'empleados' ? 'block' : 'none';
-  document.getElementById('adminTabCategorias').style.display = tab === 'categorias' ? 'block' : 'none';
-  document.getElementById('adminTabUsuarios').style.display = tab === 'usuarios' ? 'block' : 'none';
+  document.getElementById('adminTabEmpleados').style.display    = tab === 'empleados'     ? 'block' : 'none';
+  document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
+  document.getElementById('adminTabUsuarios').style.display     = tab === 'usuarios'      ? 'block' : 'none';
+  document.getElementById('adminTabSolicitudes').style.display  = tab === 'solicitudes'   ? 'block' : 'none';
+  document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
 
-  // Cuando se abre el tab de usuarios, recargar desde el Sheet y redibujar
   if (tab === 'usuarios') {
     cargarUsuarios().then(() => {
       const tabEl = document.getElementById('adminTabUsuarios');
       if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
     });
+  }
+  if (tab === 'solicitudes') {
+    cargarSolicitudesAdmin();
+  }
+  if (tab === 'configuracion') {
+    cargarConfigAdmin();
   }
 }
 
@@ -4017,4 +4093,452 @@ async function subirFotoEmpleado(input, nombreEmp) {
   } finally {
     input.value = '';
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  VACACIONES — Sistema completo
+// ══════════════════════════════════════════════════════
+
+// Cache en memoria
+let _vacCache = {};          // { empleado: { banco, usado, ajuste, disponible } }
+let _solicitudesCache = [];  // [ { id, empleado, desde, hasta, dias, estado, fechaSolicitud, notaAdmin } ]
+let _configCache = {};       // { email_admin, ... }
+
+// ── HELPERS ───────────────────────────────────────────
+function vacApiUrl(accion, params) {
+  let url = `${APPS_SCRIPT_URL}?accion=${accion}`;
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        url += `&${k}=${encodeURIComponent(v)}`;
+      }
+    });
+  }
+  return url;
+}
+
+function formatFechaISO(isoStr) {
+  if (!isoStr) return '—';
+  const [y, m, d] = isoStr.split('-').map(Number);
+  return new Date(y, m-1, d).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function estadoBadge(estado) {
+  const map = {
+    pendiente:  { bg:'#fef3c7', color:'#92400e', label:'Pendiente' },
+    aprobada:   { bg:'#d1fae5', color:'#065f46', label:'Aprobada'  },
+    rechazada:  { bg:'#fee2e2', color:'#991b1b', label:'Rechazada' },
+  };
+  const e = map[estado] || { bg:'#f1f5f9', color:'#475569', label: estado };
+  return `<span style="background:${e.bg};color:${e.color};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">${e.label}</span>`;
+}
+
+// ── CONFIG ────────────────────────────────────────────
+async function cargarConfigAdmin() {
+  try {
+    const resp = await fetch(vacApiUrl('get_config'));
+    const json = await resp.json();
+    if (json.ok) {
+      _configCache = json.config || {};
+      const el = document.getElementById('cfgEmailAdmin');
+      if (el) el.value = _configCache.email_admin || '';
+    }
+  } catch(e) { console.warn('Error cargando config:', e); }
+}
+
+async function guardarConfigAdmin() {
+  const email = document.getElementById('cfgEmailAdmin')?.value.trim();
+  const statusEl = document.getElementById('cfgStatus');
+  try {
+    const resp = await fetch(vacApiUrl('guardar_config', { clave: 'email_admin', valor: email }));
+    const json = await resp.json();
+    if (json.ok) {
+      _configCache.email_admin = email;
+      if (statusEl) { statusEl.textContent = '✓ Guardado'; statusEl.style.color='#065f46'; statusEl.style.display='block'; }
+      setTimeout(() => { if (statusEl) statusEl.style.display='none'; }, 2500);
+    } else throw new Error(json.error);
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = 'Error al guardar: ' + e.message; statusEl.style.color='#dc2626'; statusEl.style.display='block'; }
+  }
+}
+
+// ── VACACIONES: BANCO DE DÍAS ──────────────────────────
+async function cargarVacacionesAdmin(nombreEmp) {
+  const container = document.getElementById('vacAdminContent_inner');
+  if (!container) return;
+  container.innerHTML = '<p style="color:#94a3b8;font-size:13px">Cargando...</p>';
+  const anioActual = new Date().getFullYear();
+  try {
+    const [respVac, respSol] = await Promise.all([
+      fetch(vacApiUrl('get_vacaciones', { empleado: nombreEmp, anio: anioActual })),
+      fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp })),
+    ]);
+    const [jVac, jSol] = await Promise.all([respVac.json(), respSol.json()]);
+    const vac = jVac.ok ? (jVac.vacaciones?.[0] || null) : null;
+    const sols = jSol.ok ? (jSol.solicitudes || []) : [];
+    container.innerHTML = renderVacacionesAdminHTML(nombreEmp, vac, sols, anioActual);
+  } catch(e) {
+    container.innerHTML = `<p style="color:#dc2626;font-size:13px">Error: ${e.message}</p>`;
+  }
+}
+
+function renderVacacionesAdminHTML(nombreEmp, vac, solicitudes, anio) {
+  const banco     = vac?.dias_banco     ?? '—';
+  const usado     = vac?.dias_usados    ?? '—';
+  const ajuste    = vac?.dias_ajuste    ?? 0;
+  const disponible= vac?.dias_disponibles ?? '—';
+  const empEnc    = encodeURIComponent(nombreEmp).replace(/'/g,"\\'");
+
+  const solicsRows = solicitudes.length
+    ? solicitudes.map(s => `
+      <tr>
+        <td>${formatFechaISO(s.fecha_desde)} – ${formatFechaISO(s.fecha_hasta)}</td>
+        <td style="text-align:center">${s.dias}</td>
+        <td>${estadoBadge(s.estado)}</td>
+        <td style="font-size:11px;color:#64748b">${s.nota_admin || '—'}</td>
+        <td>
+          ${s.estado === 'pendiente' ? `
+            <div style="display:flex;gap:6px">
+              <button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7"
+                onclick="responderSolicitudAdmin('${s.id}','aprobada','')">✓ Aprobar</button>
+              <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5"
+                onclick="abrirModalRespuesta('${s.id}','rechazada','${empEnc}')">✗ Rechazar</button>
+            </div>` : '—'}
+        </td>
+      </tr>`).join('')
+    : `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin solicitudes</td></tr>`;
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
+      <div class="detalle-stat"><span class="detalle-stat-val">${banco}</span><span class="detalle-stat-lbl">Días banco</span></div>
+      <div class="detalle-stat"><span class="detalle-stat-val">${usado}</span><span class="detalle-stat-lbl">Usados</span></div>
+      <div class="detalle-stat"><span class="detalle-stat-val" style="color:${ajuste>=0?'#059669':'#dc2626'}">${ajuste>=0?'+':''}${ajuste}</span><span class="detalle-stat-lbl">Ajuste</span></div>
+      <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb">${disponible}</span><span class="detalle-stat-lbl">Disponibles</span></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap">
+      <button class="btn-detalle-accion" onclick="abrirModalAjusteAdmin('${empEnc}',${anio})">
+        ± Ajustar días
+      </button>
+      <button class="btn-detalle-accion" onclick="inicializarVacAdmin(${anio})">
+        ↺ Inicializar año ${anio}
+      </button>
+    </div>
+    <h4 style="font-size:13px;font-weight:600;color:#374151;margin-bottom:0.75rem">Solicitudes</h4>
+    <div class="admin-table-wrap">
+      <table class="admin-tabla">
+        <thead><tr><th>Período</th><th style="text-align:center">Días</th><th>Estado</th><th>Nota admin</th><th></th></tr></thead>
+        <tbody>${solicsRows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── VACACIONES EMPLEADO (vista propia) ─────────────────
+async function cargarVacacionesEmpleado(nombreEmp) {
+  const container = document.getElementById('evTabVacaciones');
+  if (!container) return;
+  const anio = new Date().getFullYear();
+  try {
+    const [respVac, respSol] = await Promise.all([
+      fetch(vacApiUrl('get_vacaciones', { empleado: nombreEmp, anio })),
+      fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp })),
+    ]);
+    const [jVac, jSol] = await Promise.all([respVac.json(), respSol.json()]);
+    const vac  = jVac.ok  ? (jVac.vacaciones?.[0]   || null) : null;
+    const sols = jSol.ok  ? (jSol.solicitudes || []) : [];
+    container.innerHTML = renderVacacionesEmpleadoHTML(nombreEmp, vac, sols);
+  } catch(e) {
+    container.innerHTML = `<p style="color:#dc2626;font-size:13px">Error al cargar vacaciones: ${e.message}</p>`;
+  }
+}
+
+function renderVacacionesEmpleadoHTML(nombreEmp, vac, solicitudes) {
+  const banco      = vac?.dias_banco       ?? '—';
+  const usado      = vac?.dias_usados      ?? '—';
+  const disponible = vac?.dias_disponibles ?? '—';
+  const empEnc     = encodeURIComponent(nombreEmp).replace(/'/g,"\\'");
+
+  const solicsRows = solicitudes.length
+    ? solicitudes.map(s => `
+      <div class="ev-card" style="margin-bottom:8px;padding:12px 16px;border-left:3px solid ${
+        s.estado==='aprobada'?'#059669':s.estado==='rechazada'?'#dc2626':'#f59e0b'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div>
+            <div style="font-size:13px;font-weight:500">${formatFechaISO(s.fecha_desde)} — ${formatFechaISO(s.fecha_hasta)}</div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px">${s.dias} días corridos</div>
+            ${s.nota_admin ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px">Nota: ${s.nota_admin}</div>` : ''}
+          </div>
+          ${estadoBadge(s.estado)}
+        </div>
+      </div>`).join('')
+    : `<p style="color:#94a3b8;font-size:13px">No tenés solicitudes.</p>`;
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+      <div class="detalle-stat"><span class="detalle-stat-val">${banco}</span><span class="detalle-stat-lbl">Días banco</span></div>
+      <div class="detalle-stat"><span class="detalle-stat-val">${usado}</span><span class="detalle-stat-lbl">Usados</span></div>
+      <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb">${disponible}</span><span class="detalle-stat-lbl">Disponibles</span></div>
+    </div>
+    <button class="btn-connect" style="width:auto;padding:10px 24px;margin-bottom:1.5rem;font-size:13px"
+      onclick="abrirModalSolicitudVac('${empEnc}')">
+      + Solicitar vacaciones
+    </button>
+    <h4 style="font-size:13px;font-weight:600;color:#374151;margin-bottom:0.75rem">Mis solicitudes</h4>
+    ${solicsRows}`;
+}
+
+// ── SOLICITUDES GLOBALES (tab admin) ──────────────────
+async function cargarSolicitudesAdmin() {
+  const container = document.getElementById('adminTabSolicitudes');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  try {
+    const resp = await fetch(vacApiUrl('get_solicitudes_vac', { estado: 'pendiente' }));
+    const json = await resp.json();
+    const sols = json.ok ? (json.solicitudes || []) : [];
+
+    // Actualizar badge en el tab
+    const tabBtn = document.getElementById('adminTabSolicitudesBtn');
+    if (tabBtn) tabBtn.textContent = `🏖 Solicitudes${sols.length ? ` (${sols.length})` : ''}`;
+
+    if (!sols.length) {
+      container.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:14px">No hay solicitudes pendientes 🎉</div>';
+      return;
+    }
+
+    const rows = sols.map(s => `
+      <tr>
+        <td><strong>${s.empleado.replace(/^\d+\s+/,'')}</strong></td>
+        <td>${formatFechaISO(s.fecha_desde)} – ${formatFechaISO(s.fecha_hasta)}</td>
+        <td style="text-align:center">${s.dias}</td>
+        <td style="font-size:11px;color:#64748b">${s.fecha_solicitud ? formatFechaISO(s.fecha_solicitud.substring(0,10)) : '—'}</td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7"
+              onclick="responderSolicitudAdmin('${s.id}','aprobada','')">✓ Aprobar</button>
+            <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5"
+              onclick="abrirModalRespuesta('${s.id}','rechazada','${encodeURIComponent(s.empleado)}')">✗ Rechazar</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    container.innerHTML = `
+      <div class="admin-table-wrap" style="padding:1.5rem 0 0">
+        <table class="admin-tabla">
+          <thead><tr><th>Empleado</th><th>Período</th><th style="text-align:center">Días</th><th>Solicitado</th><th>Acciones</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    container.innerHTML = `<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ${e.message}</p></div>`;
+  }
+}
+
+// ── MODALES ───────────────────────────────────────────
+function abrirModalAjusteAdmin(empEnc, anio) {
+  const nombreEmp = decodeURIComponent(empEnc);
+  const nomMostrar = nombreEmp.replace(/^\d+\s+/,'');
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Ajustar días — ${nomMostrar}</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Ajuste de días (positivo suma, negativo resta)</label>
+          <input type="number" class="admin-input" id="ajusteDias" value="0" step="1" placeholder="Ej: 3 o -2" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Motivo / Nota</label>
+          <input type="text" class="admin-input" id="ajusteNota" placeholder="Ej: Acuerdo especial" />
+        </div>
+        <p id="ajusteError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
+        <div style="display:flex;gap:10px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;flex:1" onclick="confirmarAjusteAdmin('${empEnc}',${anio})">Guardar ajuste</button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+}
+
+async function confirmarAjusteAdmin(empEnc, anio) {
+  const nombreEmp = decodeURIComponent(empEnc);
+  const ajuste = parseInt(document.getElementById('ajusteDias')?.value) || 0;
+  const nota   = document.getElementById('ajusteNota')?.value.trim();
+  const errEl  = document.getElementById('ajusteError');
+  if (ajuste === 0) { errEl.textContent='El ajuste no puede ser 0'; errEl.style.display='block'; return; }
+  try {
+    const resp = await fetch(vacApiUrl('ajustar_vac', {
+      empleado: nombreEmp, anio, ajuste, nota
+    }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    cerrarAdmin();
+    showToast('✓ Ajuste guardado');
+    cargarVacacionesAdmin(nombreEmp);
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function inicializarVacAdmin(anio) {
+  if (!confirm(`¿Inicializar banco de vacaciones ${anio} para todos los empleados?`)) return;
+  showToast('Procesando...');
+  try {
+    const resp = await fetch(vacApiUrl('inicializar_vac', { anio }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    showToast(`✓ Banco ${anio} inicializado para ${json.total || 'todos los'} empleados`);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+function abrirModalRespuesta(solicitudId, estado, empEnc) {
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">${estado === 'rechazada' ? 'Rechazar solicitud' : 'Responder solicitud'}</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Nota para el empleado (opcional)</label>
+          <input type="text" class="admin-input" id="respuestaNota" placeholder="Ej: Reagendar para enero" />
+        </div>
+        <div style="display:flex;gap:10px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;flex:1;${estado==='rechazada'?'background:#dc2626;':'background:#059669;'}"
+            onclick="responderSolicitudAdmin('${solicitudId}','${estado}',document.getElementById('respuestaNota').value)">
+            ${estado === 'rechazada' ? '✗ Confirmar rechazo' : '✓ Confirmar aprobación'}
+          </button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+}
+
+async function responderSolicitudAdmin(id, estado, nota) {
+  try {
+    const resp = await fetch(vacApiUrl('responder_solicitud', { id, estado, nota_admin: nota || '' }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    cerrarAdmin();
+    showToast(estado === 'aprobada' ? '✓ Solicitud aprobada' : '✗ Solicitud rechazada');
+    // Recargar según contexto
+    const tabSol = document.getElementById('adminTabSolicitudes');
+    if (tabSol && tabSol.style.display !== 'none') cargarSolicitudesAdmin();
+    // Si hay vacAdminContent_inner visible, recargar también
+    const inner = document.getElementById('vacAdminContent_inner');
+    if (inner) {
+      const tituloEl = document.querySelector('.detalle-titulo');
+      if (tituloEl) {
+        const nomDiv = tituloEl.textContent.trim().replace(/^#\d+\s*/,'').trim();
+        const empNombre = state.datos.find(r => r.EMPLEADO.replace(/^\d+\s+/,'').trim().toLowerCase() === nomDiv.toLowerCase())?.EMPLEADO || nomDiv;
+        cargarVacacionesAdmin(empNombre);
+      }
+    }
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── MODAL SOLICITAR VACACIONES (empleado) ─────────────
+function abrirModalSolicitudVac(empEnc) {
+  const nombreEmp = decodeURIComponent(empEnc);
+  const hoy = new Date();
+  const hoyISO = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Solicitar vacaciones</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Fecha desde</label>
+          <input type="date" class="admin-input" id="vacDesde" value="${hoyISO}"
+            onchange="calcularDiasVacForm()" min="${hoyISO}" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Fecha hasta</label>
+          <input type="date" class="admin-input" id="vacHasta" value="${hoyISO}"
+            onchange="calcularDiasVacForm()" min="${hoyISO}" />
+        </div>
+        <div class="admin-form-grupo">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+            <span style="font-size:13px;color:#374151">Días corridos:</span>
+            <span id="diasVacCalc" style="font-size:18px;font-weight:700;color:#2563eb">1</span>
+          </div>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            Se cuentan días corridos (incluyendo fines de semana y feriados, según ley argentina)
+          </span>
+        </div>
+        <p id="vacSolError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
+        <div style="display:flex;gap:10px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;flex:1" onclick="confirmarSolicitudVac('${empEnc}')">Enviar solicitud</button>
+          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+  calcularDiasVacForm();
+}
+
+function calcularDiasVacForm() {
+  const desde = document.getElementById('vacDesde')?.value;
+  const hasta = document.getElementById('vacHasta')?.value;
+  const el    = document.getElementById('diasVacCalc');
+  if (!desde || !hasta || !el) return;
+  const [dy,dm,dd] = desde.split('-').map(Number);
+  const [hy,hm,hd] = hasta.split('-').map(Number);
+  const dDesde = new Date(dy,dm-1,dd);
+  const dHasta = new Date(hy,hm-1,hd);
+  const dias = Math.max(1, Math.round((dHasta - dDesde) / 86400000) + 1);
+  el.textContent = dias;
+  return dias;
+}
+
+async function confirmarSolicitudVac(empEnc) {
+  const nombreEmp = decodeURIComponent(empEnc);
+  const desde  = document.getElementById('vacDesde')?.value;
+  const hasta  = document.getElementById('vacHasta')?.value;
+  const errEl  = document.getElementById('vacSolError');
+  if (!desde || !hasta) { errEl.textContent='Seleccioná las fechas'; errEl.style.display='block'; return; }
+  const [dy,dm,dd] = desde.split('-').map(Number);
+  const [hy,hm,hd] = hasta.split('-').map(Number);
+  if (new Date(hy,hm-1,hd) < new Date(dy,dm-1,dd)) {
+    errEl.textContent='La fecha hasta debe ser posterior a la fecha desde'; errEl.style.display='block'; return;
+  }
+  const dias = calcularDiasVacForm();
+  const datos = encodeURIComponent(JSON.stringify({ empleado: nombreEmp, fecha_desde: desde, fecha_hasta: hasta, dias }));
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=solicitar_vac&datos=${datos}`);
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    cerrarAdmin();
+    showToast('✓ Solicitud enviada — quedá pendiente de aprobación');
+    cargarVacacionesEmpleado(nombreEmp);
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+// ── SWITCH TAB VISTA EMPLEADO ─────────────────────────
+function switchEvTab(tab, btn) {
+  document.querySelectorAll('.emp-vista-personal .detalle-tabs .detalle-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const jornada    = document.getElementById('evTabJornada');
+  const vacaciones = document.getElementById('evTabVacaciones');
+  if (jornada)    jornada.style.display    = tab === 'jornada'    ? 'block' : 'none';
+  if (vacaciones) vacaciones.style.display = tab === 'vacaciones' ? 'block' : 'none';
 }
