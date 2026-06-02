@@ -134,7 +134,7 @@ let filtrosDia = {
 };
 
 // URL fija del Apps Script (no requiere configuración manual)
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxIV_QdP2kRRjBD4osvt1jSA6uRUbgqvW46pY_PRBgT7qPTs4FHHNxzGaY68GTJj9R8/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
 
 // Claves de localStorage para URLs de Apps Script
 const LS_URLS_KEY = 'croma_horarios_urls';
