@@ -3283,11 +3283,11 @@ function abrirEditarUsuario(idx) {
           </span>
         </div>
 
-        <div style="display:flex;gap:10px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarUsuarioDesdeForm()">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" onclick="guardarUsuarioDesdeForm()">
             ${u ? 'Guardar cambios' : 'Crear usuario'}
           </button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
+          <button class="btn-demo" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -3628,9 +3628,9 @@ function abrirEditarEmpleado(nombre) {
           <input type="number" class="admin-input" id="editHsBase" value="${perfil.hs_base || 8}" min="1" max="12" step="0.5" />
         </div>
 
-        <div style="display:flex;gap:10px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarPerfilDesdeForm()">Guardar cambios</button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" onclick="guardarPerfilDesdeForm()">Guardar cambios</button>
+          <button class="btn-demo" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -3727,9 +3727,9 @@ function abrirEditarCategoria(catId) {
             Percibe horas extra
           </label>
         </div>
-        <div style="display:flex;gap:10px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0;flex:1" onclick="guardarCategoriaDesdeForm()">Guardar</button>
-          <button class="btn-demo" style="flex:0 0 auto;padding:11px 16px" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" onclick="guardarCategoriaDesdeForm()">Guardar</button>
+          <button class="btn-demo" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
         </div>
       </div>
     </div>
