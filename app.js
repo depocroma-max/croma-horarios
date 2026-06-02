@@ -748,9 +748,6 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       const esDom   = fecha.getDay() === 0;
       const esFer   = esFeriado(fecha);
 
-      // Aplicar filtro de día
-      if (diaFiltrado(fecha)) return null;
-
       let horaReg = '';
       if (r0.MARCA_TEMPORAL) {
         try {
@@ -785,7 +782,6 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       }
       const [cy, cm, cd] = c.fecha.split('-').map(Number);
       const fechaCert = new Date(cy, cm-1, cd);
-      if (diaFiltrado(fechaCert)) return;
       filas.push({
         fechaStr: fechaCert.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
         diaSem:   DIAS_SEMANA[fechaCert.getDay()],
