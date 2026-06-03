@@ -4295,7 +4295,7 @@ async function cargarSolicitudesAdmin() {
             <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5"
               onclick="abrirModalRespuesta('${s.id}','rechazada','${encodeURIComponent(s.empleado)}')">✗ Rechazar</button>
             <button class="btn-admin-edit" style="font-size:11px"
-              onclick="_calVacMes=${mesIdx};_calVacAnio=${anioSol};switchVacTab('calendario',document.querySelector('#vacTabs .admin-tab'))">📅 Ver</button>
+              onclick="_calVacMes=${mesIdx};_calVacAnio=${anioSol};switchVacTab('calendario',document.querySelector('#vacTabs .admin-tab'));setTimeout(cargarCalendarioVacaciones,50)">📅 Ver</button>
           </div>
         </td>
       </tr>`;
@@ -4392,6 +4392,7 @@ function abrirModalRespuesta(solicitudId, estado, empEnc) {
           <input type="text" class="admin-input" id="respuestaNota" placeholder="Ej: Reagendar para enero" />
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0;${estado==='rechazada'?'background:#dc2626;':'background:#059669;'}"
             onclick="responderSolicitudAdmin('${solicitudId}','${estado}',document.getElementById('respuestaNota').value)">
             ${estado === 'rechazada' ? '✗ Confirmar rechazo' : '✓ Confirmar aprobación'}
           </button>
