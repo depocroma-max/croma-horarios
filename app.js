@@ -3625,7 +3625,6 @@ async function guardarPerfilDesdeForm() {
   const sucursalId   = document.getElementById('editSucursal')?.value || '';
   const fechaIngreso = document.getElementById('editFechaIngreso')?.value || '';
 
-  // Convertir URL de Drive si corresponde
   let fotoFinal = fotoUrl;
   const driveMatch = fotoUrl.match(/\/d\/([^/]+)/);
   if (driveMatch) {
@@ -3644,13 +3643,43 @@ async function guardarPerfilDesdeForm() {
     activo: true,
   };
 
-  // Guardar localmente siempre (aunque falle el servidor)
   EMPLEADOS_PERFILES[nombre] = perfil;
 
-  // Intentar guardar en Sheet
   await guardarPerfil(perfil);
   cerrarAdmin();
-  renderAdmin();
+
+  // Actualizar solo el tbody de la tabla de empleados sin re-renderizar todo el panel
+  const tablaBody = document.querySelector('#adminTablaEmps tbody');
+  if (tablaBody) {
+    const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a, b) => {
+      const na = parseInt(a) || 999, nb = parseInt(b) || 999;
+      return na !== nb ? na - nb : a.localeCompare(b);
+    });
+    // Re-usar renderAdminInline solo para obtener el HTML de filas
+    // Actualizar la fila específica del empleado editado
+    const rows = tablaBody.querySelectorAll('tr');
+    rows.forEach(row => {
+      const btn = row.querySelector('.btn-admin-edit');
+      if (btn && btn.getAttribute('onclick')?.includes(nombre.replace(/'/g,"\\'"))) {
+        const suc = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL || sucursalId)) || { nombre: '—', colorLight: '#f1f5f9', color: '#475569' };
+        row.querySelector('td:nth-child(2) span').textContent = suc.nombre;
+        const empCell = row.querySelector('td:nth-child(3)');
+        if (empCell) empCell.innerHTML = empresa
+          ? `<span class='emp-empresa-badge ${empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}'>${empresa}</span>`
+          : `<span style='color:#94a3b8;font-size:12px'>—</span>`;
+        const catCell = row.querySelector('td:nth-child(4)');
+        const catNom  = CATEGORIAS_CONFIG.find(c => c.id === categoriaId)?.nombre || '—';
+        if (catCell) catCell.innerHTML = categoriaId
+          ? `<span class='emp-cat-badge'>${catNom}</span>`
+          : `<span style='color:#94a3b8;font-size:12px'>—</span>`;
+      }
+    });
+    // Si no encontró la fila (empleado nuevo), re-renderizar completo
+    if (!tablaBody.innerHTML || !document.querySelector('#adminTablaEmps')) renderAdmin();
+  } else {
+    renderAdmin();
+  }
+  showToast('✓ Perfil guardado');
 }
 
 function abrirNuevaCategoria() { abrirEditarCategoria(null); }
