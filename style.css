@@ -1691,3 +1691,15 @@ body {
   .bell-dropdown { width: 280px; }
   .admin-inline-wrap { padding: 1rem; }
 }
+
+/* Feriados en calendario de vacaciones */
+.cal-vac-feriado {
+  background: #fef9c3;
+}
+.cal-vac-feriado .cal-vac-num {
+  color: #92400e;
+}
+.cal-fer-dot {
+  font-size: 9px;
+  vertical-align: middle;
+}

@@ -2052,6 +2052,13 @@ function setView(view) {
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);
     renderAdminInline();
+  } else if (view === 'vacaciones') {
+    weekNav.style.display  = 'none';
+    mesNav.style.display   = 'none';
+    statsRow.style.display = 'none';
+    filters.style.display  = 'none';
+    mostrarFiltrosDiaEnBarra(false);
+    renderVacacionesView();
   } else {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
@@ -2571,8 +2578,10 @@ function iniciarAppConSesion() {
   if (sesionActual.rol === 'admin') {
     adminAutenticado = true;
     sessionStorage.setItem('croma_admin_auth', '1');
-    document.getElementById('navBtnAdmin').style.display    = '';
-    document.getElementById('drawerNavAdmin').style.display = '';
+    document.getElementById('navBtnAdmin').style.display       = '';
+    document.getElementById('navBtnVacaciones').style.display  = '';
+    document.getElementById('drawerNavAdmin').style.display    = '';
+    document.getElementById('drawerNavVacaciones').style.display = '';
     document.getElementById('bellWrap').style.display       = 'flex';
     document.getElementById('bellWrapEmp').style.display    = 'none';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
@@ -3424,8 +3433,6 @@ function renderAdminInline() {
       "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\" >Empleados (" + empNombres.length + ")</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\" >Categorías</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\" >Usuarios</button>" +
-      "<button class='admin-tab' id='adminTabSolicitudesBtn' onclick=\"switchAdminTab('solicitudes',this)\" >Solicitudes</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('vacaciones',this)\" >Vacaciones</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\" >Configuración</button>" +
     "</div>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
@@ -3450,12 +3457,6 @@ function renderAdminInline() {
       "</div>" +
     "</div>" +
     renderAdminUsuarios() +
-    "<div id='adminTabSolicitudes' class='admin-tab-content' style='display:none'>" +
-      "<div style='padding:1.5rem'><p style='color:#94a3b8;font-size:13px'>Cargando solicitudes...</p></div>" +
-    "</div>" +
-    "<div id='adminTabVacaciones' class='admin-tab-content' style='display:none'>" +
-      "<div style='padding:1.5rem'><p style='color:#94a3b8;font-size:13px'>Cargando calendario...</p></div>" +
-    "</div>" +
     "<div id='adminTabConfiguracion' class='admin-tab-content' style='display:none'>" +
       "<div style='padding:1.5rem;max-width:500px'>" +
         "<h3 style='font-size:14px;font-weight:600;margin-bottom:1.5rem;color:#1e293b'>Configuración general</h3>" +
@@ -3487,13 +3488,8 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabEmpleados').style.display    = tab === 'empleados'     ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
   document.getElementById('adminTabUsuarios').style.display     = tab === 'usuarios'      ? 'block' : 'none';
-  document.getElementById('adminTabSolicitudes').style.display  = tab === 'solicitudes'   ? 'block' : 'none';
-  document.getElementById('adminTabConfiguracion').style.display = tab === 'configuracion' ? 'block' : 'none';
-  document.getElementById('adminTabVacaciones').style.display    = tab === 'vacaciones'    ? 'block' : 'none';
-
+  document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
   if (tab === 'usuarios')      cargarUsuarios().then(() => { const t = document.getElementById('adminTabUsuarios'); if(t) t.innerHTML = renderAdminUsuariosInner(); });
-  if (tab === 'solicitudes')   cargarSolicitudesAdmin();
-  if (tab === 'vacaciones')    cargarCalendarioVacaciones();
   if (tab === 'configuracion') cargarConfigAdmin();
 }
 
@@ -4236,17 +4232,23 @@ function renderVacacionesEmpleadoHTML(nombreEmp, vac, solicitudes) {
 
 // ── SOLICITUDES GLOBALES (tab admin) ──────────────────
 async function cargarSolicitudesAdmin() {
-  const container = document.getElementById('adminTabSolicitudes');
+  const container = document.getElementById('vacSolicitudesContainer');
   if (!container) return;
-  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  if (_vacSolicitudesCache === null) {
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  }
   try {
-    const resp = await fetch(vacApiUrl('get_solicitudes_vac', { estado: 'pendiente' }));
-    const json = await resp.json();
-    const sols = json.ok ? (json.solicitudes || []) : [];
+    const todas = await fetchSolicitudesCache(false);
+    const sols = todas.filter(function(s) { return s.estado === 'pendiente'; });
 
-    // Actualizar badge en el tab
-    const tabBtn = document.getElementById('adminTabSolicitudesBtn');
-    if (tabBtn) tabBtn.textContent = `🏖 Solicitudes${sols.length ? ` (${sols.length})` : ''}`;
+    // Badge de pendientes
+    const badge = document.getElementById('vacPendBadge');
+    const tabBtn = document.getElementById('vacTabSolicitudesBtn');
+    if (badge) {
+      if (sols.length > 0) { badge.textContent = sols.length + ' pendiente' + (sols.length > 1 ? 's' : ''); badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+    if (tabBtn) tabBtn.textContent = 'Solicitudes pendientes' + (sols.length ? ' (' + sols.length + ')' : '');
 
     if (!sols.length) {
       container.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:14px">No hay solicitudes pendientes 🎉</div>';
@@ -4379,8 +4381,9 @@ async function responderSolicitudAdmin(id, estado, nota) {
     cerrarAdmin();
     showToast(estado === 'aprobada' ? '✓ Solicitud aprobada' : '✗ Solicitud rechazada');
     // Recargar según contexto
-    const tabSol = document.getElementById('adminTabSolicitudes');
-    if (tabSol && tabSol.style.display !== 'none') cargarSolicitudesAdmin();
+    _vacSolicitudesCache = null; // invalidar cache
+    const vacView = document.getElementById('viewVacaciones');
+    if (vacView && vacView.classList.contains('active')) renderVacacionesView();
     // Si hay vacAdminContent_inner visible, recargar también
     const inner = document.getElementById('vacAdminContent_inner');
     if (inner) {
@@ -4471,6 +4474,7 @@ async function confirmarSolicitudVac(empEnc) {
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=solicitar_vac&datos=${datos}`);
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
+    _vacSolicitudesCache = null; // invalidar cache
     cerrarAdmin();
     showToast('✓ Solicitud enviada — quedá pendiente de aprobación');
     cargarVacacionesEmpleado(nombreEmp);
@@ -4630,13 +4634,14 @@ var _calVacAnio = new Date().getFullYear();
 var _calVacFiltroLocal = 'all';
 
 async function cargarCalendarioVacaciones() {
-  const container = document.getElementById('adminTabVacaciones');
+  const container = document.getElementById('vacCalendarioContainer');
   if (!container) return;
-  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  // Solo mostrar spinner si no hay cache aún
+  if (_vacSolicitudesCache === null) {
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  }
   try {
-    const resp = await fetch(vacApiUrl('get_solicitudes_vac', {}));
-    const json = await resp.json();
-    const todas = json.ok ? (json.solicitudes || []) : [];
+    const todas = await fetchSolicitudesCache(false);
     renderCalendarioVacaciones(container, todas.filter(function(s) {
       return s.estado === 'aprobada' || s.estado === 'pendiente';
     }));
@@ -4646,12 +4651,18 @@ async function cargarCalendarioVacaciones() {
 }
 
 function renderCalendarioVacaciones(container, solicitudes) {
+  // Selectores de mes y año
+  const aniosDisponibles = [2024, 2025, 2026, 2027];
+  const mesOpts = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+    .map(function(m, i) { return '<option value="' + i + '"' + (_calVacMes === i ? ' selected' : '') + '>' + m + '</option>'; }).join('');
+  const anioOpts = aniosDisponibles
+    .map(function(a) { return '<option value="' + a + '"' + (_calVacAnio === a ? ' selected' : '') + '>' + a + '</option>'; }).join('');
+
   const sucOpts = '<option value="all">Todos los locales</option>' +
     SUCURSALES.map(function(s) {
       return '<option value="' + s.id + '"' + (_calVacFiltroLocal === s.id ? ' selected' : '') + '>' + s.nombre + '</option>';
     }).join('');
 
-  const mesLabel = MESES_ES[_calVacMes] + ' ' + _calVacAnio;
   const primerDia = new Date(_calVacAnio, _calVacMes, 1);
   const ultimoDia = new Date(_calVacAnio, _calVacMes + 1, 0);
 
@@ -4672,37 +4683,41 @@ function renderCalendarioVacaciones(container, solicitudes) {
     return Object.values(grupos).some(function(g) { return g.length >= 2; });
   }
 
-  const diasSem = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+  const diasSem = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const offsetInicio = primerDia.getDay();
   let celdasHTML = '';
   for (let i = 0; i < offsetInicio; i++) {
     celdasHTML += '<div class="cal-vac-cell cal-vac-empty"></div>';
   }
+  const hoyISO = new Date().toISOString().substring(0,10);
   for (let d = 1; d <= ultimoDia.getDate(); d++) {
     const fecha = new Date(_calVacAnio, _calVacMes, d);
     const isoFecha = _calVacAnio + '-' + String(_calVacMes+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
-    const esHoy = isoFecha === new Date().toISOString().substring(0,10);
-    const esFinde = fecha.getDay() === 0 || fecha.getDay() === 6;
+    const esHoy    = isoFecha === hoyISO;
+    const esFinde  = fecha.getDay() === 0 || fecha.getDay() === 6;
+    const esFer    = esFeriado(fecha);
     const emps = solsFiltradas.filter(function(s) {
       return s.fecha_desde && s.fecha_hasta && isoFecha >= s.fecha_desde && isoFecha <= s.fecha_hasta;
     });
     const conflicto = hayConflicto(emps);
     const empRows = emps.map(function(s) {
-      const nom = s.empleado.replace(/^\d+\s+/, '').split(' ')[0];
+      const nom   = s.empleado.replace(/^\d+\s+/, '').split(' ')[0];
       const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '';
-      const suc = SUCURSALES.find(function(x) { return x.id === local; }) || { color: '#94a3b8', colorLight: '#f1f5f9' };
+      const suc   = SUCURSALES.find(function(x) { return x.id === local; }) || { color: '#94a3b8', colorLight: '#f1f5f9' };
       const esPend = s.estado === 'pendiente';
       return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
-        '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' (p)' : '') + '</span></div>';
+        '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' ·' : '') + '</span></div>';
     }).join('');
     celdasHTML += '<div class="cal-vac-cell' +
-      (esHoy ? ' cal-vac-hoy' : '') +
-      (esFinde ? ' cal-vac-finde' : '') +
-      (conflicto ? ' cal-vac-conflicto' : '') + '">' +
-      '<div class="cal-vac-num">' + d + (conflicto ? ' !!' : '') + '</div>' +
+      (esHoy     ? ' cal-vac-hoy'      : '') +
+      (esFinde   ? ' cal-vac-finde'    : '') +
+      (esFer     ? ' cal-vac-feriado'  : '') +
+      (conflicto ? ' cal-vac-conflicto': '') + '">' +
+      '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
       empRows + '</div>';
   }
 
+  // Tabla solicitudes del mes
   const solsMes = solsFiltradas.filter(function(s) {
     if (!s.fecha_desde) return false;
     const p = s.fecha_desde.split('-').map(Number);
@@ -4710,9 +4725,9 @@ function renderCalendarioVacaciones(container, solicitudes) {
   });
 
   const tablaSols = solsMes.length ? solsMes.map(function(s) {
-    const nom = s.empleado.replace(/^\d+\s+/, '');
+    const nom   = s.empleado.replace(/^\d+\s+/, '');
     const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '-';
-    const suc = SUCURSALES.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
+    const suc   = SUCURSALES.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
     const conflictoSol = solsFiltradas.some(function(o) {
       return o.id !== s.id &&
         (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL === local &&
@@ -4721,18 +4736,18 @@ function renderCalendarioVacaciones(container, solicitudes) {
     const acciones = s.estado === 'pendiente'
       ? '<div style="display:flex;gap:4px">' +
           '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7" ' +
-            'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\')">Aprobar</button>' +
+            'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\')">✓ Aprobar</button>' +
           '<button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5" ' +
-            'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\')">Rechazar</button>' +
+            'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\')">✗ Rechazar</button>' +
           '</div>'
       : '-';
     return '<tr>' +
       '<td><strong>' + nom + '</strong></td>' +
       '<td><span class="suc-badge-mini" style="background:' + (suc.colorLight || '#f1f5f9') + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
-      '<td>' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + '</td>' +
+      '<td>' + formatFechaISO(s.fecha_desde) + ' — ' + formatFechaISO(s.fecha_hasta) + '</td>' +
       '<td style="text-align:center">' + s.dias + '</td>' +
       '<td>' + estadoBadge(s.estado) + '</td>' +
-      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">Conflicto</span>' : '-') + '</td>' +
+      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">⚠️ Conflicto</span>' : '—') + '</td>' +
       '<td>' + acciones + '</td></tr>';
   }).join('') : '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
 
@@ -4740,24 +4755,29 @@ function renderCalendarioVacaciones(container, solicitudes) {
 
   container.innerHTML =
     '<div style="padding:1.5rem">' +
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;flex-wrap:wrap">' +
+    // Toolbar: selectors + filtro local + leyenda
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">' +
       '<div style="display:flex;align-items:center;gap:6px">' +
         '<button class="week-btn" onclick="cambiarMesCalVac(-1)">&#8592;</button>' +
-        '<span style="font-weight:600;font-size:14px;min-width:160px;text-align:center">' + mesLabel + '</span>' +
+        '<select class="filter-select" style="font-size:14px;font-weight:600" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>' +
+        '<select class="filter-select" style="font-size:14px;font-weight:600;width:80px" onchange="_calVacAnio=parseInt(this.value);cargarCalendarioVacaciones()">' + anioOpts + '</select>' +
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
       '<select class="filter-select" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
-      '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b;margin-left:auto">' +
-        '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#d1fae5;border-left:3px solid #059669"></span> Aprobada ' +
-        '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fef9c3;border-left:3px solid #f59e0b;margin-left:6px"></span> Pendiente ' +
-        '<span style="color:#f59e0b;margin-left:6px">!!</span> Conflicto' +
+      '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;margin-left:auto;flex-wrap:wrap">' +
+        '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#d1fae5;border-left:3px solid #059669;display:inline-block"></span>Aprobada</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fef9c3;border-left:3px solid #f59e0b;display:inline-block"></span>Pendiente</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fef3c7;display:inline-block"></span>Feriado</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;color:#f59e0b;font-weight:600">!! Conflicto</span>' +
       '</div>' +
     '</div>' +
+    // Grilla
     '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div>' +
+    // Tabla del mes
     '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
     '<div class="admin-table-wrap">' +
       '<table class="admin-tabla">' +
-        '<thead><tr><th>Empleado</th><th>Local</th><th>Periodo</th><th style="text-align:center">Dias</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
+        '<thead><tr><th>Empleado</th><th>Local</th><th>Período</th><th style="text-align:center">Días</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
         '<tbody>' + tablaSols + '</tbody>' +
       '</table>' +
     '</div>' +
@@ -4769,4 +4789,57 @@ function cambiarMesCalVac(delta) {
   if (_calVacMes > 11) { _calVacMes = 0; _calVacAnio++; }
   if (_calVacMes < 0)  { _calVacMes = 11; _calVacAnio--; }
   cargarCalendarioVacaciones();
+}
+
+
+// ══════════════════════════════════════════════════════
+//  VISTA VACACIONES (nav principal)
+// ══════════════════════════════════════════════════════
+
+var _vacSolicitudesCache = null; // cache: null = no cargado, [] = cargado vacío
+
+async function fetchSolicitudesCache(force) {
+  if (!force && _vacSolicitudesCache !== null) return _vacSolicitudesCache;
+  try {
+    const resp = await fetch(vacApiUrl('get_solicitudes_vac', {}));
+    const json = await resp.json();
+    _vacSolicitudesCache = json.ok ? (json.solicitudes || []) : [];
+  } catch(e) {
+    if (_vacSolicitudesCache === null) _vacSolicitudesCache = [];
+  }
+  return _vacSolicitudesCache;
+}
+
+function renderVacacionesView() {
+  const container = document.getElementById('vacacionesContainer');
+  if (!container) return;
+
+  container.innerHTML =
+    '<div class="admin-inline-wrap">' +
+    '<div class="admin-inline-header">' +
+      '<div class="admin-titulo">Vacaciones</div>' +
+      '<div id="vacPendBadge" style="display:none;background:#fef3c7;color:#92400e;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600"></div>' +
+    '</div>' +
+    '<div class="admin-tabs" id="vacTabs">' +
+      '<button class="admin-tab active" onclick="switchVacTab(\'calendario\',this)">Calendario</button>' +
+      '<button class="admin-tab" id="vacTabSolicitudesBtn" onclick="switchVacTab(\'solicitudes\',this)">Solicitudes pendientes</button>' +
+    '</div>' +
+    '<div id="vacCalendarioContainer" class="admin-tab-content">' +
+      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
+    '</div>' +
+    '<div id="vacSolicitudesContainer" class="admin-tab-content" style="display:none">' +
+      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
+    '</div>' +
+    '</div>';
+
+  // Cargar calendario con cache
+  cargarCalendarioVacaciones();
+}
+
+function switchVacTab(tab, btn) {
+  document.querySelectorAll('#vacTabs .admin-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('vacCalendarioContainer').style.display  = tab === 'calendario'  ? 'block' : 'none';
+  document.getElementById('vacSolicitudesContainer').style.display = tab === 'solicitudes' ? 'block' : 'none';
+  if (tab === 'solicitudes') cargarSolicitudesAdmin();
 }
