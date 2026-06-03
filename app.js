@@ -501,7 +501,7 @@ function renderEmpleados(datos) {
     if (!empMap[key]) {
       const perfil = EMPLEADOS_PERFILES[r.EMPLEADO] || {};
       const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
-      empMap[key] = { nombre: r.EMPLEADO, suc: r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(),
+      empMap[key] = { nombre: r.EMPLEADO, suc: perfil.sucursal_id || r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(),
                       empresa: perfil.empresa || '—', categoria: cat?.nombre || '—', foto_url: perfil.foto_url || '',
                       diasProcesados: new Set() };
     }
@@ -1105,7 +1105,7 @@ function abrirDetalleEmpleadoPeriodo(nombreEmp, modo) {
   }
 
   if (!datosFiltrados.length) { showToast('Sin registros en este período'); return; }
-  const sucId = datosFiltrados[0]?.LOCAL || '';
+  const sucId = (EMPLEADOS_PERFILES[nombreEmp]?.sucursal_id) || datosFiltrados[0]?.LOCAL || '';
   // Llamar abrirDetalleEmpleado pero con datos ya filtrados por período
   abrirDetalleEmpleadoConDatos(nombreEmp, sucId, datosFiltrados);
 }
@@ -3378,7 +3378,7 @@ function renderAdminInline() {
 
   const filasEmps = empNombres.map(nombre => {
     const perfil    = EMPLEADOS_PERFILES[nombre] || {};
-    const suc       = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL || perfil.sucursal_id)) || { nombre: '—' };
+    const suc       = SUCURSALES.find(s => s.id === (perfil.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
     const numMatch  = nombre.match(/^(\d+)\s+(.+)$/);
     const nomMostrar= numMatch ? numMatch[2] : nombre;
     const avatarUrl = perfil.foto_url || '';
@@ -3661,7 +3661,7 @@ async function guardarPerfilDesdeForm() {
     rows.forEach(row => {
       const btn = row.querySelector('.btn-admin-edit');
       if (btn && btn.getAttribute('onclick')?.includes(nombre.replace(/'/g,"\\'"))) {
-        const suc = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL || sucursalId)) || { nombre: '—', colorLight: '#f1f5f9', color: '#475569' };
+        const suc = SUCURSALES.find(s => s.id === (sucursalId || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—', colorLight: '#f1f5f9', color: '#475569' };
         row.querySelector('td:nth-child(2) span').textContent = suc.nombre;
         const empCell = row.querySelector('td:nth-child(3)');
         if (empCell) empCell.innerHTML = empresa
@@ -4737,7 +4737,7 @@ function renderCalendarioVacaciones(container, solicitudes) {
 
   const solsFiltradas = solicitudes.filter(function(s) {
     if (_calVacFiltroLocal === 'all') return true;
-    const sucEmp = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL;
+    const perfSol = EMPLEADOS_PERFILES[s.empleado] || {}; const sucEmp = perfSol.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL;
     return sucEmp === _calVacFiltroLocal;
   });
 
@@ -4745,7 +4745,7 @@ function renderCalendarioVacaciones(container, solicitudes) {
     if (empsEnFecha.length < 2) return false;
     const grupos = {};
     empsEnFecha.forEach(function(s) {
-      const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || 'x';
+      const perfEmp = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfEmp.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || 'x';
       if (!grupos[local]) grupos[local] = [];
       grupos[local].push(s);
     });
@@ -4771,7 +4771,7 @@ function renderCalendarioVacaciones(container, solicitudes) {
     const conflicto = hayConflicto(emps);
     const empRows = emps.map(function(s) {
       const nom   = s.empleado.replace(/^\d+\s+/, '').split(' ')[0];
-      const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '';
+      const perfEmp2 = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfEmp2.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '';
       const suc   = SUCURSALES.find(function(x) { return x.id === local; }) || { color: '#94a3b8', colorLight: '#f1f5f9' };
       const esPend = s.estado === 'pendiente';
       return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
@@ -4795,11 +4795,11 @@ function renderCalendarioVacaciones(container, solicitudes) {
 
   const tablaSols = solsMes.length ? solsMes.map(function(s) {
     const nom   = s.empleado.replace(/^\d+\s+/, '');
-    const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '-';
+    const perfSol2 = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfSol2.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '-';
     const suc   = SUCURSALES.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
     const conflictoSol = solsFiltradas.some(function(o) {
       return o.id !== s.id &&
-        (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL === local &&
+        (EMPLEADOS_PERFILES[o.empleado]?.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL) === local &&
         o.fecha_desde <= s.fecha_hasta && o.fecha_hasta >= s.fecha_desde;
     });
     const partesSol = s.fecha_desde ? s.fecha_desde.split('-') : [];
@@ -4954,7 +4954,7 @@ async function cargarBancoDias() {
       const ajuste    = vac ? vac.dias_ajuste     : 0;
       const disponible= vac ? vac.dias_disponibles: '—';
       const perfil    = EMPLEADOS_PERFILES[nombre] || {};
-      const local     = (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || perfil.sucursal_id || '';
+      const local     = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
       const suc       = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
       const nomEnc    = encodeURIComponent(nombre);
       const dispColor = typeof disponible === 'number' ? (disponible > 7 ? '#059669' : disponible > 0 ? '#f59e0b' : '#dc2626') : '#94a3b8';
@@ -5022,7 +5022,7 @@ async function cargarBancoDiasAnio(anio) {
       const ajuste    = vac ? vac.dias_ajuste     : 0;
       const disponible= vac ? vac.dias_disponibles: '—';
       const perfil    = EMPLEADOS_PERFILES[nombre] || {};
-      const local     = (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || perfil.sucursal_id || '';
+      const local     = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
       const suc       = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
       const nomEnc    = encodeURIComponent(nombre);
       const dispColor = typeof disponible === 'number' ? (disponible > 7 ? '#059669' : disponible > 0 ? '#f59e0b' : '#dc2626') : '#94a3b8';
