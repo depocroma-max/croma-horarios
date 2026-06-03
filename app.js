@@ -2045,8 +2045,14 @@ function setView(view) {
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);  // empleados tiene sus propios checkboxes
+  } else if (view === 'administracion') {
+    weekNav.style.display  = 'none';
+    mesNav.style.display   = 'none';
+    statsRow.style.display = 'none';
+    filters.style.display  = 'none';
+    mostrarFiltrosDiaEnBarra(false);
+    renderAdminInline();
   } else {
-    // empleados u otras vistas sin barra
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
@@ -2563,11 +2569,12 @@ function cerrarSesion() {
 // ── INICIAR APP SEGÚN ROL ──────────────────────────────
 function iniciarAppConSesion() {
   if (sesionActual.rol === 'admin') {
-    // Admin: marcar adminAutenticado para no pedir PIN de nuevo
     adminAutenticado = true;
     sessionStorage.setItem('croma_admin_auth', '1');
-    // Admin: ver todo, mostrar botón admin, mostrar nav completa
-    document.getElementById('btnAdmin').style.display = 'flex';
+    document.getElementById('navBtnAdmin').style.display    = '';
+    document.getElementById('drawerNavAdmin').style.display = '';
+    document.getElementById('bellWrap').style.display       = 'flex';
+    document.getElementById('bellWrapEmp').style.display    = 'none';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
     document.querySelectorAll('.drawer-nav-btn').forEach(b => b.style.display = '');
     actualizarIndicadorSesion();
@@ -2575,16 +2582,16 @@ function iniciarAppConSesion() {
     const vistaGuardada = localStorage.getItem('croma_vista') || 'empleados';
     setView(vistaGuardada);
     cargarDatos({ unica: APPS_SCRIPT_URL });
+    setTimeout(actualizarBadgeCampana, 1500);
   } else {
-    // Empleado: preparar el DOM ANTES de showApp para evitar flash
-    document.getElementById('btnAdmin').style.display     = 'none';
-    document.getElementById('btnRefresh').style.display   = 'none';
-    document.getElementById('btnPrint').style.display     = 'none';
-    document.querySelector('.top-nav').style.display      = 'none';
-    document.querySelector('.top-search').style.display   = 'none';
-    document.querySelector('.controls-bar').style.display = 'none';
+    document.getElementById('btnRefresh').style.display     = 'none';
+    document.getElementById('btnPrint').style.display       = 'none';
+    document.querySelector('.top-nav').style.display        = 'none';
+    document.querySelector('.top-search').style.display     = 'none';
+    document.querySelector('.controls-bar').style.display   = 'none';
     document.querySelector('.hamburger-btn') && (document.querySelector('.hamburger-btn').style.display = 'none');
-    // Vaciar el mainApp para que no se vean los stats y vistas de admin
+    document.getElementById('bellWrap').style.display       = 'none';
+    document.getElementById('bellWrapEmp').style.display    = 'flex';
     document.getElementById('mainApp').innerHTML = '<div id="vistaEmpleadoContainer" style="padding:1rem"></div>';
     actualizarIndicadorSesion();
     showApp();
@@ -3349,182 +3356,129 @@ function eliminarUsuario(idx) {
 const ADMIN_PIN = '4268';
 let adminAutenticado = sessionStorage.getItem('croma_admin_auth') === '1';
 
-function abrirAdmin() {
-  if (!adminAutenticado) {
-    mostrarLoginAdmin();
-  } else {
-    renderAdmin();
-  }
-}
+function abrirAdmin() { setView('administracion'); }
 
-function mostrarLoginAdmin() {
-  const html = `
-  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
-    <div class="admin-panel" onclick="event.stopPropagation()" style="max-width:380px">
-      <div class="admin-header">
-        <div class="admin-titulo">🔐 Acceso Admin</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
-      </div>
-      <div style="padding:2rem">
-        <p style="font-size:13px;color:#64748b;margin-bottom:1.5rem">Ingresá el PIN de administrador para continuar.</p>
-        <div style="margin-bottom:1rem">
-          <label class="emp-filtro-label" style="display:block;margin-bottom:6px">PIN</label>
-          <input type="password" id="adminPinInput" class="admin-input" placeholder="••••"
-            maxlength="8" autocomplete="off"
-            onkeydown="if(event.key==='Enter')verificarPin()" />
-        </div>
-        <p id="adminPinError" style="color:#dc2626;font-size:12px;margin-bottom:1rem;display:none">PIN incorrecto</p>
-        <button class="btn-connect" onclick="verificarPin()" style="margin-bottom:0">Ingresar</button>
-      </div>
-    </div>
-  </div>`;
-  montarOverlayAdmin(html);
-  setTimeout(() => document.getElementById('adminPinInput')?.focus(), 100);
-}
+function renderAdminInline() {
+  const container = document.getElementById('adminContainer');
+  if (!container) return;
 
-function verificarPin() {
-  const val = document.getElementById('adminPinInput')?.value;
-  if (val === ADMIN_PIN) {
-    adminAutenticado = true;
-    sessionStorage.setItem('croma_admin_auth', '1');
-    renderAdmin();
-  } else {
-    document.getElementById('adminPinError').style.display = 'block';
-    document.getElementById('adminPinInput').value = '';
-    document.getElementById('adminPinInput').focus();
-  }
-}
-
-function renderAdmin() {
-  // Obtener todos los empleados únicos de los datos
   const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a, b) => {
     const na = parseInt(a) || 999, nb = parseInt(b) || 999;
     return na !== nb ? na - nb : a.localeCompare(b);
   });
 
-  const catOpts = CATEGORIAS_CONFIG.map(c =>
-    `<option value="${c.id}">${c.nombre}</option>`
-  ).join('');
-
-  const empresaOpts = EMPRESAS.map(e =>
-    `<option value="${e}">${e}</option>`
-  ).join('');
-
-  // Tabla de empleados
   const filasEmps = empNombres.map(nombre => {
-    const perfil = EMPLEADOS_PERFILES[nombre] || {};
-    const suc = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
-    const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
-    const nomMostrar = numMatch ? numMatch[2] : nombre;
-    const avatarUrl  = perfil.foto_url || '';
-    const iniciales  = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
-    return `<tr class="admin-emp-row" onclick="abrirEditarEmpleado('${nombre.replace(/'/g,"\\'")}')">
-      <td>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="admin-avatar-mini" style="background:${avatarUrl?'transparent':'#f1f5f9'}">
-            ${avatarUrl ? `<img src="${avatarUrl}" onerror="this.parentElement.innerHTML='${iniciales}'" style="width:32px;height:32px;border-radius:50%;object-fit:cover">` : `<span style="font-size:11px;font-weight:600;color:#64748b">${iniciales}</span>`}
-          </div>
-          <span>${nomMostrar}</span>
-        </div>
-      </td>
-      <td><span class="suc-badge-mini" style="background:#f1f5f9;color:#475569">${suc.nombre}</span></td>
-      <td>${perfil.empresa ? `<span class="emp-empresa-badge ${perfil.empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}">${perfil.empresa}</span>` : '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
-      <td>${perfil.categoria_id ? `<span class="emp-cat-badge">${CATEGORIAS_CONFIG.find(c=>c.id===perfil.categoria_id)?.nombre||'—'}</span>` : '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
-      <td><span style="font-size:11px;color:#94a3b8">${perfil.foto_url ? '📷 OK' : '—'}</span></td>
-      <td><button class="btn-admin-edit" onclick="event.stopPropagation();abrirEditarEmpleado('${nombre.replace(/'/g,"\\'")}')">Editar</button></td>
-    </tr>`;
+    const perfil    = EMPLEADOS_PERFILES[nombre] || {};
+    const suc       = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
+    const numMatch  = nombre.match(/^(\d+)\s+(.+)$/);
+    const nomMostrar= numMatch ? numMatch[2] : nombre;
+    const avatarUrl = perfil.foto_url || '';
+    const iniciales = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
+    const nomEnc    = nombre.replace(/'/g, "\\'");
+    let avatarInner;
+    if (avatarUrl) {
+      avatarInner = "<img src='" + avatarUrl + "' onerror=\"this.parentElement.innerHTML='" + iniciales + "'\" style='width:32px;height:32px;border-radius:50%;object-fit:cover'>";
+    } else {
+      avatarInner = "<span style='font-size:11px;font-weight:600;color:#64748b'>" + iniciales + "</span>";
+    }
+    const empresaHTML = perfil.empresa
+      ? "<span class='emp-empresa-badge " + (perfil.empresa === 'MOSHE SRL' ? 'badge-moshe' : 'badge-cromawave') + "'>" + perfil.empresa + "</span>"
+      : "<span style='color:#94a3b8;font-size:12px'>—</span>";
+    const catNom  = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id)?.nombre || '—';
+    const catHTML = perfil.categoria_id
+      ? "<span class='emp-cat-badge'>" + catNom + "</span>"
+      : "<span style='color:#94a3b8;font-size:12px'>—</span>";
+    const fotoOk  = perfil.foto_url ? '📷 OK' : '—';
+    return "<tr class='admin-emp-row' onclick=\"abrirEditarEmpleado('" + nomEnc + "')\">" +
+      "<td><div style='display:flex;align-items:center;gap:10px'>" +
+        "<div class='admin-avatar-mini' style='background:" + (avatarUrl ? 'transparent' : '#f1f5f9') + "'>" + avatarInner + "</div>" +
+        "<span>" + nomMostrar + "</span>" +
+      "</div></td>" +
+      "<td><span class='suc-badge-mini' style='background:#f1f5f9;color:#475569'>" + suc.nombre + "</span></td>" +
+      "<td>" + empresaHTML + "</td>" +
+      "<td>" + catHTML + "</td>" +
+      "<td><span style='font-size:11px;color:#94a3b8'>" + fotoOk + "</span></td>" +
+      "<td><button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirEditarEmpleado('" + nomEnc + "')\" >Editar</button></td>" +
+      "</tr>";
   }).join('');
 
-  // Tabla de categorías
-  const filasCats = CATEGORIAS_CONFIG.map(cat => `
-    <tr>
-      <td><strong>${cat.nombre}</strong></td>
-      <td style="font-size:12px;color:#64748b">${cat.descripcion || '—'}</td>
-      <td>${cat.percibe_extra ? '<span class="pill pill-comp" style="font-size:10px">Sí</span>' : '<span class="pill pill-franco" style="font-size:10px">No</span>'}</td>
-      <td><button class="btn-admin-edit" onclick="abrirEditarCategoria('${cat.id}')">Editar</button></td>
-    </tr>`).join('');
+  const filasCats = CATEGORIAS_CONFIG.map(cat => {
+    const percibeHTML = cat.percibe_extra
+      ? "<span class='pill pill-comp' style='font-size:10px'>Sí</span>"
+      : "<span class='pill pill-franco' style='font-size:10px'>No</span>";
+    return "<tr>" +
+      "<td><strong>" + cat.nombre + "</strong></td>" +
+      "<td style='font-size:12px;color:#64748b'>" + (cat.descripcion || '—') + "</td>" +
+      "<td>" + percibeHTML + "</td>" +
+      "<td><button class='btn-admin-edit' onclick=\"abrirEditarCategoria('" + cat.id + "')\" >Editar</button></td>" +
+      "</tr>";
+  }).join('');
 
-  const html = `
-  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
-    <div class="admin-panel" onclick="event.stopPropagation()">
-      <div class="admin-header">
-        <div class="admin-titulo">Panel Admin · Croma Horarios</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn-admin-edit" onclick="adminAutenticado=false;sessionStorage.removeItem('croma_admin_auth');cerrarAdmin()">Cerrar sesión</button>
-          <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
-        </div>
-      </div>
+  container.innerHTML =
+    "<div class='admin-inline-wrap'>" +
+    "<div class='admin-inline-header'>" +
+      "<div class='admin-titulo'>Administración</div>" +
+      "<button class='btn-admin-edit' style='font-size:12px' onclick='cerrarSesionAdmin()'>Cerrar sesión admin</button>" +
+    "</div>" +
+    "<div class='admin-tabs' id='adminTabs'>" +
+      "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\" >Empleados (" + empNombres.length + ")</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\" >Categorías</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\" >Usuarios</button>" +
+      "<button class='admin-tab' id='adminTabSolicitudesBtn' onclick=\"switchAdminTab('solicitudes',this)\" >Solicitudes</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('vacaciones',this)\" >Vacaciones</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\" >Configuración</button>" +
+    "</div>" +
+    "<div id='adminTabEmpleados' class='admin-tab-content'>" +
+      "<div class='admin-toolbar'>" +
+        "<input type='text' class='admin-search' id='adminBuscarEmp' placeholder='Buscar empleado...' oninput='filtrarTablaAdmin(this.value)' />" +
+        "<span style='font-size:12px;color:#94a3b8'>" + empNombres.length + " empleados en el sistema</span>" +
+      "</div>" +
+      "<div class='admin-table-wrap'>" +
+        "<table class='admin-tabla' id='adminTablaEmps'>" +
+          "<thead><tr><th>Empleado</th><th>Sucursal</th><th>Empresa</th><th>Categoría</th><th>Foto</th><th></th></tr></thead>" +
+          "<tbody>" + (filasEmps || "<tr><td colspan='6' style='text-align:center;padding:2rem;color:#94a3b8'>Sin datos cargados</td></tr>") + "</tbody>" +
+        "</table>" +
+      "</div>" +
+    "</div>" +
+    "<div id='adminTabCategorias' class='admin-tab-content' style='display:none'>" +
+      "<div class='admin-toolbar'>" +
+        "<button class='btn-connect' style='width:auto;padding:8px 16px;font-size:13px' onclick='abrirNuevaCategoria()'>+ Nueva categoría</button>" +
+      "</div>" +
+      "<div class='admin-table-wrap'>" +
+        "<table class='admin-tabla'><thead><tr><th>Nombre</th><th>Descripción</th><th>Percibe extra</th><th></th></tr></thead>" +
+        "<tbody>" + filasCats + "</tbody></table>" +
+      "</div>" +
+    "</div>" +
+    renderAdminUsuarios() +
+    "<div id='adminTabSolicitudes' class='admin-tab-content' style='display:none'>" +
+      "<div style='padding:1.5rem'><p style='color:#94a3b8;font-size:13px'>Cargando solicitudes...</p></div>" +
+    "</div>" +
+    "<div id='adminTabVacaciones' class='admin-tab-content' style='display:none'>" +
+      "<div style='padding:1.5rem'><p style='color:#94a3b8;font-size:13px'>Cargando calendario...</p></div>" +
+    "</div>" +
+    "<div id='adminTabConfiguracion' class='admin-tab-content' style='display:none'>" +
+      "<div style='padding:1.5rem;max-width:500px'>" +
+        "<h3 style='font-size:14px;font-weight:600;margin-bottom:1.5rem;color:#1e293b'>Configuración general</h3>" +
+        "<div class='admin-form-grupo'>" +
+          "<label class='emp-filtro-label'>Email del administrador (para notificaciones)</label>" +
+          "<input type='email' class='admin-input' id='cfgEmailAdmin' placeholder='admin@croma.com' />" +
+          "<span style='font-size:11px;color:#94a3b8;margin-top:4px;display:block'>Se envía un email cuando llega una solicitud de vacaciones</span>" +
+        "</div>" +
+        "<div style='margin-top:1rem'>" +
+          "<button class='btn-connect' style='margin:0;width:auto;padding:10px 24px' onclick='guardarConfigAdmin()'>Guardar</button>" +
+        "</div>" +
+        "<p id='cfgStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
+      "</div>" +
+    "</div>" +
+    "</div>";
+}
 
-      <!-- TABS -->
-      <div class="admin-tabs" id="adminTabs">
-        <button class="admin-tab active" onclick="switchAdminTab('empleados',this)">Empleados (${empNombres.length})</button>
-        <button class="admin-tab" onclick="switchAdminTab('categorias',this)">Categorías</button>
-        <button class="admin-tab" onclick="switchAdminTab('usuarios',this)">Usuarios</button>
-        <button class="admin-tab" id="adminTabSolicitudesBtn" onclick="switchAdminTab('solicitudes',this)">🏖 Solicitudes</button>
-        <button class="admin-tab" onclick="switchAdminTab('configuracion',this)">Configuración</button>
-      </div>
+function renderAdmin() { renderAdminInline(); }
 
-      <!-- TAB EMPLEADOS -->
-      <div id="adminTabEmpleados" class="admin-tab-content">
-        <div class="admin-toolbar">
-          <input type="text" class="admin-search" id="adminBuscarEmp" placeholder="Buscar empleado..." oninput="filtrarTablaAdmin(this.value)" />
-          <span style="font-size:12px;color:#94a3b8">${empNombres.length} empleados en el sistema</span>
-        </div>
-        <div class="admin-table-wrap">
-          <table class="admin-tabla" id="adminTablaEmps">
-            <thead>
-              <tr><th>Empleado</th><th>Sucursal</th><th>Empresa</th><th>Categoría</th><th>Foto</th><th></th></tr>
-            </thead>
-            <tbody>${filasEmps || '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#94a3b8">Sin datos cargados</td></tr>'}</tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- TAB CATEGORÍAS -->
-      <div id="adminTabCategorias" class="admin-tab-content" style="display:none">
-        <div class="admin-toolbar">
-          <button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px" onclick="abrirNuevaCategoria()">+ Nueva categoría</button>
-        </div>
-        <div class="admin-table-wrap">
-          <table class="admin-tabla">
-            <thead><tr><th>Nombre</th><th>Descripción</th><th>Percibe extra</th><th></th></tr></thead>
-            <tbody>${filasCats}</tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- TAB USUARIOS -->
-      ${renderAdminUsuarios()}
-
-      <!-- TAB SOLICITUDES VACACIONES -->
-      <div id="adminTabSolicitudes" class="admin-tab-content" style="display:none">
-        <div style="padding:1.5rem">
-          <p style="color:#94a3b8;font-size:13px">Cargando solicitudes...</p>
-        </div>
-      </div>
-
-      <!-- TAB CONFIGURACIÓN -->
-      <div id="adminTabConfiguracion" class="admin-tab-content" style="display:none">
-        <div style="padding:1.5rem;max-width:500px">
-          <h3 style="font-size:14px;font-weight:600;margin-bottom:1.5rem;color:#1e293b">Configuración general</h3>
-          <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Email del administrador (para notificaciones)</label>
-            <input type="email" class="admin-input" id="cfgEmailAdmin" placeholder="admin@croma.com" />
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
-              Se envía un email a esta dirección cuando llega una solicitud de vacaciones
-            </span>
-          </div>
-          <div style="margin-top:1rem;display:flex;gap:8px">
-            <button class="btn-connect" style="margin:0;width:auto;padding:10px 24px" onclick="guardarConfigAdmin()">Guardar</button>
-          </div>
-          <p id="cfgStatus" style="font-size:12px;margin-top:8px;display:none"></p>
-        </div>
-      </div>
-
-    </div>
-  </div>`;
-
-  montarOverlayAdmin(html);
+function cerrarSesionAdmin() {
+  adminAutenticado = false;
+  sessionStorage.removeItem('croma_admin_auth');
+  setView('empleados');
 }
 
 function switchAdminTab(tab, btn) {
@@ -3534,20 +3488,13 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
   document.getElementById('adminTabUsuarios').style.display     = tab === 'usuarios'      ? 'block' : 'none';
   document.getElementById('adminTabSolicitudes').style.display  = tab === 'solicitudes'   ? 'block' : 'none';
-  document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
+  document.getElementById('adminTabConfiguracion').style.display = tab === 'configuracion' ? 'block' : 'none';
+  document.getElementById('adminTabVacaciones').style.display    = tab === 'vacaciones'    ? 'block' : 'none';
 
-  if (tab === 'usuarios') {
-    cargarUsuarios().then(() => {
-      const tabEl = document.getElementById('adminTabUsuarios');
-      if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
-    });
-  }
-  if (tab === 'solicitudes') {
-    cargarSolicitudesAdmin();
-  }
-  if (tab === 'configuracion') {
-    cargarConfigAdmin();
-  }
+  if (tab === 'usuarios')      cargarUsuarios().then(() => { const t = document.getElementById('adminTabUsuarios'); if(t) t.innerHTML = renderAdminUsuariosInner(); });
+  if (tab === 'solicitudes')   cargarSolicitudesAdmin();
+  if (tab === 'vacaciones')    cargarCalendarioVacaciones();
+  if (tab === 'configuracion') cargarConfigAdmin();
 }
 
 function filtrarTablaAdmin(q) {
@@ -4246,6 +4193,7 @@ async function cargarVacacionesEmpleado(nombreEmp) {
     const vac  = jVac.ok  ? (jVac.vacaciones?.[0]   || null) : null;
     const sols = jSol.ok  ? (jSol.solicitudes || []) : [];
     container.innerHTML = renderVacacionesEmpleadoHTML(nombreEmp, vac, sols);
+    actualizarBadgeCampanaEmp(nombreEmp);
   } catch(e) {
     container.innerHTML = `<p style="color:#dc2626;font-size:13px">Error al cargar vacaciones: ${e.message}</p>`;
   }
@@ -4540,4 +4488,285 @@ function switchEvTab(tab, btn) {
   const vacaciones = document.getElementById('evTabVacaciones');
   if (jornada)    jornada.style.display    = tab === 'jornada'    ? 'block' : 'none';
   if (vacaciones) vacaciones.style.display = tab === 'vacaciones' ? 'block' : 'none';
+}
+
+
+// ══════════════════════════════════════════════════════
+//  CAMPANA DE NOTIFICACIONES
+// ══════════════════════════════════════════════════════
+
+async function actualizarBadgeCampana() {
+  try {
+    const resp = await fetch(vacApiUrl('get_solicitudes_vac', { estado: 'pendiente' }));
+    const json = await resp.json();
+    const n = json.ok ? (json.solicitudes || []).length : 0;
+    const badge = document.getElementById('bellBadge');
+    if (!badge) return;
+    if (n > 0) {
+      badge.textContent = n;
+      badge.style.display = 'flex';
+      document.getElementById('btnBell')?.classList.add('bell-active');
+    } else {
+      badge.style.display = 'none';
+      document.getElementById('btnBell')?.classList.remove('bell-active');
+    }
+    const tabBtn = document.getElementById('adminTabSolicitudesBtn');
+    if (tabBtn) tabBtn.textContent = 'Solicitudes' + (n ? ' (' + n + ')' : '');
+  } catch(e) {}
+}
+
+function toggleBellDropdown() {
+  const existing = document.getElementById('bellDropdown');
+  if (existing) { existing.remove(); return; }
+  const dd = document.createElement('div');
+  dd.id = 'bellDropdown';
+  dd.className = 'bell-dropdown';
+  dd.innerHTML = '<div class="bell-dd-loading">Cargando...</div>';
+  document.getElementById('bellWrap').appendChild(dd);
+  fetch(vacApiUrl('get_solicitudes_vac', { estado: 'pendiente' }))
+    .then(function(r) { return r.json(); })
+    .then(function(json) {
+      const sols = json.ok ? (json.solicitudes || []) : [];
+      if (!sols.length) {
+        dd.innerHTML = '<div class="bell-dd-empty">No hay solicitudes pendientes</div>';
+        return;
+      }
+      const rows = sols.slice(0,5).map(function(s) {
+        const nom = s.empleado.replace(/^\d+\s+/, '');
+        return '<div class="bell-dd-item">' +
+          '<div><strong>' + nom + '</strong>' +
+          '<div style="font-size:11px;color:#64748b">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' - ' + s.dias + ' dias</div></div>' +
+          '<div style="display:flex;gap:4px">' +
+            '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7;font-size:11px" ' +
+              'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\');actualizarBadgeCampana();document.getElementById(\'bellDropdown\')?.remove()">V</button>' +
+            '<button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-size:11px" ' +
+              'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\');document.getElementById(\'bellDropdown\')?.remove()">X</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      dd.innerHTML = '<div class="bell-dd-title">Solicitudes pendientes</div>' + rows +
+        (sols.length > 5 ? '<div class="bell-dd-more" onclick="setView(\'administracion\');document.getElementById(\'bellDropdown\')?.remove()">Ver todas (' + sols.length + ')</div>' : '');
+    }).catch(function() { dd.innerHTML = '<div class="bell-dd-empty">Error al cargar</div>'; });
+  setTimeout(function() {
+    document.addEventListener('click', function handler(e) {
+      if (!e.target.closest('#bellDropdown') && !e.target.closest('#btnBell')) {
+        const el = document.getElementById('bellDropdown');
+        if (el) el.remove();
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 50);
+}
+
+var _bellEmpNombre = null;
+var _bellEmpLeidos = new Set(JSON.parse(localStorage.getItem('croma_bell_leidos') || '[]'));
+
+async function actualizarBadgeCampanaEmp(nombreEmp) {
+  _bellEmpNombre = nombreEmp;
+  try {
+    const resp = await fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp }));
+    const json = await resp.json();
+    const sols = json.ok ? (json.solicitudes || []) : [];
+    const noLeidas = sols.filter(function(s) {
+      return (s.estado === 'aprobada' || s.estado === 'rechazada') && !_bellEmpLeidos.has(s.id);
+    });
+    const badge = document.getElementById('bellBadgeEmp');
+    if (!badge) return;
+    badge.textContent = noLeidas.length;
+    badge.style.display = noLeidas.length > 0 ? 'flex' : 'none';
+  } catch(e) {}
+}
+
+function toggleBellDropdownEmp() {
+  const existing = document.getElementById('bellDropdownEmp');
+  if (existing) { existing.remove(); return; }
+  const dd = document.createElement('div');
+  dd.id = 'bellDropdownEmp';
+  dd.className = 'bell-dropdown';
+  dd.innerHTML = '<div class="bell-dd-loading">Cargando...</div>';
+  document.getElementById('bellWrapEmp').appendChild(dd);
+  const nombre = _bellEmpNombre || (sesionActual && sesionActual.empleadoNombre) || '';
+  fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombre }))
+    .then(function(r) { return r.json(); })
+    .then(function(json) {
+      const sols = (json.ok ? json.solicitudes || [] : []).filter(function(s) {
+        return s.estado === 'aprobada' || s.estado === 'rechazada';
+      });
+      sols.forEach(function(s) { _bellEmpLeidos.add(s.id); });
+      localStorage.setItem('croma_bell_leidos', JSON.stringify(Array.from(_bellEmpLeidos)));
+      const badge = document.getElementById('bellBadgeEmp');
+      if (badge) badge.style.display = 'none';
+      if (!sols.length) {
+        dd.innerHTML = '<div class="bell-dd-empty">Sin novedades en tus solicitudes</div>';
+        return;
+      }
+      const rows = sols.slice(0,5).map(function(s) {
+        return '<div class="bell-dd-item">' +
+          '<div><div style="font-size:12px">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + s.dias + ' dias</div>' +
+          (s.nota_admin ? '<div style="font-size:11px;color:#94a3b8">' + s.nota_admin + '</div>' : '') + '</div>' +
+          estadoBadge(s.estado) +
+          '</div>';
+      }).join('');
+      dd.innerHTML = '<div class="bell-dd-title">Tus solicitudes</div>' + rows;
+    }).catch(function() { dd.innerHTML = '<div class="bell-dd-empty">Error al cargar</div>'; });
+  setTimeout(function() {
+    document.addEventListener('click', function handler(e) {
+      if (!e.target.closest('#bellDropdownEmp') && !e.target.closest('#btnBellEmp')) {
+        const el = document.getElementById('bellDropdownEmp');
+        if (el) el.remove();
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 50);
+}
+
+// ══════════════════════════════════════════════════════
+//  CALENDARIO DE VACACIONES (admin)
+// ══════════════════════════════════════════════════════
+
+var _calVacMes  = new Date().getMonth();
+var _calVacAnio = new Date().getFullYear();
+var _calVacFiltroLocal = 'all';
+
+async function cargarCalendarioVacaciones() {
+  const container = document.getElementById('adminTabVacaciones');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  try {
+    const resp = await fetch(vacApiUrl('get_solicitudes_vac', {}));
+    const json = await resp.json();
+    const todas = json.ok ? (json.solicitudes || []) : [];
+    renderCalendarioVacaciones(container, todas.filter(function(s) {
+      return s.estado === 'aprobada' || s.estado === 'pendiente';
+    }));
+  } catch(e) {
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
+  }
+}
+
+function renderCalendarioVacaciones(container, solicitudes) {
+  const sucOpts = '<option value="all">Todos los locales</option>' +
+    SUCURSALES.map(function(s) {
+      return '<option value="' + s.id + '"' + (_calVacFiltroLocal === s.id ? ' selected' : '') + '>' + s.nombre + '</option>';
+    }).join('');
+
+  const mesLabel = MESES_ES[_calVacMes] + ' ' + _calVacAnio;
+  const primerDia = new Date(_calVacAnio, _calVacMes, 1);
+  const ultimoDia = new Date(_calVacAnio, _calVacMes + 1, 0);
+
+  const solsFiltradas = solicitudes.filter(function(s) {
+    if (_calVacFiltroLocal === 'all') return true;
+    const sucEmp = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL;
+    return sucEmp === _calVacFiltroLocal;
+  });
+
+  function hayConflicto(empsEnFecha) {
+    if (empsEnFecha.length < 2) return false;
+    const grupos = {};
+    empsEnFecha.forEach(function(s) {
+      const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || 'x';
+      if (!grupos[local]) grupos[local] = [];
+      grupos[local].push(s);
+    });
+    return Object.values(grupos).some(function(g) { return g.length >= 2; });
+  }
+
+  const diasSem = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+  const offsetInicio = primerDia.getDay();
+  let celdasHTML = '';
+  for (let i = 0; i < offsetInicio; i++) {
+    celdasHTML += '<div class="cal-vac-cell cal-vac-empty"></div>';
+  }
+  for (let d = 1; d <= ultimoDia.getDate(); d++) {
+    const fecha = new Date(_calVacAnio, _calVacMes, d);
+    const isoFecha = _calVacAnio + '-' + String(_calVacMes+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const esHoy = isoFecha === new Date().toISOString().substring(0,10);
+    const esFinde = fecha.getDay() === 0 || fecha.getDay() === 6;
+    const emps = solsFiltradas.filter(function(s) {
+      return s.fecha_desde && s.fecha_hasta && isoFecha >= s.fecha_desde && isoFecha <= s.fecha_hasta;
+    });
+    const conflicto = hayConflicto(emps);
+    const empRows = emps.map(function(s) {
+      const nom = s.empleado.replace(/^\d+\s+/, '').split(' ')[0];
+      const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '';
+      const suc = SUCURSALES.find(function(x) { return x.id === local; }) || { color: '#94a3b8', colorLight: '#f1f5f9' };
+      const esPend = s.estado === 'pendiente';
+      return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
+        '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' (p)' : '') + '</span></div>';
+    }).join('');
+    celdasHTML += '<div class="cal-vac-cell' +
+      (esHoy ? ' cal-vac-hoy' : '') +
+      (esFinde ? ' cal-vac-finde' : '') +
+      (conflicto ? ' cal-vac-conflicto' : '') + '">' +
+      '<div class="cal-vac-num">' + d + (conflicto ? ' !!' : '') + '</div>' +
+      empRows + '</div>';
+  }
+
+  const solsMes = solsFiltradas.filter(function(s) {
+    if (!s.fecha_desde) return false;
+    const p = s.fecha_desde.split('-').map(Number);
+    return p[0] === _calVacAnio && p[1]-1 === _calVacMes;
+  });
+
+  const tablaSols = solsMes.length ? solsMes.map(function(s) {
+    const nom = s.empleado.replace(/^\d+\s+/, '');
+    const local = (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '-';
+    const suc = SUCURSALES.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
+    const conflictoSol = solsFiltradas.some(function(o) {
+      return o.id !== s.id &&
+        (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL === local &&
+        o.fecha_desde <= s.fecha_hasta && o.fecha_hasta >= s.fecha_desde;
+    });
+    const acciones = s.estado === 'pendiente'
+      ? '<div style="display:flex;gap:4px">' +
+          '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7" ' +
+            'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\')">Aprobar</button>' +
+          '<button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5" ' +
+            'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\')">Rechazar</button>' +
+          '</div>'
+      : '-';
+    return '<tr>' +
+      '<td><strong>' + nom + '</strong></td>' +
+      '<td><span class="suc-badge-mini" style="background:' + (suc.colorLight || '#f1f5f9') + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
+      '<td>' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + '</td>' +
+      '<td style="text-align:center">' + s.dias + '</td>' +
+      '<td>' + estadoBadge(s.estado) + '</td>' +
+      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">Conflicto</span>' : '-') + '</td>' +
+      '<td>' + acciones + '</td></tr>';
+  }).join('') : '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
+
+  const headersSem = diasSem.map(function(d) { return '<div class="cal-vac-header">' + d + '</div>'; }).join('');
+
+  container.innerHTML =
+    '<div style="padding:1.5rem">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;flex-wrap:wrap">' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        '<button class="week-btn" onclick="cambiarMesCalVac(-1)">&#8592;</button>' +
+        '<span style="font-weight:600;font-size:14px;min-width:160px;text-align:center">' + mesLabel + '</span>' +
+        '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
+      '</div>' +
+      '<select class="filter-select" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
+      '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b;margin-left:auto">' +
+        '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#d1fae5;border-left:3px solid #059669"></span> Aprobada ' +
+        '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#fef9c3;border-left:3px solid #f59e0b;margin-left:6px"></span> Pendiente ' +
+        '<span style="color:#f59e0b;margin-left:6px">!!</span> Conflicto' +
+      '</div>' +
+    '</div>' +
+    '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div>' +
+    '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
+    '<div class="admin-table-wrap">' +
+      '<table class="admin-tabla">' +
+        '<thead><tr><th>Empleado</th><th>Local</th><th>Periodo</th><th style="text-align:center">Dias</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
+        '<tbody>' + tablaSols + '</tbody>' +
+      '</table>' +
+    '</div>' +
+    '</div>';
+}
+
+function cambiarMesCalVac(delta) {
+  _calVacMes += delta;
+  if (_calVacMes > 11) { _calVacMes = 0; _calVacAnio++; }
+  if (_calVacMes < 0)  { _calVacMes = 11; _calVacAnio--; }
+  cargarCalendarioVacaciones();
 }

@@ -1524,3 +1524,170 @@ body {
   transform: scale(1.15);
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
 }
+
+/* ══════════════════════════════════════════════
+   ADMIN INLINE (vista en panel principal)
+══════════════════════════════════════════════ */
+.admin-inline-wrap {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.admin-inline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f1f5f9;
+}
+.admin-inline-header .admin-titulo {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 1px;
+}
+
+/* ══════════════════════════════════════════════
+   CAMPANA DE NOTIFICACIONES
+══════════════════════════════════════════════ */
+.bell-wrap {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.bell-badge {
+  position: absolute;
+  top: 2px; right: 2px;
+  min-width: 16px; height: 16px;
+  background: #e8251a;
+  color: #fff;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  pointer-events: none;
+  border: 1.5px solid #fff;
+}
+.btn-icon.bell-active {
+  border-color: #e8251a;
+  color: #e8251a;
+}
+.bell-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.12);
+  z-index: 9999;
+  overflow: hidden;
+}
+.bell-dropdown-right {
+  right: auto;
+  left: 0;
+}
+.bell-dd-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 10px 14px 6px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bell-dd-loading,
+.bell-dd-empty {
+  padding: 1.2rem 14px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+}
+.bell-dd-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f8fafc;
+  font-size: 13px;
+}
+.bell-dd-item:last-child { border-bottom: none; }
+.bell-dd-more {
+  text-align: center;
+  padding: 8px;
+  font-size: 12px;
+  color: #2563eb;
+  cursor: pointer;
+  border-top: 1px solid #f1f5f9;
+}
+.bell-dd-more:hover { background: #eff6ff; }
+
+/* ══════════════════════════════════════════════
+   CALENDARIO DE VACACIONES
+══════════════════════════════════════════════ */
+.cal-vac-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 1rem;
+}
+.cal-vac-header {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  padding: 6px 0;
+  text-transform: uppercase;
+}
+.cal-vac-cell {
+  min-height: 80px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px;
+  transition: background .15s;
+}
+.cal-vac-empty {
+  background: #f8fafc;
+  border-color: transparent;
+}
+.cal-vac-finde {
+  background: #fafafa;
+}
+.cal-vac-hoy {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.cal-vac-conflicto {
+  border-color: #f59e0b !important;
+  background: #fffbeb;
+}
+.cal-vac-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+.cal-vac-emp {
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+}
+
+@media (max-width: 700px) {
+  .cal-vac-cell { min-height: 48px; padding: 3px; }
+  .cal-vac-emp  { font-size: 9px; }
+  .bell-dropdown { width: 280px; }
+  .admin-inline-wrap { padding: 1rem; }
+}
