@@ -1815,8 +1815,16 @@ async function cargarPerfiles() {
 
     if (json.categorias?.length) CATEGORIAS_CONFIG = json.categorias;
     if (json.empleados?.length) {
+      // Guardar perfiles que fueron editados localmente en esta sesión
+      const perfilesLocales = { ...EMPLEADOS_PERFILES };
       EMPLEADOS_PERFILES = {};
       json.empleados.forEach(e => { EMPLEADOS_PERFILES[e.nombre] = e; });
+      // Re-aplicar ediciones locales de esta sesión (tienen prioridad sobre el Sheet)
+      Object.keys(perfilesLocales).forEach(nombre => {
+        if (perfilesLocales[nombre]._editadoLocal) {
+          EMPLEADOS_PERFILES[nombre] = perfilesLocales[nombre];
+        }
+      });
     }
   } catch(err) {
     console.warn('No se pudieron cargar perfiles:', err);
@@ -1830,9 +1838,7 @@ async function guardarPerfil(perfil) {
     const resp = await fetch(`${url}?accion=guardar_perfil&datos=${datos}`);
     const json = await resp.json();
     if (json.ok) {
-      EMPLEADOS_PERFILES[perfil.nombre] = perfil;
-      showToast('✓ Perfil guardado');
-      renderAll();
+      EMPLEADOS_PERFILES[perfil.nombre] = { ...perfil, _editadoLocal: true };
     } else {
       showToast('Error al guardar: ' + (json.error || 'desconocido'));
     }
@@ -3641,6 +3647,7 @@ async function guardarPerfilDesdeForm() {
     sucursal_id:   sucursalId,
     fecha_ingreso: fechaIngreso,
     activo: true,
+    _editadoLocal: true,  // marca para sobrevivir recargas del Sheet
   };
 
   EMPLEADOS_PERFILES[nombre] = perfil;
