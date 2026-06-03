@@ -3378,7 +3378,7 @@ function renderAdminInline() {
 
   const filasEmps = empNombres.map(nombre => {
     const perfil    = EMPLEADOS_PERFILES[nombre] || {};
-    const suc       = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
+    const suc       = SUCURSALES.find(s => s.id === (state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL || perfil.sucursal_id)) || { nombre: '—' };
     const numMatch  = nombre.match(/^(\d+)\s+(.+)$/);
     const nomMostrar= numMatch ? numMatch[2] : nombre;
     const avatarUrl = perfil.foto_url || '';
@@ -3506,6 +3506,13 @@ function abrirEditarEmpleado(nombre) {
   const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
   const nomMostrar = numMatch ? numMatch[2] : nombre;
 
+  const sucOpts = [
+    `<option value="">Sin asignar</option>`,
+    ...SUCURSALES.map(s =>
+      `<option value="${s.id}" ${perfil.sucursal_id === s.id ? 'selected' : ''}>${s.nombre}</option>`
+    )
+  ].join('');
+
   const catOpts = [
     `<option value="">Sin categoría</option>`,
     ...CATEGORIAS_CONFIG.map(c =>
@@ -3549,6 +3556,18 @@ function abrirEditarEmpleado(nombre) {
           <input type="url" class="admin-input" id="editFotoUrl" value="${perfil.foto_url || ''}"
             placeholder="https://drive.google.com/..." oninput="previewFoto(this.value)" />
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Sucursal principal</label>
+          <select class="admin-input" id="editSucursal">${sucOpts}</select>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se usa para el calendario de vacaciones y detección de conflictos</span>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Fecha de ingreso</label>
+          <input type="date" class="admin-input" id="editFechaIngreso" value="${perfil.fecha_ingreso || ''}" />
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se usa para calcular días de vacaciones según antigüedad</span>
         </div>
 
         <div class="admin-form-grupo">
@@ -3597,12 +3616,14 @@ function toggleHsBase(val) {
 }
 
 async function guardarPerfilDesdeForm() {
-  const nombre      = document.getElementById('editNombre')?.value;
-  const fotoUrl     = document.getElementById('editFotoUrl')?.value.trim();
-  const empresa     = document.getElementById('editEmpresa')?.value;
-  const categoriaId = document.getElementById('editCategoria')?.value;
-  const reglaCustom = document.getElementById('editReglaCustom')?.value;
-  const hsBase      = parseFloat(document.getElementById('editHsBase')?.value) || 8;
+  const nombre       = document.getElementById('editNombre')?.value;
+  const fotoUrl      = document.getElementById('editFotoUrl')?.value.trim();
+  const empresa      = document.getElementById('editEmpresa')?.value;
+  const categoriaId  = document.getElementById('editCategoria')?.value;
+  const reglaCustom  = document.getElementById('editReglaCustom')?.value;
+  const hsBase       = parseFloat(document.getElementById('editHsBase')?.value) || 8;
+  const sucursalId   = document.getElementById('editSucursal')?.value || '';
+  const fechaIngreso = document.getElementById('editFechaIngreso')?.value || '';
 
   // Convertir URL de Drive si corresponde
   let fotoFinal = fotoUrl;
@@ -3614,10 +3635,12 @@ async function guardarPerfilDesdeForm() {
   const perfil = {
     nombre,
     empresa,
-    categoria_id: categoriaId,
-    regla_custom: reglaCustom || '',
-    hs_base: hsBase,
-    foto_url: fotoFinal,
+    categoria_id:  categoriaId,
+    regla_custom:  reglaCustom || '',
+    hs_base:       hsBase,
+    foto_url:      fotoFinal,
+    sucursal_id:   sucursalId,
+    fecha_ingreso: fechaIngreso,
     activo: true,
   };
 
@@ -4255,7 +4278,11 @@ async function cargarSolicitudesAdmin() {
       return;
     }
 
-    const rows = sols.map(s => `
+    const rows = sols.map(s => {
+      const partes = s.fecha_desde ? s.fecha_desde.split('-') : [];
+      const mesIdx  = partes.length >= 2 ? parseInt(partes[1]) - 1 : 0;
+      const anioSol = partes.length >= 1 ? parseInt(partes[0]) : new Date().getFullYear();
+      return `
       <tr>
         <td><strong>${s.empleado.replace(/^\d+\s+/,'')}</strong></td>
         <td>${formatFechaISO(s.fecha_desde)} – ${formatFechaISO(s.fecha_hasta)}</td>
@@ -4267,9 +4294,12 @@ async function cargarSolicitudesAdmin() {
               onclick="responderSolicitudAdmin('${s.id}','aprobada','')">✓ Aprobar</button>
             <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5"
               onclick="abrirModalRespuesta('${s.id}','rechazada','${encodeURIComponent(s.empleado)}')">✗ Rechazar</button>
+            <button class="btn-admin-edit" style="font-size:11px"
+              onclick="_calVacMes=${mesIdx};_calVacAnio=${anioSol};switchVacTab('calendario',document.querySelector('#vacTabs .admin-tab'))">📅 Ver</button>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     container.innerHTML = `
       <div class="admin-table-wrap" style="padding:1.5rem 0 0">
@@ -4537,19 +4567,28 @@ function toggleBellDropdown() {
       }
       const rows = sols.slice(0,5).map(function(s) {
         const nom = s.empleado.replace(/^\d+\s+/, '');
+        // Calcular mes/año de la solicitud para saltar al calendario
+        const partes = s.fecha_desde ? s.fecha_desde.split('-') : [];
+        const mesIdx  = partes.length >= 2 ? parseInt(partes[1]) - 1 : _calVacMes;
+        const anioSol = partes.length >= 1 ? parseInt(partes[0]) : _calVacAnio;
         return '<div class="bell-dd-item">' +
-          '<div><strong>' + nom + '</strong>' +
-          '<div style="font-size:11px;color:#64748b">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' - ' + s.dias + ' dias</div></div>' +
-          '<div style="display:flex;gap:4px">' +
+          '<div style="flex:1">' +
+            '<strong>' + nom + '</strong>' +
+            '<div style="font-size:11px;color:#64748b">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' · ' + s.dias + ' días</div>' +
+            '<button class="bell-dd-cal-btn" onclick="_calVacMes=' + mesIdx + ';_calVacAnio=' + anioSol + ';setView(\'vacaciones\');document.getElementById(\'bellDropdown\')?.remove()">📅 Ver en calendario</button>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:3px">' +
             '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7;font-size:11px" ' +
-              'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\');actualizarBadgeCampana();document.getElementById(\'bellDropdown\')?.remove()">V</button>' +
+              'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\');actualizarBadgeCampana();document.getElementById(\'bellDropdown\')?.remove()">✓ Aprobar</button>' +
             '<button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-size:11px" ' +
-              'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\');document.getElementById(\'bellDropdown\')?.remove()">X</button>' +
+              'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\');document.getElementById(\'bellDropdown\')?.remove()">✗ Rechazar</button>' +
           '</div>' +
         '</div>';
       }).join('');
       dd.innerHTML = '<div class="bell-dd-title">Solicitudes pendientes</div>' + rows +
-        (sols.length > 5 ? '<div class="bell-dd-more" onclick="setView(\'administracion\');document.getElementById(\'bellDropdown\')?.remove()">Ver todas (' + sols.length + ')</div>' : '');
+        '<div class="bell-dd-more" onclick="setView(\'vacaciones\');document.getElementById(\'bellDropdown\')?.remove()">' +
+          (sols.length > 5 ? 'Ver todas (' + sols.length + ') →' : 'Ir a Vacaciones →') +
+        '</div>';
     }).catch(function() { dd.innerHTML = '<div class="bell-dd-empty">Error al cargar</div>'; });
   setTimeout(function() {
     document.addEventListener('click', function handler(e) {
@@ -4733,14 +4772,20 @@ function renderCalendarioVacaciones(container, solicitudes) {
         (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL === local &&
         o.fecha_desde <= s.fecha_hasta && o.fecha_hasta >= s.fecha_desde;
     });
+    const partesSol = s.fecha_desde ? s.fecha_desde.split('-') : [];
+    const mesSol  = partesSol.length >= 2 ? parseInt(partesSol[1]) - 1 : 0;
+    const anioSol = partesSol.length >= 1 ? parseInt(partesSol[0]) : new Date().getFullYear();
+    const calBtn  = '<button class="btn-admin-edit" style="font-size:11px" ' +
+      'onclick="_calVacMes=' + mesSol + ';_calVacAnio=' + anioSol + ';cargarCalendarioVacaciones()">📅 Ver</button>';
     const acciones = s.estado === 'pendiente'
-      ? '<div style="display:flex;gap:4px">' +
+      ? '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
           '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7" ' +
             'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\')">✓ Aprobar</button>' +
           '<button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5" ' +
             'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\')">✗ Rechazar</button>' +
+          calBtn +
           '</div>'
-      : '-';
+      : calBtn;
     return '<tr>' +
       '<td><strong>' + nom + '</strong></td>' +
       '<td><span class="suc-badge-mini" style="background:' + (suc.colorLight || '#f1f5f9') + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
@@ -4823,11 +4868,15 @@ function renderVacacionesView() {
     '<div class="admin-tabs" id="vacTabs">' +
       '<button class="admin-tab active" onclick="switchVacTab(\'calendario\',this)">Calendario</button>' +
       '<button class="admin-tab" id="vacTabSolicitudesBtn" onclick="switchVacTab(\'solicitudes\',this)">Solicitudes pendientes</button>' +
+      '<button class="admin-tab" onclick="switchVacTab(\'banco\',this)">Banco de días</button>' +
     '</div>' +
     '<div id="vacCalendarioContainer" class="admin-tab-content">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
     '</div>' +
     '<div id="vacSolicitudesContainer" class="admin-tab-content" style="display:none">' +
+      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
+    '</div>' +
+    '<div id="vacBancoContainer" class="admin-tab-content" style="display:none">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
     '</div>' +
     '</div>';
@@ -4841,5 +4890,138 @@ function switchVacTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('vacCalendarioContainer').style.display  = tab === 'calendario'  ? 'block' : 'none';
   document.getElementById('vacSolicitudesContainer').style.display = tab === 'solicitudes' ? 'block' : 'none';
+  document.getElementById('vacBancoContainer').style.display       = tab === 'banco'       ? 'block' : 'none';
   if (tab === 'solicitudes') cargarSolicitudesAdmin();
+  if (tab === 'banco')       cargarBancoDias();
+}
+
+// ── BANCO DE DÍAS (tab vacaciones) ───────────────────
+async function cargarBancoDias() {
+  const container = document.getElementById('vacBancoContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  const anio = new Date().getFullYear();
+  try {
+    const resp = await fetch(vacApiUrl('get_vacaciones', { anio: anio }));
+    const json = await resp.json();
+    const vacaciones = json.ok ? (json.vacaciones || []) : [];
+
+    // Obtener lista de empleados activos
+    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
+      const na = parseInt(a)||999, nb = parseInt(b)||999;
+      return na !== nb ? na - nb : a.localeCompare(b);
+    });
+
+    const anioOpts = [anio-1, anio, anio+1].map(function(a) {
+      return '<option value="' + a + '"' + (a === anio ? ' selected' : '') + '>' + a + '</option>';
+    }).join('');
+
+    const filas = empNombres.map(function(nombre) {
+      const nom = nombre.replace(/^\d+\s+/, '');
+      const vac = vacaciones.find(function(v) { return v.empleado && v.empleado.replace(/^\d+\s+/,'').toLowerCase() === nom.toLowerCase(); });
+      const banco     = vac ? vac.dias_banco      : '—';
+      const usados    = vac ? vac.dias_usados     : '—';
+      const ajuste    = vac ? vac.dias_ajuste     : 0;
+      const disponible= vac ? vac.dias_disponibles: '—';
+      const perfil    = EMPLEADOS_PERFILES[nombre] || {};
+      const local     = (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || perfil.sucursal_id || '';
+      const suc       = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      const nomEnc    = encodeURIComponent(nombre);
+      const dispColor = typeof disponible === 'number' ? (disponible > 7 ? '#059669' : disponible > 0 ? '#f59e0b' : '#dc2626') : '#94a3b8';
+      return '<tr>' +
+        '<td><strong>' + nom + '</strong></td>' +
+        '<td><span class="suc-badge-mini" style="background:' + suc.colorLight + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
+        '<td style="text-align:center">' + banco + '</td>' +
+        '<td style="text-align:center">' + usados + '</td>' +
+        '<td style="text-align:center;color:' + (ajuste >= 0 ? '#059669' : '#dc2626') + ';font-weight:600">' + (ajuste > 0 ? '+' : '') + ajuste + '</td>' +
+        '<td style="text-align:center;font-weight:700;color:' + dispColor + '">' + disponible + '</td>' +
+        '<td>' +
+          '<button class="btn-admin-edit" onclick="abrirModalAjusteAdmin(\'' + nomEnc + '\',' + anio + ')">± Ajustar</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    container.innerHTML =
+      '<div style="padding:1.5rem">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<label style="font-size:13px;color:#64748b;font-weight:500">Año:</label>' +
+          '<select class="filter-select" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
+        '</div>' +
+        '<button class="btn-admin-edit" onclick="inicializarVacAdmin(' + anio + ')" style="margin-left:auto">↺ Inicializar ' + anio + '</button>' +
+      '</div>' +
+      '<div class="admin-table-wrap">' +
+        '<table class="admin-tabla">' +
+          '<thead><tr>' +
+            '<th>Empleado</th><th>Local</th>' +
+            '<th style="text-align:center">Banco</th>' +
+            '<th style="text-align:center">Usados</th>' +
+            '<th style="text-align:center">Ajuste</th>' +
+            '<th style="text-align:center">Disponibles</th>' +
+            '<th></th>' +
+          '</tr></thead>' +
+          '<tbody>' + filas + '</tbody>' +
+        '</table>' +
+      '</div>' +
+      '</div>';
+  } catch(e) {
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
+  }
+}
+
+async function cargarBancoDiasAnio(anio) {
+  const container = document.getElementById('vacBancoContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  try {
+    const resp = await fetch(vacApiUrl('get_vacaciones', { anio: anio }));
+    const json = await resp.json();
+    const vacaciones = json.ok ? (json.vacaciones || []) : [];
+    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
+      const na = parseInt(a)||999, nb = parseInt(b)||999;
+      return na !== nb ? na - nb : a.localeCompare(b);
+    });
+    const anioOpts = [anio-1, anio, anio+1].map(function(a) {
+      return '<option value="' + a + '"' + (a === anio ? ' selected' : '') + '>' + a + '</option>';
+    }).join('');
+    const filas = empNombres.map(function(nombre) {
+      const nom = nombre.replace(/^\d+\s+/, '');
+      const vac = vacaciones.find(function(v) { return v.empleado && v.empleado.replace(/^\d+\s+/,'').toLowerCase() === nom.toLowerCase(); });
+      const banco     = vac ? vac.dias_banco      : '—';
+      const usados    = vac ? vac.dias_usados     : '—';
+      const ajuste    = vac ? vac.dias_ajuste     : 0;
+      const disponible= vac ? vac.dias_disponibles: '—';
+      const perfil    = EMPLEADOS_PERFILES[nombre] || {};
+      const local     = (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || perfil.sucursal_id || '';
+      const suc       = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      const nomEnc    = encodeURIComponent(nombre);
+      const dispColor = typeof disponible === 'number' ? (disponible > 7 ? '#059669' : disponible > 0 ? '#f59e0b' : '#dc2626') : '#94a3b8';
+      return '<tr>' +
+        '<td><strong>' + nom + '</strong></td>' +
+        '<td><span class="suc-badge-mini" style="background:' + suc.colorLight + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
+        '<td style="text-align:center">' + banco + '</td>' +
+        '<td style="text-align:center">' + usados + '</td>' +
+        '<td style="text-align:center;color:' + (ajuste >= 0 ? '#059669' : '#dc2626') + ';font-weight:600">' + (ajuste > 0 ? '+' : '') + ajuste + '</td>' +
+        '<td style="text-align:center;font-weight:700;color:' + dispColor + '">' + disponible + '</td>' +
+        '<td><button class="btn-admin-edit" onclick="abrirModalAjusteAdmin(\'' + nomEnc + '\',' + anio + ')">± Ajustar</button></td>' +
+      '</tr>';
+    }).join('');
+    container.innerHTML =
+      '<div style="padding:1.5rem">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<label style="font-size:13px;color:#64748b;font-weight:500">Año:</label>' +
+          '<select class="filter-select" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
+        '</div>' +
+        '<button class="btn-admin-edit" onclick="inicializarVacAdmin(' + anio + ')" style="margin-left:auto">↺ Inicializar ' + anio + '</button>' +
+      '</div>' +
+      '<div class="admin-table-wrap">' +
+        '<table class="admin-tabla">' +
+          '<thead><tr><th>Empleado</th><th>Local</th><th style="text-align:center">Banco</th><th style="text-align:center">Usados</th><th style="text-align:center">Ajuste</th><th style="text-align:center">Disponibles</th><th></th></tr></thead>' +
+          '<tbody>' + filas + '</tbody>' +
+        '</table>' +
+      '</div></div>';
+  } catch(e) {
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
+  }
 }

@@ -1703,3 +1703,17 @@ body {
   font-size: 9px;
   vertical-align: middle;
 }
+
+/* Botón Ver en calendario dentro del dropdown de campana */
+.bell-dd-cal-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-top: 3px;
+  display: block;
+  text-align: left;
+}
+.bell-dd-cal-btn:hover { text-decoration: underline; }
