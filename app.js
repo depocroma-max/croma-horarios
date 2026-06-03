@@ -1818,13 +1818,25 @@ async function cargarPerfiles() {
       // Guardar perfiles que fueron editados localmente en esta sesión
       const perfilesLocales = { ...EMPLEADOS_PERFILES };
       EMPLEADOS_PERFILES = {};
-      json.empleados.forEach(e => { EMPLEADOS_PERFILES[e.nombre] = e; });
-      // Re-aplicar ediciones locales de esta sesión (tienen prioridad sobre el Sheet)
-      Object.keys(perfilesLocales).forEach(nombre => {
-        if (perfilesLocales[nombre]._editadoLocal) {
-          EMPLEADOS_PERFILES[nombre] = perfilesLocales[nombre];
+      json.empleados.forEach(e => {
+        // Normalizar sucursal_id: convertir número a string con cero si aplica
+        if (e.sucursal_id !== undefined && e.sucursal_id !== '') {
+          const sid = String(e.sucursal_id).trim();
+          // Si es numérico de 1-2 dígitos, agregar cero adelante
+          e.sucursal_id = /^\d{1,2}$/.test(sid) ? sid.padStart(2, '0') : sid;
         }
+        EMPLEADOS_PERFILES[e.nombre] = e;
       });
+      // Re-aplicar ediciones locales guardadas en sessionStorage (sobreviven cargarDatos)
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('croma_perfiles_locales') || '{}');
+        Object.keys(saved).forEach(nombre => {
+          if (EMPLEADOS_PERFILES[nombre]) {
+            // Aplicar solo los campos editados, preservando el resto del Sheet
+            Object.assign(EMPLEADOS_PERFILES[nombre], saved[nombre]);
+          }
+        });
+      } catch(e) {}
     }
   } catch(err) {
     console.warn('No se pudieron cargar perfiles:', err);
@@ -3651,6 +3663,12 @@ async function guardarPerfilDesdeForm() {
   };
 
   EMPLEADOS_PERFILES[nombre] = perfil;
+  // Persistir en sessionStorage para sobrevivir renderAll() y cargarDatos()
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('croma_perfiles_locales') || '{}');
+    saved[nombre] = perfil;
+    sessionStorage.setItem('croma_perfiles_locales', JSON.stringify(saved));
+  } catch(e) {}
 
   await guardarPerfil(perfil);
   cerrarAdmin();
