@@ -2197,23 +2197,23 @@ body {
 }
 .portal-profile-info {
   min-width: 0;
+  overflow: hidden;
 }
-.portal-profile-info h1 {
+.portal-profile-info h1,
+.portal-greeting {
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: clamp(20px, 5vw, 36px);
   letter-spacing: 1px;
   line-height: 1;
   color: var(--black);
-  margin: 3px 0 0;
+  margin: 3px 0 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .portal-greeting-emoji {
-  font-size: 22px;
-  line-height: 1;
-  display: block;
-  margin: 2px 0 4px;
+  font-style: normal;
+  font-size: 0.75em;
 }
 .portal-profile-info p {
   font-size: 14px;
@@ -2390,13 +2390,6 @@ body {
     align-items: flex-start;
     padding: 15px;
     border-radius: 16px;
-  }
-  .portal-profile-info h1 {
-    font-size: 26px;
-  }
-  .portal-greeting-emoji {
-    font-size: 18px;
-    margin: 1px 0 3px;
   }
   .portal-profile-info p {
     font-size: 13px;
