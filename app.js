@@ -2994,7 +2994,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
 
         <div class="portal-next-card">
-          <span class="portal-kicker">Próximo turno</span>
+          <span class="portal-kicker">Turno de hoy</span>
           ${getProximoTurno()}
         </div>
       </section>
