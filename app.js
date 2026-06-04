@@ -2264,11 +2264,33 @@ let sesionActual = null;
 // ── Cargar usuarios desde el Sheet ──
 async function cargarUsuarios() {
   try {
+    // Cache local → login instantáneo en segunda visita
+    const cached = localStorage.getItem('croma_usuarios_cache');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed?.length) {
+          _usuariosCache = parsed;
+          // Refrescar en background sin bloquear
+          fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`)
+            .then(r => r.ok ? r.json() : null)
+            .then(json => {
+              if (json?.ok && json.usuarios?.length) {
+                _usuariosCache = json.usuarios;
+                localStorage.setItem('croma_usuarios_cache', JSON.stringify(json.usuarios));
+              }
+            }).catch(() => {});
+          return _usuariosCache;
+        }
+      } catch(e) {}
+    }
+    // Sin cache — fetch bloqueante (primera vez)
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
     if (!resp.ok) return [];
     const json = await resp.json();
     if (!json.ok) return [];
     _usuariosCache = json.usuarios || [];
+    localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuariosCache));
     return _usuariosCache;
   } catch(e) {
     console.warn('No se pudieron cargar usuarios:', e);
@@ -2585,6 +2607,11 @@ async function intentarLogin() {
 }
 
 function cerrarSesion() {
+  // Al cerrar sesión explícitamente, limpiar cache del empleado
+  // (si solo cierra el navegador, el cache queda pero expira en 4hs)
+  if (sesionActual?.empleadoNombre) {
+    localStorage.removeItem(`croma_horarios_${sesionActual.empleadoNombre.replace(/\s+/g,'_')}`);
+  }
   sesionActual = null;
   adminAutenticado = false;
   sessionStorage.removeItem('croma_admin_auth');
@@ -2657,39 +2684,72 @@ function actualizarIndicadorSesion() {
 }
 
 // ── VISTA EMPLEADO LOGUEADO ────────────────────────────
+const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 horas — cache válido aunque cierren el navegador
+
 async function cargarDatosEmpleado() {
-  showToast('Cargando tu jornada...');
-
   const url = APPS_SCRIPT_URL;
+  const nombreEmp = sesionActual?.empleadoNombre || sesionActual?.nombre || '';
+  const cacheKey  = `croma_horarios_${nombreEmp.replace(/\s+/g,'_')}`;
 
-  // Lanzar los 3 fetches en paralelo para no esperar uno por uno
-  const [, , horariosResp] = await Promise.allSettled([
-    cargarPerfiles(),
-    cargarCertificados(),
-    fetch(`${url}?accion=horarios`).then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    }),
-  ]);
-
-  if (horariosResp.status === 'rejected') {
-    setConnected(false);
-    showToast('Error al cargar: ' + horariosResp.reason?.message);
-    mostrarVistaEmpleadoError();
-    return;
+  // ── Leer cache, pero solo si tiene menos de 4 horas ──
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const { datos, perfiles, categorias, ts } = JSON.parse(cached);
+      const edad = Date.now() - (ts || 0);
+      if (datos?.length && edad < CACHE_TTL_MS) {
+        // Cache fresco → mostrar al instante
+        state.datos = datos;
+        if (perfiles) Object.assign(EMPLEADOS_PERFILES, perfiles);
+        if (categorias?.length) CATEGORIAS_CONFIG = categorias;
+        setConnected(true);
+        mostrarVistaEmpleado();
+        // Refrescar silenciosamente en background
+        _refrescarDatosEmpleadoBg(url, cacheKey);
+        return;
+      } else {
+        // Cache vencido → borrarlo y cargar normal
+        localStorage.removeItem(cacheKey);
+      }
+    } catch(e) { localStorage.removeItem(cacheKey); }
   }
 
+  // ── Sin cache válido: carga bloqueante ──
+  showToast('Cargando tu jornada...');
+  await _refrescarDatosEmpleadoBg(url, cacheKey, true);
+}
+
+async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
   try {
+    const [, , horariosResp] = await Promise.allSettled([
+      cargarPerfiles(),
+      cargarCertificados(),
+      fetch(`${url}?accion=horarios`).then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }),
+    ]);
+
+    if (horariosResp.status === 'rejected') {
+      if (bloqueante) {
+        setConnected(false);
+        showToast('Error al cargar: ' + horariosResp.reason?.message);
+        mostrarVistaEmpleadoError();
+      } else {
+        showToast('Sin conexión — mostrando datos guardados');
+      }
+      return;
+    }
+
     const json = horariosResp.value;
     if (json.ok === false) throw new Error(json.error || 'Error');
 
-    const rawData = json.data || [];
-    state.datos = rawData.map(r => {
-      const NOMBRE_A_ID = {
-        'PASEO': '01', 'WAVE': '05', 'CIPO': '09', 'CIPO SAN MARTIN': '09',
-        'PERITO': '10', 'PERITO MORENO': '10', 'CENTE': '12', 'CENTENARIO': '12',
-        'ROCA180': '14', 'ROCA': '14', 'DEPO': 'DEPO', 'OFICINA': 'OFICINA',
-      };
+    const NOMBRE_A_ID = {
+      'PASEO': '01', 'WAVE': '05', 'CIPO': '09', 'CIPO SAN MARTIN': '09',
+      'PERITO': '10', 'PERITO MORENO': '10', 'CENTE': '12', 'CENTENARIO': '12',
+      'ROCA180': '14', 'ROCA': '14', 'DEPO': 'DEPO', 'OFICINA': 'OFICINA',
+    };
+    state.datos = (json.data || []).map(r => {
       const localRaw = String(r.LOCAL || r.local || r.HOJA || '').trim().toUpperCase();
       return {
         LOCAL:    NOMBRE_A_ID[localRaw] || localRaw,
@@ -2705,13 +2765,28 @@ async function cargarDatosEmpleado() {
       };
     });
 
+    // Guardar con timestamp para TTL
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({
+        datos: state.datos,
+        perfiles: EMPLEADOS_PERFILES,
+        categorias: CATEGORIAS_CONFIG,
+        ts: Date.now(),
+      }));
+    } catch(e) {}
+
     setConnected(true);
     mostrarVistaEmpleado();
+    if (!bloqueante) showToast('✓ Datos actualizados');
 
   } catch(err) {
-    setConnected(false);
-    showToast('Error al cargar: ' + err.message);
-    mostrarVistaEmpleadoError();
+    if (bloqueante) {
+      setConnected(false);
+      showToast('Error al cargar: ' + err.message);
+      mostrarVistaEmpleadoError();
+    } else {
+      showToast('Sin conexión — mostrando datos guardados');
+    }
   }
 }
 
