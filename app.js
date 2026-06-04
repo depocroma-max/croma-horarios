@@ -2550,14 +2550,18 @@ function mostrarLoginApp() {
           </div>
         </div>
 
-        <p id="loginError" style="color:#dc2626;font-size:12px;margin-bottom:0.5rem;display:none;text-align:center">
+        <p id="loginError" style="color:#dc2626;font-size:12px;margin:0;display:none;text-align:center">
           Usuario o PIN incorrecto
         </p>
 
-        <button class="btn-connect" onclick="intentarLogin()" style="margin-top:0.5rem">
-          Ingresar
+        <button class="login-btn" onclick="intentarLogin()">
+          INGRESAR
         </button>
       </div>
+
+      <div class="login-footer">Sistema interno · Croma</div>
+    </div>
+  `;
 
       <div class="login-footer">Croma · Panel de Horarios</div>
     </div>
@@ -2583,15 +2587,15 @@ async function intentarLogin() {
   const usuario = document.getElementById('loginUsuario')?.value || '';
   const pin     = document.getElementById('loginPin')?.value     || '';
   const errEl   = document.getElementById('loginError');
-  const btnEl   = document.querySelector('#loginScreen .btn-connect');
+  const btnEl   = document.querySelector('#loginScreen .login-btn');
 
   // Deshabilitar botón mientras verifica
-  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Verificando...'; }
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'VERIFICANDO...'; }
   errEl.style.display = 'none';
 
   const resultado = await verificarCredencialesAsync(usuario, pin);
 
-  if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Ingresar'; }
+  if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'INGRESAR'; }
 
   if (resultado.ok) {
     sesionActual = resultado.usuario;
