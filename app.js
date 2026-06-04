@@ -2640,12 +2640,6 @@ function actualizarIndicadorSesion() {
   const esAdmin = sesionActual.rol === 'admin';
   chip.innerHTML = `
     <span class="sesion-nombre">${esAdmin ? '👤 Admin' : sesionActual.nombre}</span>
-    ${!esAdmin ? `<button class="sesion-perfil" onclick="abrirMiPerfil()" title="Mi perfil">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-        <circle cx="12" cy="7" r="4"/>
-      </svg>
-    </button>` : ''}
     <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -2659,13 +2653,28 @@ function actualizarIndicadorSesion() {
 // ── VISTA EMPLEADO LOGUEADO ────────────────────────────
 async function cargarDatosEmpleado() {
   showToast('Cargando tu jornada...');
-  cargarPerfiles();
-  await cargarCertificados();
+
+  const url = APPS_SCRIPT_URL;
+
+  // Lanzar los 3 fetches en paralelo para no esperar uno por uno
+  const [, , horariosResp] = await Promise.allSettled([
+    cargarPerfiles(),
+    cargarCertificados(),
+    fetch(`${url}?accion=horarios`).then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }),
+  ]);
+
+  if (horariosResp.status === 'rejected') {
+    setConnected(false);
+    showToast('Error al cargar: ' + horariosResp.reason?.message);
+    mostrarVistaEmpleadoError();
+    return;
+  }
 
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=horarios`);
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const json = await resp.json();
+    const json = horariosResp.value;
     if (json.ok === false) throw new Error(json.error || 'Error');
 
     const rawData = json.data || [];
@@ -2995,6 +3004,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
             <h1>Hola ${primerNombre} 👋</h1>
             <p>${suc.nombre}</p>
             <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+            <button type="button" class="portal-profile-btn" onclick="abrirMiPerfil()">👤 Mi perfil</button>
           </div>
         </div>
 
