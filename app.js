@@ -2989,6 +2989,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
             <h1>Hola ${primerNombre} 👋</h1>
             <p>${suc.nombre}</p>
             <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+            <button type="button" class="portal-profile-btn" onclick="abrirMiPerfil()">👤 Mi perfil</button>
           </div>
         </div>
 
