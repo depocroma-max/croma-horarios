@@ -2204,7 +2204,16 @@ body {
   letter-spacing: 1px;
   line-height: 1;
   color: var(--black);
-  margin: 3px 0 4px;
+  margin: 3px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.portal-greeting-emoji {
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+  margin: 2px 0 4px;
 }
 .portal-profile-info p {
   font-size: 14px;
@@ -2383,7 +2392,11 @@ body {
     border-radius: 16px;
   }
   .portal-profile-info h1 {
-    font-size: 30px;
+    font-size: 26px;
+  }
+  .portal-greeting-emoji {
+    font-size: 18px;
+    margin: 1px 0 3px;
   }
   .portal-profile-info p {
     font-size: 13px;

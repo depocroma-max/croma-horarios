@@ -3007,7 +3007,8 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           </div>
           <div class="portal-profile-info">
             <span class="portal-kicker">Portal empleado</span>
-            <h1>Hola ${primerNombre} 👋</h1>
+            <h1>Hola ${primerNombre}</h1>
+            <span class="portal-greeting-emoji">👋</span>
             <p>${suc.nombre}</p>
             <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
           </div>
