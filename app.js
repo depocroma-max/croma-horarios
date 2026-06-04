@@ -2563,10 +2563,6 @@ function mostrarLoginApp() {
     </div>
   `;
 
-      <div class="login-footer">Croma · Panel de Horarios</div>
-    </div>
-  `;
-
   setTimeout(() => document.getElementById('loginUsuario')?.focus(), 100);
 }
 
