@@ -2592,3 +2592,108 @@ body {
     bottom: -3px;
   }
 }
+/* ===== LOGIN CROMA · MEJORA VISUAL ===== */
+#loginScreen {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(232,37,26,.22), transparent 260px),
+    radial-gradient(circle at 80% 80%, rgba(255,255,255,.08), transparent 320px),
+    linear-gradient(135deg, #050505 0%, #111 48%, #070707 100%);
+}
+
+#loginScreen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+}
+
+.login-card {
+  max-width: 390px;
+  z-index: 1;
+}
+
+.login-logo {
+  margin-bottom: 10px;
+}
+
+.login-tridente {
+  height: 46px;
+  filter: drop-shadow(0 0 18px rgba(232,37,26,.7));
+}
+
+.login-brand {
+  font-size: 56px;
+  letter-spacing: 7px;
+}
+
+.login-subtitle {
+  margin-bottom: 2rem;
+  color: #ff3b30;
+}
+
+.login-form {
+  position: relative;
+  padding: 2.2rem;
+  border-radius: 22px;
+  background: rgba(17,17,17,.82);
+  border: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 32px 90px rgba(0,0,0,.75),
+    0 0 0 1px rgba(232,37,26,.12),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.login-form::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(232,37,26,.28), transparent 34%);
+}
+
+.login-label {
+  color: #b8b8b2;
+}
+
+.login-input {
+  height: 50px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.45);
+  border: 1px solid rgba(255,255,255,.14);
+}
+
+.login-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(232,37,26,.16);
+}
+
+.login-input::placeholder {
+  color: #5f5f5a;
+}
+
+.login-btn {
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ffffff, #d9d9d5);
+  box-shadow: 0 12px 30px rgba(255,255,255,.12);
+}
+
+.login-btn:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.login-footer {
+  color: #5d5d58;
+}
+
+@media (max-width: 480px) {
+  .login-brand { font-size: 46px; }
+  .login-form { padding: 1.5rem; }
+}
