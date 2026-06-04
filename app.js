@@ -3132,7 +3132,93 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 }
 
 function imprimirVistaEmpleado() {
-  window.print();
+  const selectMes = document.getElementById('evSelectMes');
+  const periodo = selectMes ? selectMes.value : 'TODOS';
+  const periodoLabel = selectMes
+    ? (selectMes.options[selectMes.selectedIndex]?.text || periodo)
+    : 'Todos los registros';
+
+  // Tomar la tabla actual del DOM (ya renderizada y filtrada)
+  const tablaWrap = document.getElementById('evTablaWrap');
+  const tablaHTML = tablaWrap ? tablaWrap.innerHTML : '';
+
+  // Datos del empleado desde el portal
+  const nombreEl = document.querySelector('.portal-profile-info h1');
+  const sucursal  = document.querySelector('.portal-profile-info p');
+  const nombreTxt = nombreEl ? nombreEl.textContent.replace('👋','').replace('Hola','').trim() : '';
+  const sucursalTxt = sucursal ? sucursal.textContent.trim() : '';
+
+  // Totales visibles
+  const dias  = document.getElementById('evDias')?.textContent  || '—';
+  const horas = document.getElementById('evHoras')?.textContent || '—';
+  const extra = document.getElementById('evExtra')?.textContent || '—';
+  const sabs  = document.getElementById('evSabs')?.textContent  || '—';
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Historial ${periodoLabel} · ${nombreTxt}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #111; padding: 28px 32px; background: #fff; }
+    .print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #111; padding-bottom: 14px; }
+    .print-brand { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 3px; color: #111; }
+    .print-meta { text-align: right; }
+    .print-meta h2 { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+    .print-meta p  { font-size: 12px; color: #555; }
+    .print-stats { display: flex; gap: 24px; margin-bottom: 20px; padding: 12px 16px; background: #f7f7f5; border-radius: 8px; border: 1px solid #e5e5e0; }
+    .print-stat { display: flex; flex-direction: column; gap: 2px; }
+    .print-stat span { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: 0.5px; }
+    .print-stat strong { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1px; color: #111; }
+    .detalle-tabla { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .detalle-tabla thead tr { background: #f7f7f5; }
+    .detalle-tabla th { padding: 8px 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #888; border-bottom: 1px solid #ddd; text-align: center; }
+    .detalle-tabla td { padding: 7px 10px; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; }
+    .detalle-tabla tfoot tr { background: #f7f7f5; }
+    .detalle-tabla tfoot td { padding: 8px 10px; font-weight: 600; border-top: 2px solid #ddd; }
+    .detalle-tabla tr:hover td { background: transparent; }
+    .fila-sabado td { background: #fafaf0; }
+    .fila-domingo td { color: #aaa; }
+    .fila-feriado td { background: #fff8f0; }
+    .hs-extra { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 10px; font-weight: 600; font-size: 11px; }
+    .check-sab { color: #059669; font-weight: 700; }
+    .tag-feriado { background: #fed7aa; color: #c2410c; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+    .turno-cell { font-variant-numeric: tabular-nums; }
+    .print-footer { margin-top: 20px; font-size: 11px; color: #aaa; text-align: right; }
+    @media print {
+      body { padding: 12px 16px; }
+      .print-header { margin-bottom: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-header">
+    <div>
+      <div class="print-brand">CROMA</div>
+      <div style="font-size:11px;color:#888;letter-spacing:2px;margin-top:2px">HORARIOS</div>
+    </div>
+    <div class="print-meta">
+      <h2>${nombreTxt}</h2>
+      <p>${sucursalTxt}</p>
+      <p style="margin-top:4px;font-weight:600">${periodoLabel}</p>
+    </div>
+  </div>
+  <div class="print-stats">
+    <div class="print-stat"><span>Días</span><strong>${dias}</strong></div>
+    <div class="print-stat"><span>Hs totales</span><strong>${horas}</strong></div>
+    <div class="print-stat"><span>Hs extra</span><strong>${extra}</strong></div>
+    <div class="print-stat"><span>Sábados</span><strong>${sabs}</strong></div>
+  </div>
+  ${tablaHTML}
+  <div class="print-footer">Impreso el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+  <script>window.onload = function(){ window.focus(); window.print(); }<\/script>
+</body>
+</html>`);
+  win.document.close();
 }
 
 // ── MI PERFIL (vista empleado) ─────────────────────────
