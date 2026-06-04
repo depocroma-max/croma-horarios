@@ -2486,3 +2486,48 @@ body {
     font-size: 13px;
   }
 }
+
+/* ===== FIX MOBILE · BOTÓN MI PERFIL VISIBLE ===== */
+.portal-profile-card {
+  overflow: visible;
+}
+.portal-profile-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.portal-profile-btn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative;
+  z-index: 3;
+}
+@media (max-width: 640px) {
+  .portal-profile-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    overflow: visible;
+  }
+  .portal-profile-info {
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+  .portal-profile-info .emp-badges-row {
+    margin-bottom: 8px;
+  }
+  .portal-profile-btn {
+    width: 100%;
+    max-width: 220px;
+    min-height: 40px;
+    margin-top: 8px;
+    padding: 9px 14px;
+    border-radius: 12px;
+    background: #fff;
+    color: var(--black);
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, .06);
+  }
+}
