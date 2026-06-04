@@ -2638,14 +2638,14 @@ function iniciarAppConSesion() {
     cargarDatos({ unica: APPS_SCRIPT_URL });
     setTimeout(actualizarBadgeCampana, 1500);
   } else {
-    document.getElementById('btnRefresh').style.display     = 'none';
-    document.getElementById('btnPrint').style.display       = 'none';
-    document.querySelector('.top-nav').style.display        = 'none';
-    document.querySelector('.top-search').style.display     = 'none';
-    document.querySelector('.controls-bar').style.display   = 'none';
+    document.getElementById('btnRefresh')?.style && (document.getElementById('btnRefresh').style.display = 'none');
+    document.getElementById('btnPrint')?.style && (document.getElementById('btnPrint').style.display = 'none');
+    document.querySelector('.top-nav') && (document.querySelector('.top-nav').style.display = 'none');
+    document.querySelector('.top-search') && (document.querySelector('.top-search').style.display = 'none');
+    document.querySelector('.controls-bar') && (document.querySelector('.controls-bar').style.display = 'none');
     document.querySelector('.hamburger-btn') && (document.querySelector('.hamburger-btn').style.display = 'none');
-    document.getElementById('bellWrap').style.display       = 'none';
-    document.getElementById('bellWrapEmp').style.display    = 'flex';
+    document.getElementById('bellWrap') && (document.getElementById('bellWrap').style.display = 'none');
+    document.getElementById('bellWrapEmp') && (document.getElementById('bellWrapEmp').style.display = 'flex');
     document.getElementById('mainApp').innerHTML = '<div id="vistaEmpleadoContainer" style="padding:1rem"></div>';
     actualizarIndicadorSesion();
     showApp();
