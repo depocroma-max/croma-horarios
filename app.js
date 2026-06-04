@@ -76,7 +76,7 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
   if (fechaDate && esFeriado(fechaDate)) return hsTotal;
 
   const perfil = EMPLEADOS_PERFILES[nombreEmp];
-  if (!perfil) return Math.max(0, hsTotal - 8); // fallback genérico
+  if (!perfil) return Math.round(Math.max(0, hsTotal - 8) * 100) / 100; // fallback genérico
 
   const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
   if (!cat || !cat.percibe_extra) return 0;
@@ -88,7 +88,7 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
     const limite = perfil.regla_custom === 'lv4'
       ? (esFinDeSemana ? 0 : 4)
       : perfil.hs_base || 8;
-    return Math.max(0, hsTotal - limite);
+    return Math.round(Math.max(0, hsTotal - limite) * 100) / 100;
   }
 
   // Reglas predefinidas por categoría
@@ -96,15 +96,15 @@ function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
   if (cat.regla === 'lv8_s4') {
     const esSab = dow === 6;
     const limite = esSab ? 4 : 8;
-    return Math.max(0, hsTotal - limite);
+    return Math.round(Math.max(0, hsTotal - limite) * 100) / 100;
   }
   if (cat.regla === 'fijo4') {
-    return Math.max(0, hsTotal - 4);
+    return Math.round(Math.max(0, hsTotal - 4) * 100) / 100;
   }
   if (cat.regla === 'sin_extra') return 0;
 
   // Regla personalizada por hs_base
-  return Math.max(0, hsTotal - (perfil.hs_base || 8));
+  return Math.round(Math.max(0, hsTotal - (perfil.hs_base || 8)) * 100) / 100;
 }
 
 // ── FERIADOS ARGENTINA 2025-2026 ───────────────────────
@@ -2672,6 +2672,7 @@ function actualizarIndicadorSesion() {
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
         <circle cx="12" cy="7" r="4"/>
       </svg>
+      Mi perfil
     </button>` : ''}
     <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2972,16 +2973,28 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 
   function getProximoTurno() {
     const hoy = new Date(); hoy.setHours(0,0,0,0);
-    const proximos = misRegistros.map(r => {
+    // Agrupar registros por día
+    const porDia = {};
+    misRegistros.forEach(r => {
       const f = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA));
       f.setHours(0,0,0,0);
-      return { r, f };
-    }).filter(x => x.f >= hoy && x.r.H_ENTRADA && x.r.H_SALIDA)
-      .sort((a,b)=> a.f - b.f || (a.r.H_ENTRADA||'').localeCompare(b.r.H_ENTRADA||''));
-    if (!proximos.length) return '<span class="portal-next-empty">Sin próximos turnos cargados</span>';
-    const x = proximos[0];
-    const fecha = x.f.toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'2-digit' });
-    return `<span class="portal-next-date">${fecha}</span><strong>${normalizarLibreTxt(x.r.H_ENTRADA)} → ${normalizarLibreTxt(x.r.H_SALIDA)}</strong><small>${(parseFloat(x.r.TOTAL_HS)||0).toFixed(1)} hs</small>`;
+      if (f < hoy) return;
+      const key = f.getTime();
+      if (!porDia[key]) porDia[key] = { f, regs: [] };
+      porDia[key].regs.push(r);
+    });
+    const dias = Object.values(porDia)
+      .filter(d => d.regs.some(r => r.H_ENTRADA && r.H_SALIDA))
+      .sort((a,b) => a.f - b.f);
+    if (!dias.length) return '<span class="portal-next-empty">Sin próximos turnos cargados</span>';
+    const { f, regs } = dias[0];
+    regs.sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
+    const fecha = f.toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'2-digit' });
+    const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
+    const turnosHtml = regs.filter(r => r.H_ENTRADA && r.H_SALIDA).map(r =>
+      `<strong>${normalizarLibreTxt(r.H_ENTRADA)} → ${normalizarLibreTxt(r.H_SALIDA)}</strong>`
+    ).join('<span style="color:#94a3b8;margin:0 4px">·</span>');
+    return `<span class="portal-next-date">${fecha}</span>${turnosHtml}<small>${hsTotal.toFixed(1)} hs</small>`;
   }
 
   function buildFilas(fs) {
