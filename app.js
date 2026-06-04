@@ -926,7 +926,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         </div>
       </div>
       <div class="detalle-tabs">
-        <button class="detalle-tab active" onclick="switchDetalleTab('jornada', this)">Jornada</button>
+        <button class="detalle-tab active" onclick="switchDetalleTab('jornada', this)">Historial</button>
         <button class="detalle-tab" onclick="switchDetalleTab('evolucion', this)">Evolución mensual</button>
         <button class="detalle-tab" onclick="switchDetalleTab('vacaciones', this)" id="tabVacBtn_${nombreEmp.replace(/[^a-zA-Z0-9]/g,'_')}">🏖 Vacaciones</button>
       </div>
@@ -2748,7 +2748,7 @@ function mostrarVistaEmpleadoError() {
 }
 
 function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
-  const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#0d0d0d', colorLight: '#f1f5f9', nombre: sucId };
+  const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
   const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
   const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
 
@@ -2757,6 +2757,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
   const nomMostrar = numMatch ? numMatch[2] : nombreEmp;
   const iniciales  = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
 
+  // Períodos disponibles
   const ORDEN_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
                        'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
   const periodosSet = new Set();
@@ -2766,25 +2767,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     if (aA !== aB) return parseInt(aA) - parseInt(aB);
     return ORDEN_MESES.indexOf(mA) - ORDEN_MESES.indexOf(mB);
   });
+
   const periodoActual = periodos[periodos.length - 1] || 'TODOS';
 
-  function fechaFromRow(r) {
-    return new Date(parseInt(r.AÑO), MESES_ES.indexOf(r.MES), parseInt(r.DIA));
-  }
-  function fechaISO(date) {
-    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-  }
-  function fmtFechaLarga(date) {
-    return date.toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'long' });
-  }
-  function fmtFechaCorta(date) {
-    return date.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-  }
-  function parseFechaStr(fechaStr) {
-    const [dd, mm, yyyy] = fechaStr.split('/').map(Number);
-    return new Date(yyyy, mm-1, dd);
-  }
-
+  // Calcular totales para el período seleccionado
   function calcTotales(periodo) {
     const regs = periodo === 'TODOS'
       ? misRegistros
@@ -2801,83 +2787,131 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     const filas = Object.entries(porFecha).map(([key, rrs]) => {
       rrs.sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
       const r0 = rrs[0];
-      const fecha = fechaFromRow(r0);
-      const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} – ${r0.H_SALIDA}` : 'Franco';
-      const turno2 = rrs[1]?.H_ENTRADA ? `${rrs[1].H_ENTRADA} – ${rrs[1].H_SALIDA}` : '';
+      const fecha = new Date(r0.AÑO, MESES_ES.indexOf(r0.MES), parseInt(r0.DIA));
+      const fechaStr = fecha.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const diaSem = DIAS_SEMANA[fecha.getDay()];
+      const esSab  = fecha.getDay() === 6;
+      const esDom  = fecha.getDay() === 0;
+      const esFer  = esFeriado(fecha);
+      const turno1 = r0.H_ENTRADA && r0.H_SALIDA ? `${normalizarLibreTxt(r0.H_ENTRADA)} – ${normalizarLibreTxt(r0.H_SALIDA)}` : '—';
+      const turno2 = rrs[1]?.H_ENTRADA ? `${normalizarLibreTxt(rrs[1].H_ENTRADA)} – ${normalizarLibreTxt(rrs[1].H_SALIDA)}` : '';
       const hsTotal = rrs.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
       const hsExtra = calcularHsExtra(nombreEmp, hsTotal, fecha);
       const nota    = rrs.map(r=>r.NOTA).filter(Boolean).join(' / ');
       let horaReg = '';
       try { if (r0.MARCA_TEMPORAL) horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
-      return {
-        fechaStr: fmtFechaCorta(fecha), fechaISO: fechaISO(fecha), fechaObj: fecha,
-        diaSem: DIAS_SEMANA[fecha.getDay()], turno1, turno2, hsTotal, hsExtra,
-        esSab: fecha.getDay() === 6, esDom: fecha.getDay() === 0, esFer: esFeriado(fecha), nota, horaReg
-      };
+      return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, horaReg };
+    }).sort((a,b) => {
+      // ordenar más viejo primero
+      const da = a.fechaStr.split('/').reverse().join('-');
+      const db = b.fechaStr.split('/').reverse().join('-');
+      return da.localeCompare(db);
     });
 
-    const certs = getCertificadosDe(nombreEmp);
-    certs.forEach(c => {
-      if (periodo !== 'TODOS') {
-        const [cy,cm,cd] = c.fecha.split('-').map(Number);
-        const fechaCert = new Date(cy, cm-1, cd);
-        const mesAnio = MESES_ES[fechaCert.getMonth()] + ' ' + fechaCert.getFullYear();
-        if (mesAnio !== periodo) return;
-      }
-      const [cy,cm,cd] = c.fecha.split('-').map(Number);
-      const fechaCert = new Date(cy, cm-1, cd);
-      filas.push({
-        fechaStr: fmtFechaCorta(fechaCert), fechaISO: c.fecha, fechaObj: fechaCert,
-        diaSem: ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fechaCert.getDay()],
-        turno1: 'CERTIFICADO', turno2: '', hsTotal: parseFloat(c.hs)||0, hsExtra: 0,
-        esSab: fechaCert.getDay() === 6, esDom: fechaCert.getDay() === 0, esFer: esFeriado(fechaCert),
-        nota: c.nota || c.tipo, horaReg: '—', esCert: true,
-      });
-    });
-
-    filas.sort((a,b) => a.fechaISO.localeCompare(b.fechaISO));
+    // Vista empleado: no se muestran certificados en este portal.
     const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
     const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
-    const totalSabs    = filas.filter(f=>f.esSab && !f.esCert).length;
-    const totalCerts   = filas.filter(f=>f.esCert).length;
-    return { filas, totalHoras, totalHsExtra, totalSabs, totalCerts, diasUnicos: filas.length };
+    const totalSabs    = filas.filter(f=>f.esSab).length;
+    return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos: filas.length };
   }
 
-  let { filas, totalHoras, totalHsExtra, totalSabs, totalCerts, diasUnicos } = calcTotales(periodoActual);
-  const todas = calcTotales('TODOS').filas;
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const proximoTurno = todas.find(f => !f.esCert && f.fechaObj >= hoy && f.hsTotal > 0);
-  const ultimoTurno = [...todas].reverse().find(f => !f.esCert && f.hsTotal > 0);
-  const turnoDestacado = proximoTurno || ultimoTurno || filas.find(f => !f.esCert);
+  let { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcTotales(periodoActual);
 
-  const lunes = getLunes(0);
-  const semanaDias = [];
-  for (let i=0; i<7; i++) {
-    const f = new Date(lunes); f.setDate(lunes.getDate() + i);
-    const iso = fechaISO(f);
-    const regsDia = misRegistros.filter(r => fechaISO(fechaFromRow(r)) === iso)
-      .sort((a,b)=>(a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
-    const hs = regsDia.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
-    const turnos = regsDia.map(r => r.H_ENTRADA && r.H_SALIDA ? `${r.H_ENTRADA}<br>${r.H_SALIDA}` : '').filter(Boolean);
-    semanaDias.push({ fecha: f, iso, hs, turnos, hoy: f.toDateString() === new Date().toDateString() });
+  const opcionesMes = ['<option value="TODOS">Todos los registros</option>']
+    .concat(periodos.map(p => `<option value="${p}" ${p===periodoActual?'selected':''}>${p}</option>`))
+    .join('');
+
+  const avatarInner = perfil.foto_url
+    ? `<img src="${perfil.foto_url}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.parentElement.innerHTML='${iniciales}'">`
+    : (numVend ? `<span style="font-size:18px;font-weight:700;color:${suc.color}">#${numVend}</span>` : `<span style="font-size:18px;font-weight:700;color:${suc.color}">${iniciales}</span>`);
+
+  const primerNombre = (nomMostrar || '').split(' ')[0] || nomMostrar;
+
+  function normalizarLibreTxt(txt) {
+    const v = String(txt || '').trim();
+    return v.toUpperCase() === 'FRANCO' ? 'Libre' : v;
+  }
+
+  function fechaKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  }
+
+  function buildSemanaEmpleado() {
+    const lunes = getLunes(0);
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const diasLargos = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+    const cards = [];
+    for (let i=0; i<7; i++) {
+      const f = new Date(lunes); f.setDate(lunes.getDate()+i);
+      const regs = misRegistros.filter(r =>
+        String(r.AÑO) === String(f.getFullYear()) &&
+        r.MES === MESES_ES[f.getMonth()] &&
+        String(r.DIA) === String(f.getDate())
+      ).sort((a,b)=>(a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
+      const total = regs.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
+      const esHoy = f.toDateString() === new Date().toDateString();
+      const libre = !regs.length;
+      const turnos = libre
+        ? '<div class="portal-week-free">Libre</div>'
+        : regs.map(r => {
+            const ent = normalizarLibreTxt(r.H_ENTRADA);
+            const sal = normalizarLibreTxt(r.H_SALIDA);
+            if (!ent || !sal) return '<span class="portal-week-shift">Horario a confirmar</span>';
+            return `<span class="portal-week-shift">${ent} → ${sal}</span>`;
+          }).join('');
+      cards.push(`
+        <div class="portal-week-card ${libre?'is-free':''} ${esHoy?'is-today':''}">
+          <div class="portal-week-day">
+            <span>${diasLargos[i]}</span>
+            <small>${formatFecha(f)}</small>
+          </div>
+          <div class="portal-week-body">
+            ${turnos}
+            ${!libre ? `<small>${total.toFixed(1)} hs</small>` : ''}
+          </div>
+        </div>`);
+    }
+    return cards.join('');
+  }
+
+  function getProximoTurno() {
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const proximos = misRegistros.map(r => {
+      const f = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA));
+      f.setHours(0,0,0,0);
+      return { r, f };
+    }).filter(x => x.f >= hoy && x.r.H_ENTRADA && x.r.H_SALIDA)
+      .sort((a,b)=> a.f - b.f || (a.r.H_ENTRADA||'').localeCompare(b.r.H_ENTRADA||''));
+    if (!proximos.length) return '<span class="portal-next-empty">Sin próximos turnos cargados</span>';
+    const x = proximos[0];
+    const fecha = x.f.toLocaleDateString('es-AR', { weekday:'long', day:'2-digit', month:'2-digit' });
+    return `<span class="portal-next-date">${fecha}</span><strong>${normalizarLibreTxt(x.r.H_ENTRADA)} → ${normalizarLibreTxt(x.r.H_SALIDA)}</strong><small>${(parseFloat(x.r.TOTAL_HS)||0).toFixed(1)} hs</small>`;
   }
 
   function buildFilas(fs) {
     return fs.map(f => {
       if (f.esCert) return `
       <tr class="fila-certificado">
-        <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
+        <td>${f.fechaStr}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">—</td>
         <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
-        <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td></td><td></td>
+        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td>—</td>
+        <td></td>
+        <td></td>
       </tr>`;
       return `
       <tr class="${f.esSab?'fila-sabado':''} ${f.esDom?'fila-domingo':''} ${f.esFer?'fila-feriado':''}">
         <td>${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</td>
-        <td>${f.diaSem}</td><td class="hora-reg">${f.horaReg || '—'}</td>
-        <td class="turno-cell">${f.turno1}</td><td class="turno-cell">${f.turno2||'—'}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">${f.horaReg}</td>
+        <td class="turno-cell">${f.turno1}</td>
+        <td class="turno-cell">${f.turno2||'—'}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
         <td>${f.hsExtra>0?`<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>`:'—'}</td>
-        <td>${f.esSab?'<span class="check-sab">✓</span>':''}</td><td class="nota-cell">${f.nota||''}</td>
+        <td>${f.esSab?'<span class="check-sab">✓</span>':''}</td>
+        <td class="nota-cell">${f.nota||''}</td>
       </tr>`;
     }).join('');
   }
@@ -2885,129 +2919,214 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
   function buildCards(fs) {
     return fs.map(f => {
       if (f.esCert) return `
-        <div class="ev-card ev-card-cert">
-          <div class="ev-card-top"><div><span class="ev-card-dia-sem">${f.diaSem}</span><span class="ev-card-fecha-str">${f.fechaStr}</span></div><strong>${f.hsTotal.toFixed(1)} hs</strong></div>
-          <div class="ev-card-turnos"><span class="tag-cert">CERT</span><span class="ev-card-turno">${f.nota}</span></div>
+        <div class="ev-card" style="border-left:3px solid #2563eb;background:#eff6ff">
+          <div class="ev-card-top">
+            <div class="ev-card-fecha">
+              <span class="ev-card-dia-sem">${f.diaSem}</span>
+              <span class="ev-card-fecha-str">${f.fechaStr}</span>
+            </div>
+            <div class="ev-card-hs">
+              <span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span>
+            </div>
+          </div>
+          <div class="ev-card-turnos">
+            <span class="tag-cert">CERT</span>
+            <span class="ev-card-turno">${f.nota}</span>
+          </div>
         </div>`;
+      const clases = [f.esSab?'ev-card-sabado':'', f.esDom?'ev-card-domingo':'', f.esFer?'ev-card-feriado':''].filter(Boolean).join(' ');
+      const turno2html = f.turno2 && f.turno2 !== '—' ? `<span class="ev-card-turno">${f.turno2}</span>` : '';
+      const extraHtml  = f.hsExtra > 0 ? `<span class="ev-card-extra">+${f.hsExtra.toFixed(1)} extra</span>` : '';
+      const sabHtml    = f.esSab ? `<span class="ev-card-sab">Sáb ✓</span>` : '';
+      const notaHtml   = f.nota  ? `<div class="ev-card-nota">${f.nota}</div>` : '';
       return `
-        <div class="ev-card ${f.esSab?'ev-card-sabado':''} ${f.esDom?'ev-card-domingo':''} ${f.esFer?'ev-card-feriado':''}">
-          <div class="ev-card-top"><div class="ev-card-fecha"><span class="ev-card-dia-sem">${f.diaSem}</span><span class="ev-card-fecha-str">${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</span></div><div class="ev-card-hs"><span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span></div></div>
-          <div class="ev-card-turnos"><span class="ev-card-turno">${f.turno1}</span>${f.turno2?`<span class="ev-card-turno">${f.turno2}</span>`:''}${f.hsExtra>0?`<span class="ev-card-extra">+${f.hsExtra.toFixed(1)} extra</span>`:''}</div>
-          ${f.nota?`<div class="ev-card-nota">${f.nota}</div>`:''}
+        <div class="ev-card ${clases}">
+          <div class="ev-card-top">
+            <div class="ev-card-fecha">
+              <span class="ev-card-dia-sem">${f.diaSem}</span>
+              <span class="ev-card-fecha-str">${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</span>
+            </div>
+            <div class="ev-card-hs">
+              <span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span>
+              ${extraHtml}${sabHtml}
+            </div>
+          </div>
+          <div class="ev-card-turnos">
+            <span class="ev-card-turno">${f.turno1}</span>
+            ${turno2html}
+            ${f.horaReg ? `<span class="ev-card-hora-reg">Reg. ${f.horaReg}</span>` : ''}
+          </div>
+          ${notaHtml}
         </div>`;
     }).join('');
   }
 
-  const opcionesMes = ['<option value="TODOS">Todos los registros</option>']
-    .concat(periodos.map(p => `<option value="${p}" ${p===periodoActual?'selected':''}>${p}</option>`)).join('');
-
-  const avatarInner = perfil.foto_url
-    ? `<img src="${perfil.foto_url}" alt="${nomMostrar}" onerror="this.parentElement.innerHTML='${iniciales}'">`
-    : (numVend ? `<span>#${numVend}</span>` : `<span>${iniciales}</span>`);
-  const empresaBadge = perfil.empresa ? `<span class="portal-badge">${perfil.empresa}</span>` : '';
-  const catBadge = cat ? `<span class="portal-badge portal-badge-light">${cat.nombre}</span>` : '';
-
-  const proximoHtml = turnoDestacado ? `
-    <div class="portal-turno-date">${turnoDestacado.fechaObj >= hoy ? 'Próximo turno' : 'Último turno registrado'}</div>
-    <h2>${turnoDestacado.fechaObj.toDateString() === new Date().toDateString() ? 'Hoy' : fmtFechaLarga(turnoDestacado.fechaObj)}</h2>
-    <div class="portal-turno-horas"><span>${turnoDestacado.turno1.replace(' – ', '</span><b>→</b><span>')}</span></div>
-    ${turnoDestacado.turno2 ? `<div class="portal-turno-extra">Segundo turno: ${turnoDestacado.turno2}</div>` : ''}
-    <div class="portal-turno-total">◷ ${turnoDestacado.hsTotal.toFixed(1)} horas</div>` : `
-    <div class="portal-turno-date">Próximo turno</div><h2>Sin turno cargado</h2><p class="portal-muted">Todavía no hay horarios registrados.</p>`;
-
-  const semanaHtml = semanaDias.map(d => {
-    const label = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.fecha.getDay()];
-    const clase = d.hoy ? 'portal-day is-today' : 'portal-day';
-    const body = d.turnos.length ? `<div class="portal-day-time">${d.turnos.join('<small>+</small>')}</div><span class="portal-day-hs">${d.hs.toFixed(1)} hs</span>` : `<span class="portal-franco">Franco</span>`;
-    return `<div class="${clase}"><strong>${label}</strong><small>${d.fecha.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</small>${body}</div>`;
-  }).join('');
+  const empresaBadge = perfil.empresa
+    ? `<span class="emp-empresa-badge ${perfil.empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}">${perfil.empresa}</span>`
+    : '';
+  const catBadge = cat
+    ? `<span class="emp-cat-badge">${cat.nombre}</span>`
+    : '';
 
   document.getElementById('vistaEmpleadoContainer').innerHTML = `
-    <div class="portal-empleado" style="--portal-color:${suc.color};--portal-light:${suc.colorLight}">
-      <section class="portal-top-grid">
-        <article class="portal-profile-card">
-          <div class="portal-avatar-wrap">
-            <div class="portal-avatar ${perfil.foto_url?'has-photo':''}" id="empVistaAvatarDiv">${avatarInner}</div>
-            <button class="btn-cambiar-foto portal-photo-btn" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
-            <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none" onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
+    <div class="emp-vista-personal emp-portal-mobilefirst">
+
+      <!-- PORTAL EMPLEADO -->
+      <section class="portal-hero" style="--portal-color:${suc.color};--portal-soft:${suc.colorLight}">
+        <div class="portal-profile-card">
+          <div class="emp-vista-avatar-wrap">
+            <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
+                 id="empVistaAvatarDiv"
+                 style="${perfil.foto_url?'':'background:'+suc.colorLight}">
+              ${avatarInner}
+            </div>
+            <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
+            <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
+                   onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
           </div>
-          <h1>${nomMostrar}</h1>
-          <div class="portal-suc-chip">${suc.nombre}</div>
-          <div class="portal-badges">${empresaBadge}${catBadge}</div>
-          <button class="portal-profile-btn" onclick="abrirMiPerfil()">Ver mi perfil</button>
-        </article>
-
-        <article class="portal-next-card">
-          <div class="portal-card-head"><span>📅</span><strong>Mi jornada</strong><button onclick="imprimirVistaEmpleado()">Imprimir</button></div>
-          ${proximoHtml}
-        </article>
-      </section>
-
-      <section class="portal-summary-card">
-        <div class="portal-section-title">Mi resumen del período</div>
-        <div class="portal-summary-grid">
-          <div class="portal-mini-stat blue"><span id="evHoras">${totalHoras.toFixed(1)}</span><small>Horas trabajadas</small></div>
-          <div class="portal-mini-stat green"><span id="evExtra">${totalHsExtra.toFixed(1)}</span><small>Horas extra</small></div>
-          <div class="portal-mini-stat orange"><span id="evSabs">${totalSabs}</span><small>Sábados</small></div>
-          <div class="portal-mini-stat violet"><span id="evCerts">${totalCerts}</span><small>Certificados</small></div>
-        </div>
-      </section>
-
-      <section class="portal-two-cols">
-        <article class="portal-panel">
-          <div class="portal-card-head"><span>🏖</span><strong>Vacaciones</strong><button onclick="document.querySelector('.portal-tab-vac').click()">Ver</button></div>
-          <div id="evTabVacaciones" class="portal-vac-box"><p class="portal-muted">Cargando vacaciones...</p></div>
-        </article>
-        <article class="portal-panel">
-          <div class="portal-card-head"><span>🔔</span><strong>Avisos y acciones</strong></div>
-          <div class="portal-actions-grid portal-actions-grid-simple">
-            <button onclick="document.querySelector('.portal-tab-vac').click()">🏖 Solicitar vacaciones</button>
+          <div class="portal-profile-info">
+            <span class="portal-kicker">Portal empleado</span>
+            <h1>Hola ${primerNombre} 👋</h1>
+            <p>${suc.nombre}</p>
+            <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
           </div>
-          <div class="portal-notice">Los avisos de vacaciones se muestran según lo cargado en el sistema.</div>
-        </article>
+        </div>
+
+        <div class="portal-next-card">
+          <span class="portal-kicker">Próximo turno</span>
+          ${getProximoTurno()}
+        </div>
       </section>
 
-      <section class="portal-week-card">
-        <div class="portal-card-head"><span>📆</span><strong>Mis horarios de la semana</strong></div>
-        <div class="portal-week-grid">${semanaHtml}</div>
+      <section class="portal-summary-grid">
+        <div class="portal-summary-card">
+          <span>Días</span>
+          <strong id="evDias">${diasUnicos}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Hs totales</span>
+          <strong id="evHoras">${totalHoras.toFixed(1)}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Hs extra</span>
+          <strong id="evExtra">${totalHsExtra.toFixed(1)}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Sábados</span>
+          <strong id="evSabs">${totalSabs}</strong>
+        </div>
       </section>
 
-      <section class="portal-panel portal-detail-panel">
-        <div class="portal-detail-head">
-          <div class="portal-section-title">Detalle de jornada</div>
-          <div class="portal-period-select"><label>Período</label><select id="evSelectMes" class="filter-select">${opcionesMes}</select></div>
-        </div>
-        <div class="detalle-tabs portal-tabs">
-          <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Jornada</button>
-          <button class="detalle-tab portal-tab-vac" onclick="switchEvTab('vacaciones',this)">Vacaciones</button>
-        </div>
-        <div id="evTabJornada">
-          <div class="detalle-tabla-wrap ev-tabla-desktop" id="evTablaWrap">
-            <table class="detalle-tabla">
-              <thead><tr><th>Fecha</th><th>Día</th><th>Hora reg.</th><th>Turno 1</th><th>Turno 2</th><th>Hs total</th><th>Hs extra</th><th>Sáb.</th><th>Nota</th></tr></thead>
-              <tbody id="evTbody">${buildFilas(filas)}</tbody>
-              <tfoot id="evTfoot"><tr><td colspan="2"><strong>TOTALES</strong></td><td><strong id="evDias">${diasUnicos}</strong></td><td colspan="2"></td><td><strong>${totalHoras.toFixed(1)}</strong></td><td>${totalHsExtra>0?`<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>`:'—'}</td><td><strong>${totalSabs}</strong></td><td></td></tr></tfoot>
-            </table>
+      <section class="portal-section portal-week-section">
+        <div class="portal-section-head">
+          <div>
+            <span class="portal-kicker">Semana actual</span>
+            <h2>Mi semana</h2>
           </div>
-          <div class="ev-cards-mobile" id="evCardsWrap">${buildCards(filas)}<div class="ev-card-totales"><span>${diasUnicos} días</span><span>${totalHoras.toFixed(1)} hs totales</span><span>${totalSabs} sábados</span></div></div>
+        </div>
+        <div class="portal-week-grid">
+          ${buildSemanaEmpleado()}
         </div>
       </section>
+
+      <!-- TABS EMPLEADO -->
+      <div class="detalle-tabs" style="margin:0 0 0 0;border-bottom:1px solid var(--gray-100)">
+        <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Historial</button>
+        <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">🏖 Vacaciones</button>
+      </div>
+
+      <!-- CONTENIDO JORNADA -->
+      <div id="evTabJornada">
+      <!-- SELECTOR DE PERÍODO -->
+      <div class="emp-vista-toolbar">
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:13px;color:#64748b;font-weight:500">Período:</label>
+          <select id="evSelectMes" class="filter-select" style="font-size:13px">
+            ${opcionesMes}
+          </select>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-detalle-accion" onclick="imprimirVistaEmpleado()" title="Imprimir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Imprimir
+          </button>
+        </div>
+      </div>
+
+      <!-- TABLA (desktop) / CARDS (mobile) -->
+      <div class="detalle-tabla-wrap ev-tabla-desktop" id="evTablaWrap">
+        <table class="detalle-tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Día</th><th>Hora reg.</th>
+              <th>Turno 1</th><th>Turno 2</th>
+              <th>Hs total</th><th>Hs extra</th><th>Sáb.</th><th>Nota</th>
+            </tr>
+          </thead>
+          <tbody id="evTbody">${buildFilas(filas)}</tbody>
+          <tfoot id="evTfoot">
+            <tr>
+              <td colspan="2"><strong>TOTALES</strong></td>
+              <td><strong>${diasUnicos}</strong></td>
+              <td colspan="2"></td>
+              <td><strong>${totalHoras.toFixed(1)}</strong></td>
+              <td>${totalHsExtra>0?`<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>`:'—'}</td>
+              <td><strong>${totalSabs}</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="ev-cards-mobile" id="evCardsWrap">
+        ${buildCards(filas)}
+        <div class="ev-card-totales">
+          <span>${diasUnicos} días</span>
+          <span>${totalHoras.toFixed(1)} hs totales</span>
+          ${totalHsExtra>0?`<span class="ev-card-extra">+${totalHsExtra.toFixed(1)} extra</span>`:''}
+          <span>${totalSabs} sábados</span>
+        </div>
+      </div>
+      </div><!-- fin evTabJornada -->
+
+      <!-- CONTENIDO VACACIONES EMPLEADO -->
+      <div id="evTabVacaciones" style="display:none;padding:1.5rem">
+        <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+      </div>
+
     </div>
   `;
 
+  // Evento cambio de período
   document.getElementById('evSelectMes').addEventListener('change', function() {
     const p = this.value;
     const t = calcTotales(p);
+    document.getElementById('evDias').textContent  = t.diasUnicos;
     document.getElementById('evHoras').textContent = t.totalHoras.toFixed(1);
     document.getElementById('evExtra').textContent = t.totalHsExtra.toFixed(1);
     document.getElementById('evSabs').textContent  = t.totalSabs;
-    document.getElementById('evCerts').textContent = t.totalCerts;
     document.getElementById('evTbody').innerHTML   = buildFilas(t.filas);
+    // Actualizar cards mobile
     const cardsWrap = document.getElementById('evCardsWrap');
-    if (cardsWrap) cardsWrap.innerHTML = buildCards(t.filas) + `<div class="ev-card-totales"><span>${t.diasUnicos} días</span><span>${t.totalHoras.toFixed(1)} hs totales</span><span>${t.totalSabs} sábados</span></div>`;
-    document.getElementById('evTfoot').innerHTML = `<tr><td colspan="2"><strong>TOTALES</strong></td><td><strong id="evDias">${t.diasUnicos}</strong></td><td colspan="2"></td><td><strong>${t.totalHoras.toFixed(1)}</strong></td><td>${t.totalHsExtra>0?`<span class="hs-extra">${t.totalHsExtra.toFixed(1)}</span>`:'—'}</td><td><strong>${t.totalSabs}</strong></td><td></td></tr>`;
+    if (cardsWrap) cardsWrap.innerHTML = buildCards(t.filas) + `
+      <div class="ev-card-totales">
+        <span>${t.diasUnicos} días</span>
+        <span>${t.totalHoras.toFixed(1)} hs totales</span>
+        ${t.totalHsExtra>0?`<span class="ev-card-extra">+${t.totalHsExtra.toFixed(1)} extra</span>`:''}
+        <span>${t.totalSabs} sábados</span>
+      </div>`;
+    document.getElementById('evTfoot').innerHTML   = `
+      <tr>
+        <td colspan="2"><strong>TOTALES</strong></td>
+        <td><strong>${t.diasUnicos}</strong></td>
+        <td colspan="2"></td>
+        <td><strong>${t.totalHoras.toFixed(1)}</strong></td>
+        <td>${t.totalHsExtra>0?`<span class="hs-extra">${t.totalHsExtra.toFixed(1)}</span>`:'—'}</td>
+        <td><strong>${t.totalSabs}</strong></td>
+        <td></td>
+      </tr>`;
   });
 
+  // Cargar vacaciones del empleado en background
   cargarVacacionesEmpleado(nombreEmp);
 }
 
