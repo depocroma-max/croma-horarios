@@ -2310,3 +2310,7 @@ body {
   .portal-period-select { justify-content: space-between; }
   .portal-period-select select { flex: 1; }
 }
+
+/* Ajuste portal empleado: acciones reducidas */
+.portal-actions-grid-simple { grid-template-columns: 1fr; }
+.portal-actions-grid-simple button { justify-content: center; min-height: 48px; }

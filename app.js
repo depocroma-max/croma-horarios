@@ -2960,12 +2960,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </article>
         <article class="portal-panel">
           <div class="portal-card-head"><span>🔔</span><strong>Avisos y acciones</strong></div>
-          <div class="portal-actions-grid">
-            <button onclick="abrirFormCertificado('${nombreEmp.replace(/'/g,"\\'")}')">📄 Solicitar certificado</button>
+          <div class="portal-actions-grid portal-actions-grid-simple">
             <button onclick="document.querySelector('.portal-tab-vac').click()">🏖 Solicitar vacaciones</button>
-            <button onclick="abrirMiPerfil()">👤 Mi perfil</button>
           </div>
-          <div class="portal-notice">Los avisos de vacaciones y certificados se muestran según lo cargado en el sistema.</div>
+          <div class="portal-notice">Los avisos de vacaciones se muestran según lo cargado en el sistema.</div>
         </article>
       </section>
 
