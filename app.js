@@ -5627,16 +5627,21 @@ async function eliminarAnuncioAdmin(id) {
 }
 
 // ── EMPLEADO: verificar y mostrar anuncios nuevos ─────
+var _anunciosTodosCache = [];  // cache para refrescar la seccion al cerrar banner
+var _anunciosEmpActual  = '';
+
 async function verificarAnunciosEmpleado(nombreEmp) {
   try {
     const resp = await fetch(anunciosApiUrl('get_anuncios', { empleado: nombreEmp }));
     const json = await resp.json();
     if (!json.ok) return;
     const todos = json.anuncios || [];
+    _anunciosTodosCache = todos;
+    _anunciosEmpActual  = nombreEmp;
+    // Siempre poblar la seccion historial (con o sin no leidos)
+    renderAnunciosSeccion(todos, nombreEmp);
+    // Banner solo para los no leidos
     const nuevos = todos.filter(a => !_anunciosLeidosEmp.has(a.id));
-    // Siempre poblar la sección historial
-    if (todos.length) renderAnunciosSeccion(todos, nombreEmp);
-    // Banner solo para los no leídos
     if (nuevos.length) mostrarBannerAnuncios(nuevos, nombreEmp);
     actualizarBadgeAnunciosEmp(todos);
   } catch(e) {}
@@ -5721,16 +5726,20 @@ function mostrarBannerAnuncios(anuncios, nombreEmp) {
 function marcarAnuncioLeido(id, idx, empEnc) {
   _anunciosLeidosEmp.add(id);
   localStorage.setItem('croma_anuncios_leidos', JSON.stringify([..._anunciosLeidosEmp]));
-  const card = document.getElementById(`anuncioBanner${idx}`);
+  // Animar y remover el banner
+  const card = document.getElementById('anuncioBanner' + idx);
   if (card) {
     card.style.opacity = '0';
     card.style.transform = 'translateY(-8px)';
-    setTimeout(() => {
+    setTimeout(function() {
       card.remove();
-      // Si no quedan cards, quitar el wrap
       const wrap = document.getElementById('anunciosBannerWrap');
       if (wrap && !wrap.querySelector('.anuncio-banner-card')) wrap.remove();
     }, 250);
+  }
+  // Refrescar la seccion historial para que el item pase a gris
+  if (_anunciosTodosCache.length) {
+    renderAnunciosSeccion(_anunciosTodosCache, _anunciosEmpActual);
   }
 }
 
