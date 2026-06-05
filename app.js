@@ -751,12 +751,15 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       // Aplicar filtro de día
       if (diaFiltrado(fecha)) return null;
 
-      let horaReg = '';
+      let horaReg = '', horaReg2 = '';
       if (r0.MARCA_TEMPORAL) {
         try {
           const mt = new Date(r0.MARCA_TEMPORAL);
           horaReg = mt.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
         } catch(e) {}
+      }
+      if (regs[1]?.MARCA_TEMPORAL) {
+        try { horaReg2 = new Date(regs[1].MARCA_TEMPORAL).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }); } catch(e) {}
       }
 
       const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '—';
@@ -769,7 +772,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         return s ? s.nombre : r.LOCAL;
       }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
-      return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr,
+      return { fechaStr, diaSem, horaReg, horaReg2, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr,
                fechaISO: `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-${String(fecha.getDate()).padStart(2,'0')}` };
     }).filter(Boolean);
 
@@ -852,7 +855,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-sab="${f.esSab?1:0}" data-cert="0">
         <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
-        <td class="hora-reg">${f.horaReg}</td>
+        <td class="hora-reg">${f.horaReg||'—'}${f.horaReg2 ? `<br><span class="hora-reg-2">${f.horaReg2}</span>` : ''}</td>
         <td class="turno-cell">${f.turno1}</td>
         <td class="turno-cell">${f.turno2 || '—'}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
@@ -2895,9 +2898,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       const hsTotal = rrs.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
       const hsExtra = calcularHsExtra(nombreEmp, hsTotal, fecha);
       const nota    = rrs.map(r=>r.NOTA).filter(Boolean).join(' / ');
-      let horaReg = '';
+      let horaReg = '', horaReg2 = '';
       try { if (r0.MARCA_TEMPORAL) horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
-      return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, horaReg };
+      try { if (rrs[1]?.MARCA_TEMPORAL) horaReg2 = new Date(rrs[1].MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
+      return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, horaReg, horaReg2 };
     }).sort((a,b) => {
       // ordenar más viejo primero
       const da = a.fechaStr.split('/').reverse().join('-');
@@ -3014,7 +3018,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <tr class="${f.esSab?'fila-sabado':''} ${f.esDom?'fila-domingo':''} ${f.esFer?'fila-feriado':''}">
         <td>${f.fechaStr}${f.esFer?' <span class="tag-feriado">F</span>':''}</td>
         <td>${f.diaSem}</td>
-        <td class="hora-reg">${f.horaReg}</td>
+        <td class="hora-reg">${f.horaReg||'—'}${f.horaReg2 ? `<br><span class="hora-reg-2">${f.horaReg2}</span>` : ''}</td>
         <td class="turno-cell">${f.turno1}</td>
         <td class="turno-cell">${f.turno2||'—'}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
@@ -3063,7 +3067,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <div class="ev-card-turnos">
             <span class="ev-card-turno">${f.turno1}</span>
             ${turno2html}
-            ${f.horaReg ? `<span class="ev-card-hora-reg">Reg. ${f.horaReg}</span>` : ''}
+            ${f.horaReg ? `<span class="ev-card-hora-reg">Reg. ${f.horaReg}${f.horaReg2 ? ` / ${f.horaReg2}` : ''}</span>` : ''}
           </div>
           ${notaHtml}
         </div>`;
