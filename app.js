@@ -2521,6 +2521,9 @@ function mostrarLoginApp() {
     document.body.appendChild(loginEl);
   }
 
+  // Leer usuario recordado (solo el nombre, nunca el PIN)
+  const usuarioRecordado = localStorage.getItem('croma_remember_user') || '';
+
   loginEl.style.display = 'flex';
   loginEl.innerHTML = `
     <div class="login-card">
@@ -2535,6 +2538,7 @@ function mostrarLoginApp() {
           <label class="login-label" for="loginUsuario">Usuario</label>
           <input type="text" id="loginUsuario" class="login-input"
             placeholder="Tu nombre de usuario"
+            value="${usuarioRecordado}"
             autocomplete="off" autocapitalize="off" spellcheck="false"
             onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()" />
         </div>
@@ -2553,6 +2557,11 @@ function mostrarLoginApp() {
           </div>
         </div>
 
+        <label class="login-remember-wrap">
+          <input type="checkbox" id="loginRecordar" ${usuarioRecordado ? 'checked' : ''} />
+          <span>Recordar este dispositivo</span>
+        </label>
+
         <p id="loginError" style="color:#dc2626;font-size:12px;margin:0;display:none;text-align:center">
           Usuario o PIN incorrecto
         </p>
@@ -2566,7 +2575,14 @@ function mostrarLoginApp() {
     </div>
   `;
 
-  setTimeout(() => document.getElementById('loginUsuario')?.focus(), 100);
+  // Si hay usuario recordado, ir directo al PIN; si no, al usuario
+  setTimeout(() => {
+    if (usuarioRecordado) {
+      document.getElementById('loginPin')?.focus();
+    } else {
+      document.getElementById('loginUsuario')?.focus();
+    }
+  }, 100);
 }
 
 function togglePinVisibility() {
@@ -2599,6 +2615,22 @@ async function intentarLogin() {
   if (resultado.ok) {
     sesionActual = resultado.usuario;
     errEl.style.display = 'none';
+
+    // Manejar "Recordar este dispositivo"
+    const recordar = document.getElementById('loginRecordar')?.checked;
+    if (recordar) {
+      // Guardar usuario y sesión serializada (sin PIN) en localStorage
+      localStorage.setItem('croma_remember_user', usuario.trim());
+      localStorage.setItem('croma_session', JSON.stringify({
+        usuario: resultado.usuario,
+        ts: Date.now()
+      }));
+    } else {
+      // Si desmarcó, borrar cualquier sesión guardada anterior
+      localStorage.removeItem('croma_remember_user');
+      localStorage.removeItem('croma_session');
+    }
+
     document.getElementById('loginScreen').style.display = 'none';
     // Iniciar la app según el rol
     iniciarAppConSesion();
@@ -2618,6 +2650,9 @@ function cerrarSesion() {
   sesionActual = null;
   adminAutenticado = false;
   sessionStorage.removeItem('croma_admin_auth');
+  // Limpiar sesión persistida (el usuario tendrá que volver a ingresar PIN)
+  // pero mantenemos el nombre guardado para pre-rellenarlo
+  localStorage.removeItem('croma_session');
   mostrarLoginApp();
 }
 
@@ -4036,8 +4071,27 @@ function cerrarAdmin(event) {
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // Arrancar con pantalla de login
-  mostrarLoginApp();
+  // Verificar si hay sesión persistida (dispositivo de confianza)
+  const sesionGuardada = localStorage.getItem('croma_session');
+  if (sesionGuardada) {
+    try {
+      const { usuario } = JSON.parse(sesionGuardada);
+      if (usuario && usuario.nombre && usuario.rol) {
+        // Sesión válida → entrar directo sin pedir PIN
+        sesionActual = usuario;
+        iniciarAppConSesion();
+      } else {
+        localStorage.removeItem('croma_session');
+        mostrarLoginApp();
+      }
+    } catch (e) {
+      localStorage.removeItem('croma_session');
+      mostrarLoginApp();
+    }
+  } else {
+    // Sin sesión guardada → mostrar login normal
+    mostrarLoginApp();
+  }
 
   // Semana
   document.getElementById('weekRange').textContent = getWeekRange(0);

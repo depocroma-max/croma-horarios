@@ -1372,6 +1372,20 @@ body {
   font-size: 10px; color: #2a2a2a; letter-spacing: 2px;
   text-transform: uppercase; text-align: center;
 }
+.login-remember-wrap {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; user-select: none;
+  font-size: 11px; color: #666; letter-spacing: 0.3px;
+  margin-top: -2px;
+}
+.login-remember-wrap input[type="checkbox"] {
+  width: 15px; height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.login-remember-wrap:hover { color: #999; }
 
 /* ===== CHIP DE SESIÓN ===== */
 .sesion-chip {
