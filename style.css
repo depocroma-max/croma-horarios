@@ -2890,17 +2890,24 @@ body {
 .portal-anuncios-section {
   margin-bottom: 0;
 }
+#anunciosSectionWrap {
+  margin-bottom: 14px;
+}
 .anuncio-seccion-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px; height: 20px;
+  min-width: 16px; height: 16px;
   background: #2563eb;
   color: #fff;
   border-radius: 20px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 0 5px;
+  padding: 0 4px;
+  vertical-align: middle;
+  margin-left: 4px;
+  position: relative;
+  top: -1px;
 }
 .anuncio-hist-item {
   border-radius: 12px;

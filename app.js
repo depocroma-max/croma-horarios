@@ -3170,11 +3170,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- SECCIÓN ANUNCIOS (historial) -->
       <div id="anunciosSectionWrap" style="display:none">
         <section class="portal-section portal-anuncios-section">
-          <div class="portal-section-head" style="margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="portal-kicker">Novedades</span>
-              <h2 style="margin:0">Anuncios</h2>
-              <span class="anuncio-seccion-badge" id="anunciosBadgeCount"></span>
+          <div class="portal-section-head">
+            <div>
+              <span class="portal-kicker">Novedades <span class="anuncio-seccion-badge" id="anunciosBadgeCount" style="display:none"></span></span>
+              <h2>Anuncios</h2>
             </div>
           </div>
           <div id="anunciosSectionList"></div>
@@ -5655,7 +5654,7 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
 
   const noLeidos = anuncios.filter(a => !_anunciosLeidosEmp.has(a.id));
   if (badge) {
-    badge.textContent = noLeidos.length ? noLeidos.length : '';
+    badge.textContent = noLeidos.length || '';
     badge.style.display = noLeidos.length ? 'inline-flex' : 'none';
   }
 
