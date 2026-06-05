@@ -2966,3 +2966,49 @@ body {
 @media (max-width: 700px) {
   .anuncio-hist-item { padding: 10px 12px; }
 }
+
+/* ── EVENTOS DEL CALENDARIO ─────────────────────────── */
+.cal-vac-evento {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #ede9fe;
+  border-left: 3px solid #7c3aed;
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  transition: background .15s;
+}
+.cal-vac-evento:hover { background: #ddd6fe; }
+
+/* ── EVENTOS EN MI SEMANA DEL EMPLEADO ──────────────── */
+.evento-semana-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: #ede9fe;
+  border-left: 3px solid #7c3aed;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 8px;
+}
+.evento-semana-icono {
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.evento-semana-titulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+  line-height: 1.3;
+}
+.evento-semana-desc {
+  font-size: 11px;
+  color: #7c3aed;
+  margin-top: 2px;
+  opacity: .8;
+  line-height: 1.3;
+}

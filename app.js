@@ -2073,13 +2073,13 @@ function setView(view) {
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);
     renderAdminInline();
-  } else if (view === 'vacaciones') {
+  } else if (view === 'calendario') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);
-    renderVacacionesView();
+    renderCalendarioView();
   } else {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
@@ -2662,9 +2662,9 @@ function iniciarAppConSesion() {
     adminAutenticado = true;
     sessionStorage.setItem('croma_admin_auth', '1');
     document.getElementById('navBtnAdmin').style.display       = '';
-    document.getElementById('navBtnVacaciones').style.display  = '';
+    document.getElementById('navBtnCalendario').style.display  = '';
     document.getElementById('drawerNavAdmin').style.display    = '';
-    document.getElementById('drawerNavVacaciones').style.display = '';
+    document.getElementById('drawerNavCalendario').style.display = '';
     document.getElementById('bellWrap').style.display       = 'flex';
     document.getElementById('bellWrapEmp').style.display    = 'none';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
@@ -2856,8 +2856,9 @@ function mostrarVistaEmpleado() {
     document.getElementById('mainApp').innerHTML = '<div id="vistaEmpleadoContainer" style="padding:1rem"></div>';
   }
   renderVistaEmpleado(nombreEmp, sucId, misRegistros);
-  // Verificar anuncios nuevos (sin bloquear)
+  // Verificar anuncios y eventos nuevos (sin bloquear)
   setTimeout(() => verificarAnunciosEmpleado(nombreEmp), 1200);
+  setTimeout(() => cargarEventosEmpleado(nombreEmp), 1400);
 }
 
 function mostrarVistaEmpleadoSinDatos(nombreEmp) {
@@ -3747,7 +3748,6 @@ function renderAdminInline() {
       "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\" >Empleados (" + empNombres.length + ")</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\" >Categorías</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\" >Usuarios</button>" +
-      "<button class='admin-tab' id='adminTabAnunciosBtn' onclick=\"switchAdminTab('anuncios',this)\" >Anuncios</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\" >Configuración</button>" +
     "</div>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
@@ -3772,13 +3772,6 @@ function renderAdminInline() {
       "</div>" +
     "</div>" +
     renderAdminUsuarios() +
-    "<div id='adminTabAnuncios' class='admin-tab-content' style='display:none'>" +
-      "<div class='admin-toolbar'>" +
-        "<span style='font-size:12px;color:#94a3b8'>Enviá mensajes a tus empleados — aparecen en su pantalla con sonido</span>" +
-        "<button class='btn-connect' style='width:auto;padding:8px 16px;font-size:13px;margin:0' onclick='abrirNuevoAnuncio()'>+ Nuevo anuncio</button>" +
-      "</div>" +
-      "<div id='adminAnunciosList'><div style='padding:2rem;text-align:center;color:#94a3b8;font-size:13px'>Cargando...</div></div>" +
-    "</div>" +
     "<div id='adminTabConfiguracion' class='admin-tab-content' style='display:none'>" +
       "<div style='padding:1.5rem;max-width:500px'>" +
         "<h3 style='font-size:14px;font-weight:600;margin-bottom:1.5rem;color:#1e293b'>Configuración general</h3>" +
@@ -3810,11 +3803,9 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabEmpleados').style.display    = tab === 'empleados'     ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
   document.getElementById('adminTabUsuarios').style.display     = tab === 'usuarios'      ? 'block' : 'none';
-  document.getElementById('adminTabAnuncios').style.display     = tab === 'anuncios'      ? 'block' : 'none';
   document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
   if (tab === 'usuarios')      cargarUsuarios().then(() => { const t = document.getElementById('adminTabUsuarios'); if(t) t.innerHTML = renderAdminUsuariosInner(); });
   if (tab === 'configuracion') cargarConfigAdmin();
-  if (tab === 'anuncios')      cargarListaAnuncios();
 }
 
 function filtrarTablaAdmin(q) {
@@ -4792,8 +4783,8 @@ async function responderSolicitudAdmin(id, estado, nota) {
     showToast(estado === 'aprobada' ? '✓ Solicitud aprobada' : '✗ Solicitud rechazada');
     // Recargar según contexto
     _vacSolicitudesCache = null; // invalidar cache
-    const vacView = document.getElementById('viewVacaciones');
-    if (vacView && vacView.classList.contains('active')) renderVacacionesView();
+    const vacView = document.getElementById('viewCalendario');
+    if (vacView && vacView.classList.contains('active')) renderCalendarioView();
     // Si hay vacAdminContent_inner visible, recargar también
     const inner = document.getElementById('vacAdminContent_inner');
     if (inner) {
@@ -4955,7 +4946,7 @@ function toggleBellDropdown() {
           '<div style="flex:1">' +
             '<strong>' + nom + '</strong>' +
             '<div style="font-size:11px;color:#64748b">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' · ' + s.dias + ' días</div>' +
-            '<button class="bell-dd-cal-btn" onclick="_calVacMes=' + mesIdx + ';_calVacAnio=' + anioSol + ';setView(\'vacaciones\');document.getElementById(\'bellDropdown\')?.remove()">📅 Ver en calendario</button>' +
+            '<button class="bell-dd-cal-btn" onclick="_calVacMes=' + mesIdx + ';_calVacAnio=' + anioSol + ';setView(\'calendario\');document.getElementById(\'bellDropdown\')?.remove()">📅 Ver en calendario</button>' +
           '</div>' +
           '<div style="display:flex;flex-direction:column;gap:3px">' +
             '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7;font-size:11px" ' +
@@ -4966,8 +4957,8 @@ function toggleBellDropdown() {
         '</div>';
       }).join('');
       dd.innerHTML = '<div class="bell-dd-title">Solicitudes pendientes</div>' + rows +
-        '<div class="bell-dd-more" onclick="setView(\'vacaciones\');document.getElementById(\'bellDropdown\')?.remove()">' +
-          (sols.length > 5 ? 'Ver todas (' + sols.length + ') →' : 'Ir a Vacaciones →') +
+        '<div class="bell-dd-more" onclick="setView(\'calendario\');document.getElementById(\'bellDropdown\')?.remove()">' +
+          (sols.length > 5 ? 'Ver todas (' + sols.length + ') →' : 'Ir a Calendario →') +
         '</div>';
     }).catch(function() { dd.innerHTML = '<div class="bell-dd-empty">Error al cargar</div>'; });
   setTimeout(function() {
@@ -5060,16 +5051,20 @@ async function cargarCalendarioVacaciones() {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
   }
   try {
-    const todas = await fetchSolicitudesCache(false);
+    const [todas, eventos] = await Promise.all([
+      fetchSolicitudesCache(false),
+      cargarEventos(false)
+    ]);
     renderCalendarioVacaciones(container, todas.filter(function(s) {
       return s.estado === 'aprobada' || s.estado === 'pendiente';
-    }));
+    }), eventos);
   } catch(e) {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
   }
 }
 
-function renderCalendarioVacaciones(container, solicitudes) {
+function renderCalendarioVacaciones(container, solicitudes, eventos) {
+  eventos = eventos || [];
   // Selectores de mes y año
   const aniosDisponibles = [2024, 2025, 2026, 2027];
   const mesOpts = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -5127,13 +5122,20 @@ function renderCalendarioVacaciones(container, solicitudes) {
       return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
         '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' ·' : '') + '</span></div>';
     }).join('');
+    const eventosDelDia = eventos.filter(function(ev) { return ev.fecha === isoFecha; });
+    const eventosRows = eventosDelDia.map(function(ev) {
+      return '<div class="cal-vac-evento" title="' + (ev.descripcion || '') + '" onclick="eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
+        '<span style="font-size:9px">📌</span>' +
+        '<span style="font-size:9px;font-weight:600;color:#7c3aed;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ev.titulo + '</span>' +
+      '</div>';
+    }).join('');
     celdasHTML += '<div class="cal-vac-cell' +
       (esHoy     ? ' cal-vac-hoy'      : '') +
       (esFinde   ? ' cal-vac-finde'    : '') +
       (esFer     ? ' cal-vac-feriado'  : '') +
       (conflicto ? ' cal-vac-conflicto': '') + '">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
-      empRows + '</div>';
+      empRows + eventosRows + '</div>';
   }
 
   // Tabla solicitudes del mes
@@ -5189,10 +5191,12 @@ function renderCalendarioVacaciones(container, solicitudes) {
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
       '<select class="filter-select" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
-      '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;margin-left:auto;flex-wrap:wrap">' +
+      '<button class="btn-connect" style="width:auto;padding:6px 14px;font-size:12px;margin:0;margin-left:auto" onclick="abrirNuevoEvento()">＋ Nuevo evento</button>' +
+      '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;flex-wrap:wrap">' +
         '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#d1fae5;border-left:3px solid #059669;display:inline-block"></span>Aprobada</span>' +
         '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fef9c3;border-left:3px solid #f59e0b;display:inline-block"></span>Pendiente</span>' +
         '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fef3c7;display:inline-block"></span>Feriado</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;color:#7c3aed;font-weight:600">📌 Evento</span>' +
         '<span style="display:inline-flex;align-items:center;gap:4px;color:#f59e0b;font-weight:600">!! Conflicto</span>' +
       '</div>' +
     '</div>' +
@@ -5218,8 +5222,245 @@ function cambiarMesCalVac(delta) {
 
 
 // ══════════════════════════════════════════════════════
-//  VISTA VACACIONES (nav principal)
+//  EVENTOS DEL CALENDARIO — Sistema completo
 // ══════════════════════════════════════════════════════
+
+var _eventosCache = null;
+
+function eventosApiUrl(accion, params) {
+  let url = APPS_SCRIPT_URL + '?accion=' + accion;
+  if (params) Object.entries(params).forEach(function([k,v]) {
+    if (v !== undefined && v !== null) url += '&' + k + '=' + encodeURIComponent(v);
+  });
+  return url;
+}
+
+async function cargarEventos(force) {
+  if (!force && _eventosCache !== null) return _eventosCache;
+  try {
+    const resp = await fetch(eventosApiUrl('get_eventos'));
+    const json = await resp.json();
+    _eventosCache = json.ok ? (json.eventos || []) : [];
+  } catch(e) {
+    if (_eventosCache === null) _eventosCache = [];
+  }
+  return _eventosCache;
+}
+
+// ── Modal nuevo evento ─────────────────────────────────
+function abrirNuevoEvento(fechaPreset) {
+  const usuarios = getUsuarios().filter(function(u) { return u.rol === 'empleado' && u.empleadoNombre; });
+  const hoy = new Date().toISOString().substring(0,10);
+  const fechaVal = fechaPreset || hoy;
+
+  const sucOpts = SUCURSALES.map(function(s) {
+    return '<option value="suc_' + s.id + '">' + s.nombre + '</option>';
+  }).join('');
+
+  const empOpts = usuarios.map(function(u) {
+    const nom = u.empleadoNombre.replace(/^\d+\s+/,'');
+    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;cursor:pointer">' +
+      '<input type="checkbox" class="evento-dest-cb" value="' + u.empleadoNombre + '" style="width:16px;height:16px;accent-color:#7c3aed" />' +
+      '<span style="font-size:13px;color:#374151">' + nom + '</span>' +
+    '</label>';
+  }).join('');
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Nuevo evento</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+      </div>
+      <div class="admin-form" style="gap:14px">
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Título del evento *</label>
+          <input type="text" class="admin-input" id="eventoTitulo" placeholder="Ej: Reunión de personal, Capacitación..." maxlength="80" />
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Fecha *</label>
+          <input type="date" class="admin-input" id="eventoFecha" value="${fechaVal}" />
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Descripción (opcional)</label>
+          <textarea class="admin-input" id="eventoDesc" rows="3" placeholder="Detalles del evento..." style="resize:vertical;font-family:inherit;font-size:13px"></textarea>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">¿Quién puede verlo?</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
+            <input type="radio" name="eventoDestTipo" id="eventoDestTodos" value="todos" checked onchange="toggleEventoDest(this.value)" style="accent-color:#7c3aed" />
+            <span style="font-size:13px;color:#374151">Todos los empleados</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
+            <input type="radio" name="eventoDestTipo" id="eventoDestSucursal" value="sucursal" onchange="toggleEventoDest(this.value)" style="accent-color:#7c3aed" />
+            <span style="font-size:13px;color:#374151">Sucursal específica</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="radio" name="eventoDestTipo" id="eventoDestEspecifico" value="especifico" onchange="toggleEventoDest(this.value)" style="accent-color:#7c3aed" />
+            <span style="font-size:13px;color:#374151">Empleados específicos</span>
+          </label>
+
+          <div id="eventoDestSucursalWrap" style="display:none;margin-top:10px">
+            <select class="admin-input" id="eventoDestSucursalSel">
+              ${sucOpts}
+            </select>
+          </div>
+          <div id="eventoDestEspWrap" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px">
+            ${empOpts || '<p style="font-size:12px;color:#94a3b8;padding:8px 0">No hay empleados con usuario configurado</p>'}
+          </div>
+        </div>
+
+        <div class="admin-form-grupo" style="background:#f8fafc;border-radius:10px;padding:12px;border:1px solid #e2e8f0">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="eventoConAnuncio" style="width:16px;height:16px;accent-color:#7c3aed" onchange="toggleEventoAnuncio(this.checked)" />
+            <span style="font-size:13px;font-weight:500;color:#374151">📣 Enviar también como anuncio</span>
+          </label>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">El evento aparecerá en el calendario Y como notificación al empleado</span>
+          <div id="eventoAnuncioWrap" style="display:none;margin-top:10px">
+            <input type="text" class="admin-input" id="eventoAnuncioMsg" placeholder="Mensaje adicional del anuncio (opcional)" />
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:0.5rem">
+          <button class="btn-connect" style="margin:0" onclick="guardarEvento()">Guardar evento</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+}
+
+function toggleEventoDest(val) {
+  document.getElementById('eventoDestSucursalWrap').style.display = val === 'sucursal'  ? 'block' : 'none';
+  document.getElementById('eventoDestEspWrap').style.display      = val === 'especifico'? 'block' : 'none';
+}
+
+function toggleEventoAnuncio(checked) {
+  document.getElementById('eventoAnuncioWrap').style.display = checked ? 'block' : 'none';
+}
+
+async function guardarEvento() {
+  const titulo = document.getElementById('eventoTitulo')?.value.trim();
+  const fecha  = document.getElementById('eventoFecha')?.value;
+  const desc   = document.getElementById('eventoDesc')?.value.trim();
+  if (!titulo) { showToast('Ingresá un título para el evento'); return; }
+  if (!fecha)  { showToast('Seleccioná una fecha'); return; }
+
+  const destTipo = document.querySelector('input[name="eventoDestTipo"]:checked')?.value || 'todos';
+  let destinatarios = 'todos';
+  if (destTipo === 'sucursal') {
+    const suc = document.getElementById('eventoDestSucursalSel')?.value;
+    destinatarios = suc || 'todos';
+  } else if (destTipo === 'especifico') {
+    const checks = [...document.querySelectorAll('.evento-dest-cb:checked')].map(function(c) { return c.value; });
+    if (!checks.length) { showToast('Seleccioná al menos un empleado'); return; }
+    destinatarios = JSON.stringify(checks);
+  }
+
+  const conAnuncio = document.getElementById('eventoConAnuncio')?.checked;
+  const anuncioMsg = document.getElementById('eventoAnuncioMsg')?.value.trim();
+
+  try {
+    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha, descripcion: desc, destinatarios }));
+    const resp  = await fetch(eventosApiUrl('guardar_evento', { datos }));
+    const json  = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+
+    // Si también es anuncio, guardarlo en paralelo
+    if (conAnuncio) {
+      const msgAnuncio = anuncioMsg || titulo + (desc ? ': ' + desc : '');
+      const destsAnuncio = destTipo === 'todos' ? [] :
+        destTipo === 'especifico' ? JSON.parse(destinatarios) : [];
+      const datosAnuncio = encodeURIComponent(JSON.stringify({
+        titulo: '📌 ' + titulo,
+        mensaje: msgAnuncio,
+        destinatarios: destsAnuncio
+      }));
+      await fetch(anunciosApiUrl('guardar_anuncio', { datos: datosAnuncio }));
+      _anunciosCache = null;
+    }
+
+    _eventosCache = null;
+    cerrarAdmin();
+    showToast('✓ Evento guardado');
+    cargarCalendarioVacaciones();
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function eliminarEvento(id) {
+  if (!confirm('¿Eliminar este evento?')) return;
+  try {
+    const resp = await fetch(eventosApiUrl('eliminar_evento', { id }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    showToast('✓ Evento eliminado');
+    _eventosCache = null;
+    cargarCalendarioVacaciones();
+  } catch(e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+// ── Mostrar eventos en Mi semana del empleado ──────────
+var _eventosEmpCache = [];
+
+async function cargarEventosEmpleado(nombreEmp) {
+  try {
+    const resp = await fetch(eventosApiUrl('get_eventos', { empleado: nombreEmp }));
+    const json = await resp.json();
+    if (!json.ok) return;
+    const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
+    const sucId  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombreEmp; }) || {}).LOCAL || '';
+    // Filtrar: todos, suc_XX coincidente, o lista específica con este empleado
+    _eventosEmpCache = (json.eventos || []).filter(function(ev) {
+      if (ev.destinatarios === 'todos') return true;
+      if (ev.destinatarios === 'suc_' + sucId) return true;
+      try {
+        const lista = JSON.parse(ev.destinatarios);
+        return lista.some(function(n) { return n.toLowerCase() === nombreEmp.toLowerCase(); });
+      } catch(err) { return false; }
+    });
+    renderEventosEnSemana(nombreEmp);
+  } catch(e) {}
+}
+
+function renderEventosEnSemana(nombreEmp) {
+  if (!_eventosEmpCache.length) return;
+  // Para cada card de la semana del empleado, inyectar eventos del día
+  const lunes = getLunes(0);
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  for (let i = 0; i < 7; i++) {
+    const f = new Date(lunes); f.setDate(lunes.getDate() + i);
+    const isoFecha = f.getFullYear() + '-' + String(f.getMonth()+1).padStart(2,'0') + '-' + String(f.getDate()).padStart(2,'0');
+    const eventosDelDia = _eventosEmpCache.filter(function(ev) { return ev.fecha === isoFecha; });
+    if (!eventosDelDia.length) continue;
+    // Buscar la card del día correspondiente y agregar evento
+    const cards = document.querySelectorAll('.portal-week-card');
+    if (cards[i]) {
+      const body = cards[i].querySelector('.portal-week-body');
+      if (body) {
+        const evHtml = eventosDelDia.map(function(ev) {
+          return '<div class="evento-semana-chip">' +
+            '<span class="evento-semana-icono">📌</span>' +
+            '<div>' +
+              '<div class="evento-semana-titulo">' + ev.titulo + '</div>' +
+              (ev.descripcion ? '<div class="evento-semana-desc">' + ev.descripcion + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('');
+        body.insertAdjacentHTML('beforeend', evHtml);
+      }
+    }
+  }
+}
 
 var _vacSolicitudesCache = null; // cache: null = no cargado, [] = cargado vacío
 
@@ -5235,23 +5476,31 @@ async function fetchSolicitudesCache(force) {
   return _vacSolicitudesCache;
 }
 
-function renderVacacionesView() {
-  const container = document.getElementById('vacacionesContainer');
+function renderCalendarioView() {
+  const container = document.getElementById('calendarioAdminContainer');
   if (!container) return;
 
   container.innerHTML =
     '<div class="admin-inline-wrap">' +
     '<div class="admin-inline-header">' +
-      '<div class="admin-titulo">Vacaciones</div>' +
+      '<div class="admin-titulo">Calendario</div>' +
       '<div id="vacPendBadge" style="display:none;background:#fef3c7;color:#92400e;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600"></div>' +
     '</div>' +
     '<div class="admin-tabs" id="vacTabs">' +
       '<button class="admin-tab active" onclick="switchVacTab(\'calendario\',this)">Calendario</button>' +
+      '<button class="admin-tab" onclick="switchVacTab(\'anuncios\',this)">Anuncios</button>' +
       '<button class="admin-tab" id="vacTabSolicitudesBtn" onclick="switchVacTab(\'solicitudes\',this)">Solicitudes pendientes</button>' +
       '<button class="admin-tab" onclick="switchVacTab(\'banco\',this)">Banco de días</button>' +
     '</div>' +
     '<div id="vacCalendarioContainer" class="admin-tab-content">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
+    '</div>' +
+    '<div id="vacAnunciosContainer" class="admin-tab-content" style="display:none">' +
+      '<div class="admin-toolbar">' +
+        '<span style="font-size:12px;color:#94a3b8">Enviá mensajes a tus empleados — aparecen en su pantalla con sonido</span>' +
+        '<button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px;margin:0" onclick="abrirNuevoAnuncio()">+ Nuevo anuncio</button>' +
+      '</div>' +
+      '<div id="adminAnunciosList"><div style="padding:2rem;text-align:center;color:#94a3b8;font-size:13px">Cargando...</div></div>' +
     '</div>' +
     '<div id="vacSolicitudesContainer" class="admin-tab-content" style="display:none">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
@@ -5269,10 +5518,12 @@ function switchVacTab(tab, btn) {
   document.querySelectorAll('#vacTabs .admin-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('vacCalendarioContainer').style.display  = tab === 'calendario'  ? 'block' : 'none';
+  document.getElementById('vacAnunciosContainer').style.display    = tab === 'anuncios'    ? 'block' : 'none';
   document.getElementById('vacSolicitudesContainer').style.display = tab === 'solicitudes' ? 'block' : 'none';
   document.getElementById('vacBancoContainer').style.display       = tab === 'banco'       ? 'block' : 'none';
   if (tab === 'solicitudes') cargarSolicitudesAdmin();
   if (tab === 'banco')       cargarBancoDias();
+  if (tab === 'anuncios')    cargarListaAnuncios();
 }
 
 // ── BANCO DE DÍAS (tab vacaciones) ───────────────────
