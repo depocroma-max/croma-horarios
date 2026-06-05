@@ -2721,3 +2721,165 @@ body {
   .login-brand { font-size: 46px; }
   .login-form { padding: 1.5rem; }
 }
+
+/* ══════════════════════════════════════════════
+   ANUNCIOS — Admin y Vista Empleado
+══════════════════════════════════════════════ */
+
+/* ── Admin: lista de anuncios ── */
+.anuncio-admin-item {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background .1s;
+}
+.anuncio-admin-item:hover { background: #f8fafc; }
+.anuncio-admin-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.anuncio-admin-fecha {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.anuncio-admin-dest {
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.anuncio-admin-titulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+.anuncio-admin-msg {
+  font-size: 13px;
+  color: #475569;
+  white-space: pre-wrap;
+}
+
+/* ── Admin: selector de destinatarios ── */
+.anuncio-dest-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.anuncio-dest-check input[type="checkbox"] {
+  width: 15px; height: 15px;
+  accent-color: #1e293b;
+  cursor: pointer;
+}
+
+/* ── Empleado: banner de anuncios ── */
+.anuncios-banner-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 1rem 1rem 0;
+}
+.anuncio-banner-card {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  color: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 20px rgba(37,99,235,.25);
+  transition: opacity .25s ease, transform .25s ease;
+  animation: anuncioBounceIn .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes anuncioBounceIn {
+  from { opacity:0; transform: translateY(-12px) scale(.97); }
+  to   { opacity:1; transform: translateY(0) scale(1); }
+}
+.anuncio-banner-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.anuncio-banner-icono {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.anuncio-banner-titulo {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+.anuncio-banner-close {
+  background: rgba(255,255,255,.15);
+  border: none;
+  color: #fff;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.anuncio-banner-close:hover { background: rgba(255,255,255,.3); }
+.anuncio-banner-msg {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: .92;
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+}
+.anuncio-banner-fecha {
+  font-size: 10px;
+  opacity: .6;
+  text-align: right;
+}
+
+@media (max-width: 700px) {
+  .anuncio-banner-card { border-radius: 10px; padding: 12px 14px; }
+  .anuncio-banner-titulo { font-size: 13px; }
+  .anuncio-admin-item { padding: .75rem 1rem; }
+}
+
+/* ── WhatsApp toggle en selector de destinatarios ── */
+.anuncio-dest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.anuncio-wa-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+.anuncio-wa-toggle:hover {
+  background: #dcfce7;
+  color: #16a34a;
+  border-color: #86efac;
+}
+.anuncio-wa-toggle.anuncio-wa-activo {
+  background: #25D366;
+  color: #fff;
+  border-color: #25D366;
+  box-shadow: 0 2px 8px rgba(37,211,102,.3);
+}
