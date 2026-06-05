@@ -5654,17 +5654,20 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
     badge.style.display = noLeidos.length ? 'inline-flex' : 'none';
   }
 
-  list.innerHTML = anuncios.map((a, i) => {
+  list.innerHTML = anuncios.map(function(a, i) {
     const leido = _anunciosLeidosEmp.has(a.id);
-    return \`<div class="anuncio-hist-item \${leido ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo'}" id="anuncioHist\${i}">
-      <div class="anuncio-hist-top">
-        <span class="anuncio-hist-icono">\${leido ? '📋' : '📣'}</span>
-        <div class="anuncio-hist-titulo">\${a.titulo}</div>
-        \${!leido ? \`<span class="anuncio-hist-badge">Nuevo</span>\` : ''}
-        <span class="anuncio-hist-fecha">\${a.fecha}</span>
-      </div>
-      <div class="anuncio-hist-msg">\${a.mensaje}</div>
-    </div>\`;
+    const claseItem = leido ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo';
+    const icono     = leido ? '📋' : '📣';
+    const badgeNuevo = !leido ? '<span class="anuncio-hist-badge">Nuevo</span>' : '';
+    return '<div class="anuncio-hist-item ' + claseItem + '" id="anuncioHist' + i + '">' +
+      '<div class="anuncio-hist-top">' +
+        '<span class="anuncio-hist-icono">' + icono + '</span>' +
+        '<div class="anuncio-hist-titulo">' + a.titulo + '</div>' +
+        badgeNuevo +
+        '<span class="anuncio-hist-fecha">' + a.fecha + '</span>' +
+      '</div>' +
+      '<div class="anuncio-hist-msg">' + a.mensaje + '</div>' +
+    '</div>';
   }).join('');
 
   wrap.style.display = 'block';
