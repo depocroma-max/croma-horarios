@@ -2883,3 +2883,79 @@ body {
   border-color: #25D366;
   box-shadow: 0 2px 8px rgba(37,211,102,.3);
 }
+
+/* ══════════════════════════════════════════════
+   ANUNCIOS — Sección historial en vista empleado
+══════════════════════════════════════════════ */
+.portal-anuncios-section {
+  margin-bottom: 0;
+}
+.anuncio-seccion-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px; height: 20px;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 5px;
+}
+.anuncio-hist-item {
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  transition: box-shadow .15s;
+}
+.anuncio-hist-nuevo {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(37,99,235,.2);
+}
+.anuncio-hist-leido {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #374151;
+}
+.anuncio-hist-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.anuncio-hist-icono { font-size: 15px; flex-shrink: 0; }
+.anuncio-hist-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  flex: 1;
+}
+.anuncio-hist-nuevo .anuncio-hist-titulo { color: #fff; }
+.anuncio-hist-leido .anuncio-hist-titulo  { color: #1e293b; }
+.anuncio-hist-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: #fff;
+  color: #2563eb;
+  padding: 1px 7px;
+  border-radius: 20px;
+  letter-spacing: .3px;
+  flex-shrink: 0;
+}
+.anuncio-hist-fecha {
+  font-size: 10px;
+  opacity: .6;
+  flex-shrink: 0;
+}
+.anuncio-hist-msg {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.anuncio-hist-nuevo .anuncio-hist-msg { opacity: .92; }
+.anuncio-hist-leido .anuncio-hist-msg  { color: #475569; }
+
+@media (max-width: 700px) {
+  .anuncio-hist-item { padding: 10px 12px; }
+}

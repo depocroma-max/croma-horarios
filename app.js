@@ -3167,6 +3167,20 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
       </section>
 
+      <!-- SECCIÓN ANUNCIOS (historial) -->
+      <div id="anunciosSectionWrap" style="display:none">
+        <section class="portal-section portal-anuncios-section">
+          <div class="portal-section-head" style="margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="portal-kicker">Novedades</span>
+              <h2 style="margin:0">Anuncios</h2>
+              <span class="anuncio-seccion-badge" id="anunciosBadgeCount"></span>
+            </div>
+          </div>
+          <div id="anunciosSectionList"></div>
+        </section>
+      </div>
+
       <section class="portal-section portal-week-section">
         <div class="portal-section-head">
           <div>
@@ -5620,12 +5634,40 @@ async function verificarAnunciosEmpleado(nombreEmp) {
     if (!json.ok) return;
     const todos = json.anuncios || [];
     const nuevos = todos.filter(a => !_anunciosLeidosEmp.has(a.id));
-    if (nuevos.length) {
-      mostrarBannerAnuncios(nuevos, nombreEmp);
-    }
-    // Actualizar badge en campana empleado
+    // Siempre poblar la sección historial
+    if (todos.length) renderAnunciosSeccion(todos, nombreEmp);
+    // Banner solo para los no leídos
+    if (nuevos.length) mostrarBannerAnuncios(nuevos, nombreEmp);
     actualizarBadgeAnunciosEmp(todos);
   } catch(e) {}
+}
+
+function renderAnunciosSeccion(anuncios, nombreEmp) {
+  const wrap = document.getElementById('anunciosSectionWrap');
+  const list = document.getElementById('anunciosSectionList');
+  const badge = document.getElementById('anunciosBadgeCount');
+  if (!wrap || !list) return;
+
+  const noLeidos = anuncios.filter(a => !_anunciosLeidosEmp.has(a.id));
+  if (badge) {
+    badge.textContent = noLeidos.length ? noLeidos.length : '';
+    badge.style.display = noLeidos.length ? 'inline-flex' : 'none';
+  }
+
+  list.innerHTML = anuncios.map((a, i) => {
+    const leido = _anunciosLeidosEmp.has(a.id);
+    return \`<div class="anuncio-hist-item \${leido ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo'}" id="anuncioHist\${i}">
+      <div class="anuncio-hist-top">
+        <span class="anuncio-hist-icono">\${leido ? '📋' : '📣'}</span>
+        <div class="anuncio-hist-titulo">\${a.titulo}</div>
+        \${!leido ? \`<span class="anuncio-hist-badge">Nuevo</span>\` : ''}
+        <span class="anuncio-hist-fecha">\${a.fecha}</span>
+      </div>
+      <div class="anuncio-hist-msg">\${a.mensaje}</div>
+    </div>\`;
+  }).join('');
+
+  wrap.style.display = 'block';
 }
 
 function actualizarBadgeAnunciosEmp(anuncios) {
