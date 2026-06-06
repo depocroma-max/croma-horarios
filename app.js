@@ -6209,10 +6209,21 @@ var _anunciosEmpActual  = '';
 
 async function verificarAnunciosEmpleado(nombreEmp) {
   try {
+    const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
+    const sucId  = perfil.sucursal_id || (state.datos.find(r => r.EMPLEADO === nombreEmp) || {}).LOCAL || '';
     const resp = await fetch(anunciosApiUrl('get_anuncios', { empleado: nombreEmp }));
     const json = await resp.json();
     if (!json.ok) return;
-    const todos = json.anuncios || [];
+    // Filtrar suc_X en el front (el backend los pasa todos para que filtremos aquí)
+    const todos = (json.anuncios || []).filter(a => {
+      if (a.destinatarios === 'todos') return true;
+      if (a.destinatarios === 'suc_' + sucId) return true;
+      try {
+        const lista = JSON.parse(a.destinatarios);
+        if (lista[0] && lista[0].startsWith('suc_')) return lista.includes('suc_' + sucId);
+        return lista.some(n => n.toLowerCase() === nombreEmp.toLowerCase());
+      } catch(e) { return a.destinatarios.toLowerCase() === nombreEmp.toLowerCase(); }
+    });
     _anunciosTodosCache = todos;
     _anunciosEmpActual  = nombreEmp;
     // Siempre poblar la seccion historial (con o sin no leidos)
