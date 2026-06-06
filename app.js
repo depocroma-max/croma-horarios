@@ -5444,10 +5444,33 @@ function epFechaDesdeChange() {
 
 function epLocalCerradoChange() {
   const checked = document.getElementById('epLocalCerrado')?.checked;
-  // Si se marca local cerrado, cambiar destino a "Por sucursal" automáticamente
   if (checked) {
+    // Cambiar destino a "Por sucursal"
     const radSuc = document.querySelector('input[name="epDest"][value="sucursal"]');
     if (radSuc) { radSuc.checked = true; epRadioChange(); }
+    // Prellenar título y descripción
+    const tituloEl = document.getElementById('epTitulo');
+    const descEl   = document.getElementById('epDesc');
+    if (tituloEl) tituloEl.value = 'LOCAL CERRADO';
+    if (descEl) {
+      const desde = document.getElementById('epFechaDesde')?.value || '';
+      const hasta = document.getElementById('epFechaHasta')?.value || '';
+      const fmtDate = iso => {
+        if (!iso) return '';
+        const [y,m,d] = iso.split('-');
+        return d + '/' + m + '/' + y;
+      };
+      const rango = hasta && hasta !== desde
+        ? 'Del ' + fmtDate(desde) + ' al ' + fmtDate(hasta)
+        : 'El día ' + fmtDate(desde);
+      descEl.value = rango + ' el local permanecerá cerrado.';
+    }
+  } else {
+    // Al desmarcar, limpiar si el texto sigue siendo el predefinido
+    const tituloEl = document.getElementById('epTitulo');
+    const descEl   = document.getElementById('epDesc');
+    if (tituloEl?.value === 'LOCAL CERRADO') tituloEl.value = '';
+    if (descEl?.value.includes('permanecerá cerrado')) descEl.value = '';
   }
 }
 
@@ -5632,6 +5655,28 @@ function toggleLocalCerrado(checked) {
     // Local cerrado implica sucursal específica
     const radSuc = document.querySelector('input[name="eventoDestTipo"][value="sucursal"]');
     if (radSuc) { radSuc.checked = true; toggleEventoDest('sucursal'); }
+    // Prellenar título y descripción
+    const tituloEl = document.getElementById('eventoTitulo');
+    const descEl   = document.getElementById('eventoDesc');
+    if (tituloEl) tituloEl.value = 'LOCAL CERRADO';
+    if (descEl) {
+      const desde = document.getElementById('eventoFecha')?.value || '';
+      const hasta = document.getElementById('eventoFechaFin')?.value || '';
+      const fmtDate = iso => {
+        if (!iso) return '';
+        const [y,m,d] = iso.split('-');
+        return d + '/' + m + '/' + y;
+      };
+      const rango = hasta && hasta !== desde
+        ? 'Del ' + fmtDate(desde) + ' al ' + fmtDate(hasta)
+        : 'El día ' + fmtDate(desde);
+      descEl.value = rango + ' el local permanecerá cerrado.';
+    }
+  } else {
+    const tituloEl = document.getElementById('eventoTitulo');
+    const descEl   = document.getElementById('eventoDesc');
+    if (tituloEl?.value === 'LOCAL CERRADO') tituloEl.value = '';
+    if (descEl?.value.includes('permanecerá cerrado')) descEl.value = '';
   }
 }
 
