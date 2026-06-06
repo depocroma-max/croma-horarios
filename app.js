@@ -2879,6 +2879,9 @@ function mostrarVistaEmpleado() {
   else {
     document.getElementById('mainApp').innerHTML = '<div id="vistaEmpleadoContainer" style="padding:1rem"></div>';
   }
+  _empSemanaOffset  = 0;
+  _empPortalActual  = nombreEmp;
+  _empMisRegistros  = misRegistros;
   renderVistaEmpleado(nombreEmp, sucId, misRegistros);
   // Verificar anuncios y eventos nuevos (sin bloquear)
   setTimeout(() => verificarAnunciosEmpleado(nombreEmp), 1200);
@@ -2999,8 +3002,20 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
   }
 
+  function getEmpSemanaLabel(offset) {
+    const lunes = getLunes(offset);
+    const dom   = new Date(lunes); dom.setDate(lunes.getDate() + 6);
+    const fmtOpts = { day: '2-digit', month: 'short' };
+    const desde = lunes.toLocaleDateString('es-AR', fmtOpts);
+    const hasta = dom.toLocaleDateString('es-AR', fmtOpts);
+    if (offset === 0) return 'Esta semana · ' + desde + ' – ' + hasta;
+    if (offset === 1) return 'Próxima semana · ' + desde + ' – ' + hasta;
+    if (offset === -1) return 'Semana pasada · ' + desde + ' – ' + hasta;
+    return (offset > 0 ? '+' : '') + offset + ' semanas · ' + desde + ' – ' + hasta;
+  }
+
   function buildSemanaEmpleado() {
-    const lunes = getLunes(0);
+    const lunes = getLunes(_empSemanaOffset);
     const hoy = new Date(); hoy.setHours(0,0,0,0);
     const diasLargos = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
     const cards = [];
@@ -3208,11 +3223,16 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <section class="portal-section portal-week-section">
         <div class="portal-section-head">
           <div>
-            <span class="portal-kicker">Semana actual</span>
+            <span class="portal-kicker" id="empSemanaLabel">${getEmpSemanaLabel(_empSemanaOffset)}</span>
             <h2>Mi semana</h2>
           </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="emp-semana-nav-btn" onclick="empNavSemana(-1)" title="Semana anterior">&#8592;</button>
+            <button class="emp-semana-nav-btn emp-semana-nav-hoy" onclick="empNavSemana(0,'reset')" title="Ir a esta semana">Hoy</button>
+            <button class="emp-semana-nav-btn" onclick="empNavSemana(1)" title="Semana siguiente">&#8594;</button>
+          </div>
         </div>
-        <div class="portal-week-grid">
+        <div class="portal-week-grid" id="empSemanaGrid">
           ${buildSemanaEmpleado()}
         </div>
       </section>
@@ -5751,7 +5771,7 @@ function descargarICS(ev) {
 function renderEventosEnSemana(nombreEmp) {
   if (!_eventosEmpCache.length) return;
   // Para cada card de la semana del empleado, inyectar eventos del día
-  const lunes = getLunes(0);
+  const lunes = getLunes(_empSemanaOffset);
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   for (let i = 0; i < 7; i++) {
     const f = new Date(lunes); f.setDate(lunes.getDate() + i);
@@ -5790,6 +5810,73 @@ function renderEventosEnSemana(nombreEmp) {
       }
     }
   }
+}
+
+// ── Navegación de semanas en el portal empleado ───────
+function empNavSemana(delta, modo) {
+  if (modo === 'reset') {
+    _empSemanaOffset = 0;
+  } else {
+    _empSemanaOffset += delta;
+  }
+  // Actualizar label
+  const label = document.getElementById('empSemanaLabel');
+  if (label) {
+    const lunes = getLunes(_empSemanaOffset);
+    const dom   = new Date(lunes); dom.setDate(lunes.getDate() + 6);
+    const fmtOpts = { day: '2-digit', month: 'short' };
+    const desde = lunes.toLocaleDateString('es-AR', fmtOpts);
+    const hasta = dom.toLocaleDateString('es-AR', fmtOpts);
+    let txt = '';
+    if (_empSemanaOffset === 0)       txt = 'Esta semana · ' + desde + ' – ' + hasta;
+    else if (_empSemanaOffset === 1)  txt = 'Próxima semana · ' + desde + ' – ' + hasta;
+    else if (_empSemanaOffset === -1) txt = 'Semana pasada · ' + desde + ' – ' + hasta;
+    else txt = (_empSemanaOffset > 0 ? '+' : '') + _empSemanaOffset + ' semanas · ' + desde + ' – ' + hasta;
+    label.textContent = txt;
+  }
+  // Re-renderizar el grid de la semana
+  const grid = document.getElementById('empSemanaGrid');
+  if (!grid || !_empMisRegistros.length) return;
+  // Reconstruir cards manualmente (replica buildSemanaEmpleado sin depender del closure)
+  const MESES_NOMBRES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                         'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  const diasLargos = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const lunes = getLunes(_empSemanaOffset);
+  const cards = [];
+  for (let i = 0; i < 7; i++) {
+    const f = new Date(lunes); f.setDate(lunes.getDate() + i);
+    const regs = _empMisRegistros.filter(r =>
+      String(r.AÑO) === String(f.getFullYear()) &&
+      r.MES === MESES_ES[f.getMonth()] &&
+      String(r.DIA) === String(f.getDate())
+    ).sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
+    const total  = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
+    const esHoy  = f.toDateString() === new Date().toDateString();
+    const libre  = !regs.length;
+    function normTxt(txt) { return String(txt||'').trim().toUpperCase()==='FRANCO'?'Libre':String(txt||'').trim(); }
+    const turnos = libre
+      ? '<div class="portal-week-free">Libre</div>'
+      : regs.map(r => {
+          const ent = normTxt(r.H_ENTRADA), sal = normTxt(r.H_SALIDA);
+          if (!ent || !sal) return '<span class="portal-week-shift">Horario a confirmar</span>';
+          return '<span class="portal-week-shift">' + ent + ' → ' + sal + '</span>';
+        }).join('');
+    cards.push(
+      '<div class="portal-week-card ' + (libre?'is-free':'') + ' ' + (esHoy?'is-today':'') + '">' +
+        '<div class="portal-week-day">' +
+          '<span>' + diasLargos[i] + '</span>' +
+          '<span class="portal-week-day-num">' + f.getDate() + '</span>' +
+        '</div>' +
+        '<div class="portal-week-body">' +
+          turnos +
+          (!libre ? '<small>' + total.toFixed(1) + ' hs</small>' : '') +
+        '</div>' +
+      '</div>'
+    );
+  }
+  grid.innerHTML = cards.join('');
+  // Re-inyectar eventos del período correcto
+  renderEventosEnSemana(_empPortalActual);
 }
 
 var _vacSolicitudesCache = null; // cache: null = no cargado, [] = cargado vacío
@@ -6205,6 +6292,9 @@ async function eliminarAnuncioAdmin(id) {
 
 // ── EMPLEADO: verificar y mostrar anuncios nuevos ─────
 var _anunciosTodosCache = [];  // cache para refrescar la seccion al cerrar banner
+var _empSemanaOffset   = 0;   // semanas adelante/atrás en el portal empleado
+var _empPortalActual   = '';  // nombre del empleado activo en el portal
+var _empMisRegistros   = [];  // registros del empleado activo (para re-render semana)
 var _anunciosEmpActual  = '';
 
 async function verificarAnunciosEmpleado(nombreEmp) {

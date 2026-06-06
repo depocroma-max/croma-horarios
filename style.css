@@ -2845,10 +2845,36 @@ body {
   line-height: 1;
   margin-top: 3px;
 }
+.emp-semana-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--black);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.emp-semana-nav-btn:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-300);
+}
+.emp-semana-nav-hoy {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .3px;
+}
 .portal-week-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(105px, 1fr));
   gap: 8px;
+  overflow-x: auto;
 }
 .portal-week-card {
   border: 1px solid var(--gray-100);
