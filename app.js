@@ -3160,7 +3160,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 
   const _vc = document.getElementById('vistaEmpleadoContainer');
   _vc.innerHTML = `
-    <div class="emp-vista-personal emp-portal-mobilefirst emp-entrada-anim">
+    <div class="emp-vista-personal emp-portal-mobilefirst">
 
       <!-- PORTAL EMPLEADO -->
       <section class="portal-hero" style="--portal-color:${suc.color};--portal-soft:${suc.colorLight}">
