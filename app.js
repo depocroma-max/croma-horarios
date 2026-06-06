@@ -6300,17 +6300,25 @@ var _anunciosEmpActual  = '';
 async function verificarAnunciosEmpleado(nombreEmp) {
   try {
     const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
-    const sucId  = perfil.sucursal_id || (state.datos.find(r => r.EMPLEADO === nombreEmp) || {}).LOCAL || '';
-    const resp = await fetch(anunciosApiUrl('get_anuncios', { empleado: nombreEmp }));
+    // Usar _empMisRegistros como fuente principal (ya está cargado), con fallbacks
+    const sucId  = (perfil.sucursal_id ||
+                    (_empMisRegistros[0] || {}).LOCAL ||
+                    (state.datos.find(r => r.EMPLEADO === nombreEmp) || {}).LOCAL ||
+                    '').toString().trim();
+    const resp = await fetch(anunciosApiUrl('get_anuncios', { empleado: nombreEmp, sucursal: sucId }));
     const json = await resp.json();
     if (!json.ok) return;
     // Filtrar suc_X en el front (el backend los pasa todos para que filtremos aquí)
     const todos = (json.anuncios || []).filter(a => {
       if (a.destinatarios === 'todos') return true;
       if (a.destinatarios === 'suc_' + sucId) return true;
+      // Comparación case-insensitive como fallback
+      if (a.destinatarios.toLowerCase() === ('suc_' + sucId).toLowerCase()) return true;
       try {
         const lista = JSON.parse(a.destinatarios);
-        if (lista[0] && lista[0].startsWith('suc_')) return lista.includes('suc_' + sucId);
+        if (lista[0] && lista[0].startsWith('suc_')) {
+          return lista.some(s => s.toLowerCase() === ('suc_' + sucId).toLowerCase());
+        }
         return lista.some(n => n.toLowerCase() === nombreEmp.toLowerCase());
       } catch(e) { return a.destinatarios.toLowerCase() === nombreEmp.toLowerCase(); }
     });
