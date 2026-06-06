@@ -536,7 +536,7 @@ function renderEmpleados(datos) {
 
     // Avatar: foto o iniciales
     const avatarInner = e.foto_url
-      ? `<img src="${e.foto_url}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.parentElement.innerHTML='${iniciales}'">`
+      ? `<img src="${e.foto_url}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.parentElement.innerHTML='${iniciales}'">`
       : (numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales);
 
     // Badge empresa
@@ -563,37 +563,40 @@ function renderEmpleados(datos) {
       : '';
 
     return `<div class="emp-card" onclick="abrirDetalleEmpleadoDesdePanel('${e.nombre.replace(/'/g,"\\'")}', '${e.suc}')" style="cursor:pointer">
-      <div class="emp-card-head">
-        <div class="emp-avatar ${e.foto_url ? 'emp-avatar-foto' : ''}" style="${e.foto_url ? '' : `background:${s.colorLight};color:${s.color}`}">
-          ${avatarInner}
+      <span class="emp-card-stripe" style="background:${s.color}"></span>
+      <div class="emp-card-body">
+        <div class="emp-card-head">
+          <div class="emp-avatar ${e.foto_url ? 'emp-avatar-foto' : ''}" style="${e.foto_url ? '' : `background:${s.colorLight};color:${s.color}`}">
+            ${avatarInner}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="emp-nombre">${nomMostrar}</div>
+            <div class="emp-suc" style="color:${s.color}">${s.nombre}${numVend ? ` · #${numVend}` : ''}</div>
+            <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+          </div>
         </div>
-        <div style="flex:1;min-width:0">
-          <div class="emp-nombre">${nomMostrar}</div>
-          <div class="emp-suc">${s.nombre}${numVend ? ` · <span style="color:${s.color};font-weight:500">Vend. #${numVend}</span>` : ''}</div>
-          <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
-        </div>
-      </div>
-      <div class="emp-stats">
-        <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.dias.size}</div>
-          <div class="emp-stat-label">Días</div>
-        </div>
-        <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.horas.toFixed(0)}</div>
-          <div class="emp-stat-label">Hs total</div>
-        </div>
-        <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.hsExtra.toFixed(0)}</div>
-          <div class="emp-stat-label">Hs extra</div>
-        </div>
-        <div class="emp-stat-item">
-          <div class="emp-stat-val">${e.sabados.size}</div>
-          <div class="emp-stat-label">Sábados</div>
+        <div class="emp-stats">
+          <div class="emp-stat-item">
+            <div class="emp-stat-val">${e.dias.size}</div>
+            <div class="emp-stat-label">Días</div>
+          </div>
+          <div class="emp-stat-item">
+            <div class="emp-stat-val">${e.horas.toFixed(0)}</div>
+            <div class="emp-stat-label">Hs</div>
+          </div>
+          <div class="emp-stat-item">
+            <div class="emp-stat-val" style="${e.hsExtra > 0 ? 'color:#e8251a' : ''}">${e.hsExtra.toFixed(0)}</div>
+            <div class="emp-stat-label">Extra</div>
+          </div>
+          <div class="emp-stat-item">
+            <div class="emp-stat-val">${e.sabados.size}</div>
+            <div class="emp-stat-label">Sáb</div>
+          </div>
         </div>
       </div>
       <div class="emp-card-footer">
         ${waBtn}
-        <span>Ver jornada completa →</span>
+        <span class="emp-card-footer-link">Ver jornada →</span>
       </div>
     </div>`;
   }).join('');
@@ -664,6 +667,10 @@ function renderEmpleados(datos) {
           ${empOpts}
         </select>
       </div>
+    </div>
+    <div class="emp-section-header">
+      <span class="emp-section-title">EMPLEADOS</span>
+      <span class="emp-section-count">${lista.length} ${lista.length === 1 ? 'empleado' : 'empleados'}</span>
     </div>
     <div class="emp-grid" id="empGrid">
       ${grilla || '<p style="padding:2rem;color:#999;font-size:14px">No hay empleados para los filtros seleccionados.</p>'}
@@ -892,40 +899,52 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
   const html = `
   <div class="detalle-overlay" onclick="cerrarDetalle(event)">
     <div class="detalle-panel" onclick="event.stopPropagation()">
-      <div class="detalle-header" style="border-left: 4px solid ${suc.color}">
-        <div class="detalle-header-top">
-          <div>
-            <div class="detalle-titulo">
-              ${numVend ? `<span class="detalle-num" style="background:${suc.colorLight};color:${suc.color}">#${numVend}</span>` : ''}
-              ${nomMostrar}
+      <div class="detalle-header">
+        <span class="detalle-header-stripe" style="background:${suc.color}"></span>
+        <div class="detalle-header-inner">
+          <div class="detalle-header-top">
+            <div style="display:flex;align-items:center;gap:14px">
+              ${(() => {
+                const perfil = EMPLEADOS_PERFILES[nombreEmp];
+                const fotoUrl = perfil?.foto_url;
+                return fotoUrl
+                  ? `<div class="detalle-foto emp-avatar-foto" style="width:52px;height:52px;border-radius:14px;overflow:hidden;flex-shrink:0"><img src="${fotoUrl}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover" /></div>`
+                  : `<div class="detalle-foto" style="width:52px;height:52px;border-radius:14px;background:${suc.colorLight};color:${suc.color};display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue';font-size:22px;flex-shrink:0">${nomMostrar.charAt(0)}</div>`;
+              })()}
+              <div>
+                <div class="detalle-titulo">
+                  ${numVend ? `<span class="detalle-num" style="background:${suc.colorLight};color:${suc.color}">#${numVend}</span>` : ''}
+                  ${nomMostrar}
+                </div>
+                <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
+              </div>
             </div>
-            <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
-          </div>
-          <div class="detalle-acciones">
-            <select id="detalleSelectMes" style="padding:5px 8px;border-radius:6px;border:1px solid #ddd;font-size:12px;font-family:inherit;background:#f8f9fa;color:#333;cursor:pointer;margin-right:6px;">
-              ${opcionesMes}
-            </select>
-            <button class="btn-detalle-accion" onclick="imprimirDetalleEmpleado()" title="Imprimir / PDF">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-              PDF
-            </button>
-            <button class="btn-detalle-accion btn-excel" onclick="descargarExcelEmpleado('${nombreEmp.replace(/'/g,"\\''")}', '${nomMostrar}', '${suc.nombre}')" title="Descargar Excel">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-              Excel
-            </button>
-            <button class="btn-detalle-accion" style="color:#2563eb;border-color:#93c5fd" onclick="abrirFormCertificado(this.dataset.emp)" data-emp="${nombreEmp}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-              + Certificado
-            </button>
-            <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+            <div class="detalle-acciones">
+              <select id="detalleSelectMes" class="filter-select" style="height:32px;font-size:12px;padding:0 8px;border-radius:8px">
+                ${opcionesMes}
+              </select>
+              <button class="btn-detalle-accion" onclick="imprimirDetalleEmpleado()" title="Imprimir / PDF">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                PDF
+              </button>
+              <button class="btn-detalle-accion btn-excel" onclick="descargarExcelEmpleado('${nombreEmp.replace(/'/g,"\\''")}', '${nomMostrar}', '${suc.nombre}')" title="Descargar Excel">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                Excel
+              </button>
+              <button class="btn-detalle-accion" style="color:#2563eb;border-color:#93c5fd;background:#eff6ff" onclick="abrirFormCertificado(this.dataset.emp)" data-emp="${nombreEmp}">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Certificado
+              </button>
+              <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+            </div>
           </div>
         </div>
         <div class="detalle-stats-row">
           <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatDias">${duIni}</span><span class="detalle-stat-lbl">Días</span></div>
           <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatHs">${thIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs totales</span></div>
-          <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatExtra">${theIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" style="${theIni > 0 ? 'color:#e8251a' : ''}" id="detalleStatExtra">${theIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
           <div class="detalle-stat"><span class="detalle-stat-val" id="detalleStatSabs">${tsIni}</span><span class="detalle-stat-lbl">Sábados</span></div>
-          <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb" id="detalleStatCerts">${filasIni.filter(f=>f.esCert).length}</span><span class="detalle-stat-lbl">Certificados</span></div>
+          <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb" id="detalleStatCerts">${filasIni.filter(f=>f.esCert).length}</span><span class="detalle-stat-lbl">Certs</span></div>
         </div>
       </div>
       <div class="detalle-tabs">
@@ -2041,15 +2060,20 @@ function setView(view) {
   document.querySelectorAll('.drawer-nav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.view === view);
   });
-  const weekNav  = document.querySelector('.week-nav:not(.mes-nav)');
-  const mesNav   = document.getElementById('mesNav');
-  const statsRow = document.querySelector('.stats-row');
-  const filters  = document.querySelector('.filters');
+  const weekNav    = document.querySelector('.week-nav:not(.mes-nav)');
+  const mesNav     = document.getElementById('mesNav');
+  const statsRow   = document.querySelector('.stats-row');
+  const filters    = document.querySelector('.filters');
+  const controlsBar = document.querySelector('.controls-bar');
+
+  // Vistas que NO usan la barra de controles
+  const sinControls = ['empleados', 'administracion', 'calendario'];
+  if (controlsBar) controlsBar.style.display = sinControls.includes(view) ? 'none' : '';
 
   if (view === 'semana') {
     weekNav.style.display  = 'flex';
     mesNav.style.display   = 'none';
-    statsRow.style.display = 'none';   // ← ocultar stats en Semana
+    statsRow.style.display = 'none';
     filters.style.display  = 'flex';
     document.getElementById('filterTurno').style.display = 'block';
     mostrarFiltrosDiaEnBarra(true);
@@ -2065,7 +2089,7 @@ function setView(view) {
     mesNav.style.display   = 'none';
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
-    mostrarFiltrosDiaEnBarra(false);  // empleados tiene sus propios checkboxes
+    mostrarFiltrosDiaEnBarra(false);
   } else if (view === 'administracion') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
@@ -3002,7 +3026,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <div class="portal-week-card ${libre?'is-free':''} ${esHoy?'is-today':''}">
           <div class="portal-week-day">
             <span>${diasLargos[i]}</span>
-            <small>${formatFecha(f)}</small>
+            <span class="portal-week-day-num">${f.getDate()}</span>
           </div>
           <div class="portal-week-body">
             ${turnos}
@@ -3125,27 +3149,33 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- PORTAL EMPLEADO -->
       <section class="portal-hero" style="--portal-color:${suc.color};--portal-soft:${suc.colorLight}">
         <div class="portal-profile-card">
-          <div class="emp-vista-avatar-wrap">
-            <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
-                 id="empVistaAvatarDiv"
-                 style="${perfil.foto_url?'':'background:'+suc.colorLight}">
-              ${avatarInner}
+          <div class="portal-profile-card-stripe"></div>
+          <div class="portal-profile-card-body">
+            <div class="emp-vista-avatar-wrap">
+              <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
+                   id="empVistaAvatarDiv"
+                   style="${perfil.foto_url?'':'background:'+suc.colorLight}">
+                ${avatarInner}
+              </div>
+              <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
+              <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
+                     onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
             </div>
-            <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
-            <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
-                   onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
-          </div>
-          <div class="portal-profile-info">
-            <span class="portal-kicker">Portal empleado</span>
-            <h1 class="portal-greeting">Hola ${primerNombre} <span class="portal-greeting-emoji">👋</span></h1>
-            <p>${suc.nombre}</p>
-            <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+            <div class="portal-profile-info">
+              <span class="portal-kicker">Portal empleado</span>
+              <h1 class="portal-greeting">Hola ${primerNombre} <span class="portal-greeting-emoji">👋</span></h1>
+              <p>${suc.nombre}</p>
+              <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+            </div>
           </div>
         </div>
 
         <div class="portal-next-card">
-          <span class="portal-kicker">Turno de hoy</span>
-          ${getProximoTurno()}
+          <div class="portal-next-card-stripe"></div>
+          <div class="portal-next-card-body">
+            <span class="portal-kicker">Turno de hoy</span>
+            ${getProximoTurno()}
+          </div>
         </div>
       </section>
 
@@ -3741,14 +3771,17 @@ function renderAdminInline() {
   container.innerHTML =
     "<div class='admin-inline-wrap'>" +
     "<div class='admin-inline-header'>" +
-      "<div class='admin-titulo'>Administración</div>" +
-      "<button class='btn-admin-edit' style='font-size:12px' onclick='cerrarSesionAdmin()'>Cerrar sesión admin</button>" +
+      "<div>" +
+        "<div class='admin-titulo'>Administración</div>" +
+        "<span style='font-size:12px;color:#94a3b8;font-family:var(--font-body)'>" + empNombres.length + " empleados · " + SUCURSALES.length + " sucursales</span>" +
+      "</div>" +
+      "<button class='btn-admin-edit' style='font-size:12px' onclick='cerrarSesionAdmin()'>Cerrar sesión</button>" +
     "</div>" +
     "<div class='admin-tabs' id='adminTabs'>" +
-      "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\" >Empleados (" + empNombres.length + ")</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\" >Categorías</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\" >Usuarios</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\" >Configuración</button>" +
+      "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\">Empleados <span style='font-size:11px;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;margin-left:4px'>" + empNombres.length + "</span></button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\">Categorías</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\">Usuarios</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\">Configuración</button>" +
     "</div>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
       "<div class='admin-toolbar'>" +
@@ -3758,13 +3791,13 @@ function renderAdminInline() {
       "<div class='admin-table-wrap'>" +
         "<table class='admin-tabla' id='adminTablaEmps'>" +
           "<thead><tr><th>Empleado</th><th>Sucursal</th><th>Empresa</th><th>Categoría</th><th>Foto</th><th></th></tr></thead>" +
-          "<tbody>" + (filasEmps || "<tr><td colspan='6' style='text-align:center;padding:2rem;color:#94a3b8'>Sin datos cargados</td></tr>") + "</tbody>" +
+          "<tbody>" + (filasEmps || "<tr><td colspan='6' style='text-align:center;padding:2.5rem;color:#94a3b8;font-size:13px'>Sin datos cargados</td></tr>") + "</tbody>" +
         "</table>" +
       "</div>" +
     "</div>" +
     "<div id='adminTabCategorias' class='admin-tab-content' style='display:none'>" +
       "<div class='admin-toolbar'>" +
-        "<button class='btn-connect' style='width:auto;padding:8px 16px;font-size:13px' onclick='abrirNuevaCategoria()'>+ Nueva categoría</button>" +
+        "<button class='btn-connect' style='width:auto;padding:8px 18px;font-size:13px;margin:0' onclick='abrirNuevaCategoria()'>+ Nueva categoría</button>" +
       "</div>" +
       "<div class='admin-table-wrap'>" +
         "<table class='admin-tabla'><thead><tr><th>Nombre</th><th>Descripción</th><th>Percibe extra</th><th></th></tr></thead>" +
@@ -3773,17 +3806,19 @@ function renderAdminInline() {
     "</div>" +
     renderAdminUsuarios() +
     "<div id='adminTabConfiguracion' class='admin-tab-content' style='display:none'>" +
-      "<div style='padding:1.5rem;max-width:500px'>" +
-        "<h3 style='font-size:14px;font-weight:600;margin-bottom:1.5rem;color:#1e293b'>Configuración general</h3>" +
-        "<div class='admin-form-grupo'>" +
-          "<label class='emp-filtro-label'>Email del administrador (para notificaciones)</label>" +
-          "<input type='email' class='admin-input' id='cfgEmailAdmin' placeholder='admin@croma.com' />" +
-          "<span style='font-size:11px;color:#94a3b8;margin-top:4px;display:block'>Se envía un email cuando llega una solicitud de vacaciones</span>" +
+      "<div style='padding:1.25rem 0;max-width:480px'>" +
+        "<div class='admin-table-wrap' style='padding:1.5rem'>" +
+          "<h3 style='font-size:14px;font-weight:600;margin:0 0 1.25rem;color:#1e293b'>Configuración general</h3>" +
+          "<div class='admin-form-grupo'>" +
+            "<label class='emp-filtro-label'>Email del administrador (para notificaciones)</label>" +
+            "<input type='email' class='admin-input' id='cfgEmailAdmin' placeholder='admin@croma.com' />" +
+            "<span style='font-size:11px;color:#94a3b8;margin-top:4px;display:block'>Se envía un email cuando llega una solicitud de vacaciones</span>" +
+          "</div>" +
+          "<div style='margin-top:1.25rem'>" +
+            "<button class='btn-connect' style='margin:0;width:auto;padding:10px 24px' onclick='guardarConfigAdmin()'>Guardar</button>" +
+          "</div>" +
+          "<p id='cfgStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
         "</div>" +
-        "<div style='margin-top:1rem'>" +
-          "<button class='btn-connect' style='margin:0;width:auto;padding:10px 24px' onclick='guardarConfigAdmin()'>Guardar</button>" +
-        "</div>" +
-        "<p id='cfgStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
       "</div>" +
     "</div>" +
     "</div>";
@@ -5182,26 +5217,28 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
 
   container.innerHTML =
     '<div style="padding:1.5rem">' +
-    // Toolbar: selectors + filtro local + leyenda
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">' +
-      '<div style="display:flex;align-items:center;gap:6px">' +
+    '<div class="cal-vac-wrap">' +
+    // Toolbar
+    '<div class="cal-vac-toolbar">' +
+      '<div class="cal-vac-nav">' +
         '<button class="week-btn" onclick="cambiarMesCalVac(-1)">&#8592;</button>' +
-        '<select class="filter-select" style="font-size:14px;font-weight:600" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>' +
-        '<select class="filter-select" style="font-size:14px;font-weight:600;width:80px" onchange="_calVacAnio=parseInt(this.value);cargarCalendarioVacaciones()">' + anioOpts + '</select>' +
+        '<select class="filter-select" style="font-size:14px;font-weight:600;background:transparent;border:none;box-shadow:none" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>' +
+        '<select class="filter-select" style="font-size:14px;font-weight:600;width:78px;background:transparent;border:none;box-shadow:none" onchange="_calVacAnio=parseInt(this.value);cargarCalendarioVacaciones()">' + anioOpts + '</select>' +
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
       '<select class="filter-select" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
-      '<button class="btn-connect" style="width:auto;padding:6px 14px;font-size:12px;margin:0;margin-left:auto" onclick="abrirNuevoEvento()">＋ Nuevo evento</button>' +
-      '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;flex-wrap:wrap">' +
-        '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#d1fae5;border-left:3px solid #059669;display:inline-block"></span>Aprobada</span>' +
-        '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fef9c3;border-left:3px solid #f59e0b;display:inline-block"></span>Pendiente</span>' +
-        '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fef3c7;display:inline-block"></span>Feriado</span>' +
-        '<span style="display:inline-flex;align-items:center;gap:4px;color:#7c3aed;font-weight:600">📌 Evento</span>' +
-        '<span style="display:inline-flex;align-items:center;gap:4px;color:#f59e0b;font-weight:600">!! Conflicto</span>' +
+      '<button class="btn-connect" style="width:auto;padding:6px 16px;font-size:12px;margin:0" onclick="abrirNuevoEvento()">＋ Nuevo evento</button>' +
+      '<div class="cal-vac-legend">' +
+        '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#d1fae5;border-left:3px solid #059669"></span>Aprobada</span>' +
+        '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef9c3;border-left:3px solid #f59e0b"></span>Pendiente</span>' +
+        '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef3c7"></span>Feriado</span>' +
+        '<span class="cal-vac-legend-item" style="color:#7c3aed;font-weight:600">📌 Evento</span>' +
+        '<span class="cal-vac-legend-item" style="color:#f59e0b;font-weight:600">⚠ Conflicto</span>' +
       '</div>' +
     '</div>' +
     // Grilla
     '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div>' +
+    '</div>' +
     // Tabla del mes
     '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
     '<div class="admin-table-wrap">' +

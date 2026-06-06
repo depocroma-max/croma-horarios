@@ -98,50 +98,67 @@
 
   <!-- SETUP SCREEN -->
   <div class="setup-screen" id="setupScreen" style="display:none">
-    <div class="setup-card">
-      <div class="setup-logo">CROMA</div>
-      <h1 class="setup-title">Panel de Horarios</h1>
-      <p class="setup-desc">Conectá los Google Sheets de cada sucursal para visualizar los horarios en tiempo real.</p>
 
-      <div class="setup-steps">
-        <div class="setup-step">
-          <div class="step-num">1</div>
-          <div class="step-text">En cada Google Sheet abrí <strong>Extensiones → Apps Script</strong> y pegá el código del archivo <code>apps-script.js</code></div>
+    <!-- Panel izquierdo: marca -->
+    <div class="setup-left">
+      <div class="setup-left-inner">
+        <div class="setup-brand">
+          <img src="tridente_solo.png" class="setup-tridente" alt="Croma" />
+          <div class="setup-brand-wordmark">
+            <span class="setup-brand-name">CROMA</span>
+            <span class="setup-brand-sub">HORARIOS</span>
+          </div>
         </div>
-        <div class="setup-step">
-          <div class="step-num">2</div>
-          <div class="step-text">Hacé clic en <strong>Implementar → Nueva implementación</strong>, tipo <em>Aplicación web</em>, acceso: <em>Cualquier persona</em></div>
-        </div>
-        <div class="setup-step">
-          <div class="step-num">3</div>
-          <div class="step-text">Copiá la URL generada y pegala abajo para cada sucursal</div>
-        </div>
+        <p class="setup-tagline">Sistema interno de gestión de turnos y empleados para todas las sucursales.</p>
+        <ul class="setup-suc-list">
+          <li><span class="setup-suc-dot" style="background:#2563eb"></span>PASEO</li>
+          <li><span class="setup-suc-dot" style="background:#7c3aed"></span>WAVE</li>
+          <li><span class="setup-suc-dot" style="background:#059669"></span>CIPO SAN MARTIN</li>
+          <li><span class="setup-suc-dot" style="background:#d97706"></span>PERITO MORENO</li>
+          <li><span class="setup-suc-dot" style="background:#db2777"></span>CENTENARIO</li>
+          <li><span class="setup-suc-dot" style="background:#e8251a"></span>ROCA</li>
+        </ul>
       </div>
-
-      <div class="url-form" id="urlForm">
-        <!-- generado por JS -->
-      </div>
-
-      <button class="btn-connect" id="btnConnect">Conectar y ver horarios</button>
-      <button class="btn-demo" id="btnDemo">Ver demo con datos de ejemplo</button>
     </div>
+
+    <!-- Panel derecho: formulario -->
+    <div class="setup-right">
+      <div class="setup-form-wrap">
+        <h1 class="setup-form-title">Conectar sucursales</h1>
+        <p class="setup-form-desc">Pegá la URL de Apps Script de cada local para visualizar los horarios en tiempo real.</p>
+
+        <details class="setup-instructions">
+          <summary>¿Cómo obtener la URL?</summary>
+          <div class="setup-steps">
+            <div class="setup-step">
+              <div class="step-num">1</div>
+              <div class="step-text">En cada Google Sheet abrí <strong>Extensiones → Apps Script</strong> y pegá el código de <code>apps-script.js</code></div>
+            </div>
+            <div class="setup-step">
+              <div class="step-num">2</div>
+              <div class="step-text">Hacé clic en <strong>Implementar → Nueva implementación</strong>, tipo <em>Aplicación web</em>, acceso: <em>Cualquier persona</em></div>
+            </div>
+            <div class="setup-step">
+              <div class="step-num">3</div>
+              <div class="step-text">Copiá la URL generada y pegala abajo</div>
+            </div>
+          </div>
+        </details>
+
+        <div class="url-form" id="urlForm">
+          <!-- generado por JS -->
+        </div>
+
+        <button class="btn-connect" id="btnConnect">Conectar y ver horarios</button>
+        <button class="btn-demo" id="btnDemo">Explorar demo sin conexión</button>
+      </div>
+    </div>
+
   </div>
 
   <!-- MAIN APP -->
   <main class="app" id="mainApp" style="display:none">
 
-    <!-- HERO / RESUMEN VISUAL -->
-    <section class="dashboard-hero" aria-label="Resumen del panel">
-      <div class="hero-copy">
-        <span class="hero-kicker">Sistema interno</span>
-        <h1>Panel de horarios</h1>
-        <p>Resumen semanal de turnos, empleados, vacaciones y administración operativa de Croma.</p>
-      </div>
-      <div class="hero-actions">
-        <span class="hero-chip">Semana activa</span>
-        <span class="hero-chip hero-chip-dark">Datos en vivo</span>
-      </div>
-    </section>
 
     <!-- STATS ROW -->
     <div class="stats-row">
