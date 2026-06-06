@@ -5327,7 +5327,7 @@ function abrirEventoPopover(fecha, celda) {
 
   const sucCheckboxes = SUCURSALES.map(function(s) {
     return `<label class="ep-suc-check">
-      <input type="checkbox" class="ep-suc-cb" value="${s.id}" onchange="epToggleTodos()" />
+      <input type="checkbox" class="ep-suc-cb" value="${s.id}" />
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
       <span>${s.nombre}</span>
     </label>`;
@@ -5466,12 +5466,9 @@ async function guardarEventoPopover(fecha) {
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
 
   try {
-    const url = eventosApiUrl('crearEvento');
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titulo, fecha: fechaDesde, fecha_fin: fechaHasta, descripcion: desc, destinatario: dest, tipo: document.getElementById('epLocalCerrado')?.checked ? 'local_cerrado' : '' })
-    });
+    const tipo  = document.getElementById('epLocalCerrado')?.checked ? 'local_cerrado' : '';
+    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha: fechaDesde, fecha_fin: fechaHasta, descripcion: desc, destinatario: dest, tipo }));
+    const res = await fetch(eventosApiUrl('guardar_evento', { datos }));
     const data = await res.json();
     if (data.ok) {
       cerrarEventoPopover();
