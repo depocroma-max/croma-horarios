@@ -3149,33 +3149,27 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- PORTAL EMPLEADO -->
       <section class="portal-hero" style="--portal-color:${suc.color};--portal-soft:${suc.colorLight}">
         <div class="portal-profile-card">
-          <div class="portal-profile-card-stripe"></div>
-          <div class="portal-profile-card-body">
-            <div class="emp-vista-avatar-wrap">
-              <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
-                   id="empVistaAvatarDiv"
-                   style="${perfil.foto_url?'':'background:'+suc.colorLight}">
-                ${avatarInner}
-              </div>
-              <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
-              <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
-                     onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
+          <div class="emp-vista-avatar-wrap">
+            <div class="emp-vista-avatar ${perfil.foto_url?'emp-avatar-foto':''}"
+                 id="empVistaAvatarDiv"
+                 style="${perfil.foto_url?'':'background:'+suc.colorLight}">
+              ${avatarInner}
             </div>
-            <div class="portal-profile-info">
-              <span class="portal-kicker">Portal empleado</span>
-              <h1 class="portal-greeting">Hola ${primerNombre} <span class="portal-greeting-emoji">👋</span></h1>
-              <p>${suc.nombre}</p>
-              <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
-            </div>
+            <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
+            <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
+                   onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
+          </div>
+          <div class="portal-profile-info">
+            <span class="portal-kicker">Portal empleado</span>
+            <h1 class="portal-greeting">Hola ${primerNombre} <span class="portal-greeting-emoji">👋</span></h1>
+            <p>${suc.nombre}</p>
+            <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
           </div>
         </div>
 
         <div class="portal-next-card">
-          <div class="portal-next-card-stripe"></div>
-          <div class="portal-next-card-body">
-            <span class="portal-kicker">Turno de hoy</span>
-            ${getProximoTurno()}
-          </div>
+          <span class="portal-kicker">Turno de hoy</span>
+          ${getProximoTurno()}
         </div>
       </section>
 

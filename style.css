@@ -2745,24 +2745,11 @@ body {
 }
 .portal-profile-card {
   display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-  border-left: none;
-  border-top: none;
-}
-.portal-profile-card-stripe {
-  height: 5px;
-  background: var(--portal-color, var(--accent));
-  flex-shrink: 0;
-}
-.portal-profile-card-body {
-  display: flex;
   align-items: center;
   gap: 16px;
   padding: 18px;
-  flex: 1;
+  border-left: none;
+  border-top: 5px solid var(--portal-color, var(--accent));
 }
 .portal-profile-card .emp-vista-avatar {
   width: 72px;
@@ -2795,25 +2782,12 @@ body {
   margin-bottom: 8px;
 }
 .portal-next-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-  border-top: none;
-}
-.portal-next-card-stripe {
-  height: 5px;
-  background: var(--portal-color, var(--accent));
-  flex-shrink: 0;
-}
-.portal-next-card-body {
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 4px;
-  flex: 1;
+  gap: 6px;
+  border-top: 5px solid var(--portal-color, var(--accent));
 }
 .portal-next-card strong {
   font-family: var(--font-display);
@@ -2983,17 +2957,18 @@ body {
 @media (max-width: 640px) {
   .app { padding: .85rem; }
   .emp-portal-mobilefirst { padding-bottom: 2rem; }
-  .portal-profile-card {
-    align-items: flex-start;
-    padding: 15px;
+  .portal-profile-card,
+  .portal-next-card {
     border-radius: 16px;
+  }
+  .portal-profile-card {
+    padding: 14px;
+  }
+  .portal-next-card {
+    padding: 13px 14px;
   }
   .portal-profile-info p {
     font-size: 13px;
-  }
-  .portal-next-card {
-    padding: 15px;
-    border-radius: 16px;
   }
   .portal-next-card strong {
     font-size: 30px;
