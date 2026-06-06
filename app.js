@@ -6442,13 +6442,8 @@ function mostrarBannerAnuncios(anuncios, nombreEmp) {
 
   wrap.innerHTML = items;
 
-  // Insertar debajo del header de la vista empleado
-  const vistaEmp = document.getElementById('vistaEmpleadoContainer');
-  if (vistaEmp) {
-    vistaEmp.prepend(wrap);
-  } else {
-    document.getElementById('mainApp')?.prepend(wrap);
-  }
+  // Insertar como notificación flotante (no en el flujo del contenido)
+  document.body.appendChild(wrap);
 
   // Sonar notificación
   sonarNotificacion();

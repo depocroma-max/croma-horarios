@@ -3372,37 +3372,44 @@ body {
 
 /* ── Empleado: banner de anuncios ── */
 .anuncios-banner-wrap {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 1rem 1rem 0;
+  z-index: 9999;
+  pointer-events: none;
 }
 .anuncio-banner-card {
   background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
   color: #fff;
-  border-radius: 14px;
-  padding: 14px 16px;
-  box-shadow: 0 4px 20px rgba(37,99,235,.25);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.22), 0 2px 8px rgba(37,99,235,.25);
   transition: opacity .25s ease, transform .25s ease;
   animation: anuncioBounceIn .4s cubic-bezier(.34,1.56,.64,1) both;
+  pointer-events: all;
 }
 @keyframes anuncioBounceIn {
-  from { opacity:0; transform: translateY(-12px) scale(.97); }
+  from { opacity:0; transform: translateY(16px) scale(.96); }
   to   { opacity:1; transform: translateY(0) scale(1); }
 }
 .anuncio-banner-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 .anuncio-banner-icono {
-  font-size: 18px;
+  font-size: 20px;
   flex-shrink: 0;
 }
 .anuncio-banner-titulo {
   flex: 1;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: .2px;
 }
@@ -3410,7 +3417,7 @@ body {
   background: rgba(255,255,255,.15);
   border: none;
   color: #fff;
-  width: 26px; height: 26px;
+  width: 28px; height: 28px;
   border-radius: 50%;
   cursor: pointer;
   font-size: 13px;
@@ -3421,20 +3428,22 @@ body {
 .anuncio-banner-close:hover { background: rgba(255,255,255,.3); }
 .anuncio-banner-msg {
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   opacity: .92;
   white-space: pre-wrap;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .anuncio-banner-fecha {
   font-size: 10px;
-  opacity: .6;
+  opacity: .55;
   text-align: right;
+  letter-spacing: .3px;
 }
 
 @media (max-width: 700px) {
-  .anuncio-banner-card { border-radius: 10px; padding: 12px 14px; }
-  .anuncio-banner-titulo { font-size: 13px; }
+  .anuncios-banner-wrap { bottom: 16px; }
+  .anuncio-banner-card { border-radius: 14px; padding: 14px 16px; }
+  .anuncio-banner-titulo { font-size: 14px; }
   .anuncio-admin-item { padding: .75rem 1rem; }
 }
 
