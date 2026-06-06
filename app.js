@@ -3804,14 +3804,27 @@ function renderAdminInline() {
         "<div class='admin-table-wrap' style='padding:1.5rem'>" +
           "<h3 style='font-size:14px;font-weight:600;margin:0 0 1.25rem;color:#1e293b'>Configuración general</h3>" +
           "<div class='admin-form-grupo'>" +
-            "<label class='emp-filtro-label'>Email del administrador (para notificaciones)</label>" +
+            "<label class='emp-filtro-label'>Email del administrador (para notificaciones de vacaciones)</label>" +
             "<input type='email' class='admin-input' id='cfgEmailAdmin' placeholder='admin@croma.com' />" +
-            "<span style='font-size:11px;color:#94a3b8;margin-top:4px;display:block'>Se envía un email cuando llega una solicitud de vacaciones</span>" +
           "</div>" +
           "<div style='margin-top:1.25rem'>" +
             "<button class='btn-connect' style='margin:0;width:auto;padding:10px 24px' onclick='guardarConfigAdmin()'>Guardar</button>" +
           "</div>" +
           "<p id='cfgStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
+        "</div>" +
+        "<div class='admin-table-wrap' style='padding:1.5rem;margin-top:1rem'>" +
+          "<h3 style='font-size:14px;font-weight:600;margin:0 0 4px;color:#1e293b'>Emails por sucursal</h3>" +
+          "<p style='font-size:12px;color:#94a3b8;margin:0 0 1.25rem'>Se usan para notificar eventos del calendario a cada sucursal.</p>" +
+          SUCURSALES.map(function(s) {
+            return "<div class='admin-form-grupo' style='margin-bottom:10px'>" +
+              "<label class='emp-filtro-label'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:" + s.color + ";margin-right:6px'></span>" + s.nombre + "</label>" +
+              "<input type='email' class='admin-input cfg-suc-email' data-suc-id='" + s.id + "' placeholder='email@sucursal.com' style='margin:0' />" +
+            "</div>";
+          }).join('') +
+          "<div style='margin-top:1.25rem'>" +
+            "<button class='btn-connect' style='margin:0;width:auto;padding:10px 24px' onclick='guardarEmailsSucursales()'>Guardar emails</button>" +
+          "</div>" +
+          "<p id='cfgSucStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
         "</div>" +
       "</div>" +
     "</div>" +
@@ -4507,8 +4520,30 @@ async function cargarConfigAdmin() {
       _configCache = json.config || {};
       const el = document.getElementById('cfgEmailAdmin');
       if (el) el.value = _configCache.email_admin || '';
+      // Cargar emails de sucursales
+      document.querySelectorAll('.cfg-suc-email').forEach(function(input) {
+        const id = input.dataset.sucId;
+        input.value = _configCache['email_suc_' + id] || '';
+      });
     }
   } catch(e) { console.warn('Error cargando config:', e); }
+}
+
+async function guardarEmailsSucursales() {
+  const statusEl = document.getElementById('cfgSucStatus');
+  const inputs = [...document.querySelectorAll('.cfg-suc-email')];
+  try {
+    for (const input of inputs) {
+      const clave = 'email_suc_' + input.dataset.sucId;
+      const valor = input.value.trim();
+      await fetch(vacApiUrl('guardar_config', { clave, valor }));
+      _configCache[clave] = valor;
+    }
+    if (statusEl) { statusEl.textContent = '✓ Emails guardados'; statusEl.style.color = '#065f46'; statusEl.style.display = 'block'; }
+    setTimeout(function() { if (statusEl) statusEl.style.display = 'none'; }, 2500);
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = 'Error: ' + e.message; statusEl.style.color = '#dc2626'; statusEl.style.display = 'block'; }
+  }
 }
 
 async function guardarConfigAdmin() {
@@ -5151,7 +5186,10 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
         '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' ·' : '') + '</span></div>';
     }).join('');
-    const eventosDelDia = eventos.filter(function(ev) { return ev.fecha === isoFecha; });
+    const eventosDelDia = eventos.filter(function(ev) {
+      const fin = ev.fecha_fin || ev.fecha;
+      return isoFecha >= ev.fecha && isoFecha <= fin;
+    });
     const eventosRows = eventosDelDia.map(function(ev) {
       return '<div class="cal-vac-evento" title="' + (ev.descripcion || '') + '" onclick="eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
         '<span style="font-size:9px">📌</span>' +
@@ -5162,7 +5200,8 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       (esHoy     ? ' cal-vac-hoy'      : '') +
       (esFinde   ? ' cal-vac-finde'    : '') +
       (esFer     ? ' cal-vac-feriado'  : '') +
-      (conflicto ? ' cal-vac-conflicto': '') + '">' +
+      (conflicto ? ' cal-vac-conflicto': '') + '"' +
+      ' onclick="abrirEventoPopover(\'' + isoFecha + '\', this)" style="cursor:pointer">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
       empRows + eventosRows + '</div>';
   }
@@ -5278,14 +5317,189 @@ async function cargarEventos(force) {
   return _eventosCache;
 }
 
+// ── Popover nuevo evento (click en celda del calendario) ──
+function abrirEventoPopover(fecha, celda) {
+  cerrarEventoPopover();
+
+  const partes = fecha.split('-');
+  const fechaLabel = partes[2] + '/' + partes[1] + '/' + partes[0];
+  const fechaHoy = fecha; // fecha de la celda clickeada
+
+  const sucCheckboxes = SUCURSALES.map(function(s) {
+    return `<label class="ep-suc-check">
+      <input type="checkbox" class="ep-suc-cb" value="${s.id}" onchange="epToggleTodos()" />
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
+      <span>${s.nombre}</span>
+    </label>`;
+  }).join('');
+
+  const pop = document.createElement('div');
+  pop.id = 'eventoPopover';
+  pop.className = 'evento-popover';
+  pop.innerHTML = `
+    <div class="evento-popover-header">
+      <span class="evento-popover-fecha">Nuevo evento</span>
+      <button class="evento-popover-close" onclick="cerrarEventoPopover()">✕</button>
+    </div>
+    <div class="evento-popover-body">
+      <input type="text" id="epTitulo" class="evento-popover-input" placeholder="Título del evento..." maxlength="80" />
+      <input type="text" id="epDesc" class="evento-popover-input" placeholder="Descripción (opcional)" maxlength="200" />
+      <div class="ep-fechas-wrap">
+        <div class="ep-fecha-campo">
+          <label class="ep-fecha-label">Desde</label>
+          <input type="date" id="epFechaDesde" class="evento-popover-input ep-date" value="${fecha}" onchange="epFechaDesdeChange()" />
+        </div>
+        <div class="ep-fecha-campo">
+          <label class="ep-fecha-label">Hasta</label>
+          <input type="date" id="epFechaHasta" class="evento-popover-input ep-date" value="${fecha}" />
+        </div>
+      </div>
+      <div class="ep-dest-wrap">
+        <label class="ep-radio-opt">
+          <input type="radio" name="epDest" value="todos" checked onchange="epRadioChange()" />
+          <span>Todos los empleados</span>
+        </label>
+        <label class="ep-radio-opt">
+          <input type="radio" name="epDest" value="sucursal" onchange="epRadioChange()" />
+          <span>Por sucursal</span>
+        </label>
+        <div class="ep-suc-list" id="epSucList" style="display:none">${sucCheckboxes}</div>
+        <label class="ep-radio-opt">
+          <input type="radio" name="epDest" value="personal" onchange="epRadioChange()" />
+          <span>Personal</span>
+        </label>
+      </div>
+      <label class="ep-radio-opt" style="border-top:1px solid #f1f5f9;margin-top:2px">
+        <input type="checkbox" id="epLocalCerrado" onchange="epLocalCerradoChange()" style="width:14px;height:14px;accent-color:#dc2626;flex-shrink:0;cursor:pointer" />
+        <span style="color:#dc2626;font-weight:600">🔴 Local cerrado</span>
+      </label>
+      <button class="evento-popover-btn" onclick="guardarEventoPopover('${fecha}')">+ Crear evento</button>
+    </div>
+  `;
+  // Posicionar relativo a la celda (position: fixed = coordenadas de viewport)
+  document.body.appendChild(pop);
+  const rect   = celda.getBoundingClientRect();
+  const popW   = 270;
+  const popH   = pop.offsetHeight || 220;
+  const margen = 8;
+
+  // Horizontal: alinear con la celda, ajustar si se sale por la derecha
+  let left = rect.left;
+  if (left + popW > window.innerWidth - margen) left = window.innerWidth - popW - margen;
+  if (left < margen) left = margen;
+
+  // Vertical: abajo si hay espacio, arriba si no
+  let top = rect.bottom + margen;
+  if (top + popH > window.innerHeight - margen) top = rect.top - popH - margen;
+  if (top < margen) top = margen;
+
+  pop.style.left = left + 'px';
+  pop.style.top  = top + 'px';
+
+  setTimeout(function() {
+    document.getElementById('epTitulo')?.focus();
+    document.addEventListener('mousedown', _cerrarPopoverClickFuera);
+  }, 10);
+}
+
+function _cerrarPopoverClickFuera(e) {
+  const pop = document.getElementById('eventoPopover');
+  if (pop && !pop.contains(e.target) && !e.target.closest('.cal-vac-cell')) {
+    cerrarEventoPopover();
+  }
+}
+
+function cerrarEventoPopover() {
+  const pop = document.getElementById('eventoPopover');
+  if (pop) pop.remove();
+  document.removeEventListener('mousedown', _cerrarPopoverClickFuera);
+}
+
+function epFechaDesdeChange() {
+  const desde = document.getElementById('epFechaDesde')?.value;
+  const hastaEl = document.getElementById('epFechaHasta');
+  if (hastaEl && desde && hastaEl.value < desde) hastaEl.value = desde;
+  if (hastaEl && desde) hastaEl.min = desde;
+}
+
+function epLocalCerradoChange() {
+  const checked = document.getElementById('epLocalCerrado')?.checked;
+  // Si se marca local cerrado, cambiar destino a "Por sucursal" automáticamente
+  if (checked) {
+    const radSuc = document.querySelector('input[name="epDest"][value="sucursal"]');
+    if (radSuc) { radSuc.checked = true; epRadioChange(); }
+  }
+}
+
+function epRadioChange() {
+  const val = (document.querySelector('input[name="epDest"]:checked') || {}).value;
+  const sucList = document.getElementById('epSucList');
+  if (sucList) sucList.style.display = (val === 'sucursal') ? '' : 'none';
+}
+
+async function guardarEventoPopover(fecha) {
+  const titulo     = document.getElementById('epTitulo')?.value.trim();
+  const desc       = document.getElementById('epDesc')?.value.trim();
+  const fechaDesde = document.getElementById('epFechaDesde')?.value || fecha;
+  const fechaHasta = document.getElementById('epFechaHasta')?.value || fechaDesde;
+  if (!titulo) { document.getElementById('epTitulo')?.focus(); return; }
+
+  // Calcular destinatarios
+  const radioVal = (document.querySelector('input[name="epDest"]:checked') || {}).value || 'todos';
+  let dest;
+  if (radioVal === 'personal') {
+    dest = 'personal';
+  } else if (radioVal === 'sucursal') {
+    const sucsMarcadas = [...document.querySelectorAll('.ep-suc-cb:checked')].map(function(c) { return c.value; });
+    if (sucsMarcadas.length === 0) {
+      dest = 'todos';
+    } else if (sucsMarcadas.length === 1) {
+      dest = 'suc_' + sucsMarcadas[0];
+    } else {
+      dest = JSON.stringify(sucsMarcadas.map(function(id) { return 'suc_' + id; }));
+    }
+  } else {
+    dest = 'todos';
+  }
+
+  const btn = document.querySelector('.evento-popover-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  try {
+    const url = eventosApiUrl('crearEvento');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ titulo, fecha: fechaDesde, fecha_fin: fechaHasta, descripcion: desc, destinatario: dest, tipo: document.getElementById('epLocalCerrado')?.checked ? 'local_cerrado' : '' })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      cerrarEventoPopover();
+      _eventosCache = null;
+      cargarCalendarioVacaciones();
+      showToast('✓ Evento creado');
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = '+ Crear evento'; }
+      showToast('Error al guardar');
+    }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '+ Crear evento'; }
+    showToast('Error de conexión');
+  }
+}
+
 // ── Modal nuevo evento ─────────────────────────────────
 function abrirNuevoEvento(fechaPreset) {
   const usuarios = getUsuarios().filter(function(u) { return u.rol === 'empleado' && u.empleadoNombre; });
   const hoy = new Date().toISOString().substring(0,10);
   const fechaVal = fechaPreset || hoy;
 
-  const sucOpts = SUCURSALES.map(function(s) {
-    return '<option value="suc_' + s.id + '">' + s.nombre + '</option>';
+  const sucCheckboxes = SUCURSALES.map(function(s) {
+    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;cursor:pointer">' +
+      '<input type="checkbox" class="evento-suc-cb" value="suc_' + s.id + '" style="width:16px;height:16px;accent-color:#7c3aed" />' +
+      '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + s.color + ';flex-shrink:0"></span>' +
+      '<span style="font-size:13px;color:#374151">' + s.nombre + '</span>' +
+    '</label>';
   }).join('');
 
   const empOpts = usuarios.map(function(u) {
@@ -5312,7 +5526,16 @@ function abrirNuevoEvento(fechaPreset) {
 
         <div class="admin-form-grupo">
           <label class="emp-filtro-label">Fecha *</label>
-          <input type="date" class="admin-input" id="eventoFecha" value="${fechaVal}" />
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="flex:1">
+              <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Desde</div>
+              <input type="date" class="admin-input" id="eventoFecha" value="${fechaVal}" onchange="eventoFechaDesdeChange()" style="margin:0" />
+            </div>
+            <div style="flex:1">
+              <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Hasta</div>
+              <input type="date" class="admin-input" id="eventoFechaFin" value="${fechaVal}" style="margin:0" />
+            </div>
+          </div>
         </div>
 
         <div class="admin-form-grupo">
@@ -5335,14 +5558,20 @@ function abrirNuevoEvento(fechaPreset) {
             <span style="font-size:13px;color:#374151">Empleados específicos</span>
           </label>
 
-          <div id="eventoDestSucursalWrap" style="display:none;margin-top:10px">
-            <select class="admin-input" id="eventoDestSucursalSel">
-              ${sucOpts}
-            </select>
+          <div id="eventoDestSucursalWrap" style="display:none;margin-top:10px;max-height:180px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px">
+            ${sucCheckboxes}
           </div>
           <div id="eventoDestEspWrap" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px">
             ${empOpts || '<p style="font-size:12px;color:#94a3b8;padding:8px 0">No hay empleados con usuario configurado</p>'}
           </div>
+        </div>
+
+        <div class="admin-form-grupo" style="background:#fff0f0;border-radius:10px;padding:12px;border:1px solid #fecaca">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="eventoLocalCerrado" style="width:16px;height:16px;accent-color:#dc2626" onchange="toggleLocalCerrado(this.checked)" />
+            <span style="font-size:13px;font-weight:600;color:#dc2626">🔴 Local cerrado</span>
+          </label>
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Los empleados verán "LOCAL CERRADO" en su semana en vez de "Libre"</span>
         </div>
 
         <div class="admin-form-grupo" style="background:#f8fafc;border-radius:10px;padding:12px;border:1px solid #e2e8f0">
@@ -5367,9 +5596,26 @@ function abrirNuevoEvento(fechaPreset) {
   montarOverlayAdmin(html);
 }
 
+function eventoFechaDesdeChange() {
+  const desde = document.getElementById('eventoFecha')?.value;
+  const hastaEl = document.getElementById('eventoFechaFin');
+  if (hastaEl && desde) {
+    if (hastaEl.value < desde) hastaEl.value = desde;
+    hastaEl.min = desde;
+  }
+}
+
 function toggleEventoDest(val) {
   document.getElementById('eventoDestSucursalWrap').style.display = val === 'sucursal'  ? 'block' : 'none';
   document.getElementById('eventoDestEspWrap').style.display      = val === 'especifico'? 'block' : 'none';
+}
+
+function toggleLocalCerrado(checked) {
+  if (checked) {
+    // Local cerrado implica sucursal específica
+    const radSuc = document.querySelector('input[name="eventoDestTipo"][value="sucursal"]');
+    if (radSuc) { radSuc.checked = true; toggleEventoDest('sucursal'); }
+  }
 }
 
 function toggleEventoAnuncio(checked) {
@@ -5377,17 +5623,19 @@ function toggleEventoAnuncio(checked) {
 }
 
 async function guardarEvento() {
-  const titulo = document.getElementById('eventoTitulo')?.value.trim();
-  const fecha  = document.getElementById('eventoFecha')?.value;
-  const desc   = document.getElementById('eventoDesc')?.value.trim();
+  const titulo   = document.getElementById('eventoTitulo')?.value.trim();
+  const fecha    = document.getElementById('eventoFecha')?.value;
+  const fechaFin = document.getElementById('eventoFechaFin')?.value || fecha;
+  const desc     = document.getElementById('eventoDesc')?.value.trim();
   if (!titulo) { showToast('Ingresá un título para el evento'); return; }
   if (!fecha)  { showToast('Seleccioná una fecha'); return; }
 
   const destTipo = document.querySelector('input[name="eventoDestTipo"]:checked')?.value || 'todos';
   let destinatarios = 'todos';
   if (destTipo === 'sucursal') {
-    const suc = document.getElementById('eventoDestSucursalSel')?.value;
-    destinatarios = suc || 'todos';
+    const sucsMarcadas = [...document.querySelectorAll('.evento-suc-cb:checked')].map(function(c) { return c.value; });
+    if (!sucsMarcadas.length) { showToast('Seleccioná al menos una sucursal'); return; }
+    destinatarios = sucsMarcadas.length === 1 ? sucsMarcadas[0] : JSON.stringify(sucsMarcadas);
   } else if (destTipo === 'especifico') {
     const checks = [...document.querySelectorAll('.evento-dest-cb:checked')].map(function(c) { return c.value; });
     if (!checks.length) { showToast('Seleccioná al menos un empleado'); return; }
@@ -5398,7 +5646,8 @@ async function guardarEvento() {
   const anuncioMsg = document.getElementById('eventoAnuncioMsg')?.value.trim();
 
   try {
-    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha, descripcion: desc, destinatarios }));
+    const tipo  = document.getElementById('eventoLocalCerrado')?.checked ? 'local_cerrado' : '';
+    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha, fecha_fin: fechaFin, descripcion: desc, destinatarios, tipo }));
     const resp  = await fetch(eventosApiUrl('guardar_evento', { datos }));
     const json  = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
@@ -5450,17 +5699,56 @@ async function cargarEventosEmpleado(nombreEmp) {
     if (!json.ok) return;
     const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
     const sucId  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombreEmp; }) || {}).LOCAL || '';
-    // Filtrar: todos, suc_XX coincidente, o lista específica con este empleado
+    // Filtrar: todos, suc_XX coincidente, array de sucursales, o lista específica de empleados
     _eventosEmpCache = (json.eventos || []).filter(function(ev) {
+      if (ev.destinatarios === 'personal') return false; // solo admin
       if (ev.destinatarios === 'todos') return true;
       if (ev.destinatarios === 'suc_' + sucId) return true;
       try {
         const lista = JSON.parse(ev.destinatarios);
+        if (!Array.isArray(lista)) return false;
+        // Array de sucursales: ["suc_paseo", "suc_wave"]
+        if (lista.length && lista[0].startsWith('suc_')) {
+          return lista.indexOf('suc_' + sucId) !== -1;
+        }
+        // Array de nombres de empleados
         return lista.some(function(n) { return n.toLowerCase() === nombreEmp.toLowerCase(); });
       } catch(err) { return false; }
     });
     renderEventosEnSemana(nombreEmp);
   } catch(e) {}
+}
+
+function descargarICS(ev) {
+  const toICS = function(iso) { return (iso || '').replace(/-/g, ''); };
+  const fechaInicio = toICS(ev.fecha);
+  const fechaFin    = toICS(ev.fecha_fin || ev.fecha);
+  // Para eventos de día completo, fecha_fin en .ics es exclusiva (día siguiente)
+  const d = new Date(ev.fecha_fin || ev.fecha);
+  d.setDate(d.getDate() + 1);
+  const fechaFinExcl = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const desc = (ev.descripcion || '').replace(/\n/g,'\\n');
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Croma Horarios//ES',
+    'BEGIN:VEVENT',
+    'UID:' + ev.id + '@croma-horarios',
+    'DTSTART;VALUE=DATE:' + fechaInicio,
+    'DTEND;VALUE=DATE:' + fechaFinExcl,
+    'SUMMARY:' + ev.titulo,
+    (desc ? 'DESCRIPTION:' + desc : ''),
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].filter(Boolean).join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = ev.titulo.replace(/[^a-zA-Z0-9\s]/g,'').trim() + '.ics';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function renderEventosEnSemana(nombreEmp) {
@@ -5471,20 +5759,34 @@ function renderEventosEnSemana(nombreEmp) {
   for (let i = 0; i < 7; i++) {
     const f = new Date(lunes); f.setDate(lunes.getDate() + i);
     const isoFecha = f.getFullYear() + '-' + String(f.getMonth()+1).padStart(2,'0') + '-' + String(f.getDate()).padStart(2,'0');
-    const eventosDelDia = _eventosEmpCache.filter(function(ev) { return ev.fecha === isoFecha; });
+    const eventosDelDia = _eventosEmpCache.filter(function(ev) {
+      const fin = ev.fecha_fin || ev.fecha;
+      return isoFecha >= ev.fecha && isoFecha <= fin;
+    });
     if (!eventosDelDia.length) continue;
     // Buscar la card del día correspondiente y agregar evento
     const cards = document.querySelectorAll('.portal-week-card');
     if (cards[i]) {
       const body = cards[i].querySelector('.portal-week-body');
       if (body) {
+        // Verificar si hay "local cerrado"
+        const localCerrado = eventosDelDia.some(function(ev) { return ev.tipo === 'local_cerrado'; });
+        if (localCerrado) {
+          const card = cards[i];
+          card.classList.add('is-cerrado');
+          const freeEl = card.querySelector('.portal-week-free');
+          if (freeEl) freeEl.innerHTML = '<span class="portal-week-cerrado">🔴 Local cerrado</span>';
+        }
         const evHtml = eventosDelDia.map(function(ev) {
+          if (ev.tipo === 'local_cerrado') return ''; // ya se muestra en el header
+          const icsBtn = '<button class="evento-ics-btn" onclick="descargarICS(' + JSON.stringify(ev).replace(/'/g,"&#39;") + ')" title="Agregar a mi calendario">📅</button>';
           return '<div class="evento-semana-chip">' +
             '<span class="evento-semana-icono">📌</span>' +
-            '<div>' +
+            '<div style="flex:1">' +
               '<div class="evento-semana-titulo">' + ev.titulo + '</div>' +
               (ev.descripcion ? '<div class="evento-semana-desc">' + ev.descripcion + '</div>' : '') +
             '</div>' +
+            icsBtn +
           '</div>';
         }).join('');
         body.insertAdjacentHTML('beforeend', evHtml);
@@ -5513,10 +5815,7 @@ function renderCalendarioView() {
 
   container.innerHTML =
     '<div class="admin-inline-wrap">' +
-    '<div class="admin-inline-header">' +
-      '<div class="admin-titulo">Calendario</div>' +
-      '<div id="vacPendBadge" style="display:none;background:#fef3c7;color:#92400e;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600"></div>' +
-    '</div>' +
+    '<div id="vacPendBadge" style="display:none"></div>' +
     '<div class="admin-tabs" id="vacTabs">' +
       '<button class="admin-tab active" onclick="switchVacTab(\'calendario\',this)">Calendario</button>' +
       '<button class="admin-tab" onclick="switchVacTab(\'anuncios\',this)">Anuncios</button>' +
