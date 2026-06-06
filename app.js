@@ -6131,10 +6131,9 @@ function anunciosApiUrl(accion, params) {
   return url;
 }
 
-function sonarNotificacion() {
+function _playNotifSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // Dos tonos suaves: do y mi
     [[523, 0], [659, 0.18]].forEach(([freq, when]) => {
       const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -6148,7 +6147,25 @@ function sonarNotificacion() {
       osc.start(ctx.currentTime + when);
       osc.stop(ctx.currentTime + when + 0.55);
     });
-  } catch(e) {}
+    return true;
+  } catch(e) { return false; }
+}
+
+var _pendingNotifSound = false;
+
+function sonarNotificacion() {
+  // Los navegadores bloquean AudioContext sin interacción previa.
+  // Intentamos reproducir; si falla, esperamos el primer toque del usuario.
+  if (!_playNotifSound()) {
+    _pendingNotifSound = true;
+    const handler = function() {
+      if (_pendingNotifSound) { _playNotifSound(); _pendingNotifSound = false; }
+      document.removeEventListener('touchstart', handler);
+      document.removeEventListener('click', handler);
+    };
+    document.addEventListener('touchstart', handler, { once: true });
+    document.addEventListener('click', handler, { once: true });
+  }
 }
 
 // ── ADMIN: cargar y renderizar lista de anuncios ──────
