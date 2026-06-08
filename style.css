@@ -45,6 +45,41 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ===== SPLASH SCREEN ===== */
+#splashScreen {
+  position: fixed;
+  inset: 0;
+  background: #0d0d0d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  z-index: 99999;
+  transition: opacity .6s ease;
+}
+#splashScreen.splash-hide {
+  opacity: 0;
+  pointer-events: none;
+}
+#splashLogo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  animation: splashLogoIn .7s cubic-bezier(0.390, 0.575, 0.565, 1.000) both;
+}
+#splashText {
+  font-family: var(--font-display);
+  font-size: 36px;
+  letter-spacing: 6px;
+  color: #fff;
+  animation: splashLogoIn .7s .15s cubic-bezier(0.390, 0.575, 0.565, 1.000) both;
+}
+@keyframes splashLogoIn {
+  0%   { opacity: 0; transform: scale(.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 /* ===== TOPBAR ===== */
 .topbar {
   position: sticky; top: 0; z-index: 100;

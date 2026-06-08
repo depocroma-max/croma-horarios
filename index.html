@@ -17,6 +17,12 @@
 </head>
 <body>
 
+  <!-- SPLASH SCREEN -->
+  <div id="splashScreen">
+    <img src="tridente_solo.png" alt="Croma" id="splashLogo" />
+    <span id="splashText">CROMA</span>
+  </div>
+
   <!-- TOPBAR -->
   <header class="topbar">
     <button class="hamburger-btn" id="btnHamburger" aria-label="Menú">
@@ -252,6 +258,15 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/croma-horarios/sw.js');
     }
+    // Splash: fade out cuando el DOM está listo
+    window.addEventListener('load', function() {
+      const splash = document.getElementById('splashScreen');
+      if (!splash) return;
+      setTimeout(function() {
+        splash.classList.add('splash-hide');
+        setTimeout(function() { splash.remove(); }, 600);
+      }, 1200);
+    });
   </script>
 </body>
 </html>
