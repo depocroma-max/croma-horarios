@@ -1,0 +1,25 @@
+{
+  "name": "Croma Horarios",
+  "short_name": "Croma",
+  "description": "Portal de horarios y jornadas Croma",
+  "start_url": "/croma-horarios/",
+  "scope": "/croma-horarios/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
+  "icons": [
+    {
+      "src": "tridente_solo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "tridente_solo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
