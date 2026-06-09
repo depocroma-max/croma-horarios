@@ -2535,6 +2535,11 @@ async function verificarCredencialesAsync(usuario, pin) {
 
 // ── PANTALLA DE LOGIN ──────────────────────────────────
 function mostrarLoginApp() {
+  // Redirigir al login central de Croma App
+  location.href = 'https://depocroma-max.github.io/Croma-app/';
+}
+
+function _mostrarLoginAppLegado() {
   document.getElementById('setupScreen').style.display = 'none';
   document.getElementById('mainApp').style.display     = 'none';
 
@@ -4161,35 +4166,40 @@ function init() {
   const cromaLocal   = localStorage.getItem('croma_auth') === '1' && localStorage.getItem('croma_remember') === '1';
 
   if (cromaSession || cromaLocal) {
-    const store    = cromaSession ? sessionStorage : localStorage;
-    const userName = store.getItem('croma_user') || 'Admin';
-    sesionActual = {
-      nombre:    userName.charAt(0).toUpperCase() + userName.slice(1),
-      rol:       'admin',
-      sucursal:  store.getItem('croma_suc') || '',
-      fromCromaApp: true
-    };
-    iniciarAppConSesion();
-  } else {
-    // Sin token de Croma App → verificar sesión propia (empleados con PIN)
-    const sesionGuardada = localStorage.getItem('croma_session');
-    if (sesionGuardada) {
+    const store = cromaSession ? sessionStorage : localStorage;
+
+    // Empleado que viene de Croma App → usar su sesión completa
+    const empSesionStr = store.getItem('croma_horarios_session');
+    if (empSesionStr) {
       try {
-        const { usuario } = JSON.parse(sesionGuardada);
-        if (usuario && usuario.nombre && usuario.rol) {
-          sesionActual = usuario;
+        const { usuario } = JSON.parse(empSesionStr);
+        if (usuario && usuario.nombre) {
+          sesionActual = { ...usuario, fromCromaApp: true };
           iniciarAppConSesion();
-        } else {
-          localStorage.removeItem('croma_session');
-          mostrarLoginApp();
-        }
-      } catch (e) {
-        localStorage.removeItem('croma_session');
-        mostrarLoginApp();
+          // continuar con el resto del init después del if/else
+        } else { throw new Error('sesión inválida'); }
+      } catch(e) {
+        // sesión corrupta → volver a Croma App
+        sessionStorage.clear();
+        ['croma_auth','croma_rol','croma_suc','croma_remember','croma_horarios_session'].forEach(k=>localStorage.removeItem(k));
+        location.href = 'https://depocroma-max.github.io/Croma-app/';
+        return;
       }
     } else {
-      mostrarLoginApp();
+      // Admin / encargado → acceso completo como admin
+      const userName = store.getItem('croma_user') || 'Admin';
+      sesionActual = {
+        nombre:      userName.charAt(0).toUpperCase() + userName.slice(1),
+        rol:         'admin',
+        sucursal:    store.getItem('croma_suc') || '',
+        fromCromaApp: true
+      };
+      iniciarAppConSesion();
     }
+  } else {
+    // Sin token → redirigir a Croma App (todos pasan por ahí)
+    location.href = 'https://depocroma-max.github.io/Croma-app/';
+    return;
   }
 
   // Semana
