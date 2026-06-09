@@ -2666,18 +2666,23 @@ async function intentarLogin() {
 }
 
 function cerrarSesion() {
-  // Al cerrar sesión explícitamente, limpiar cache del empleado
-  // (si solo cierra el navegador, el cache queda pero expira en 4hs)
   if (sesionActual?.empleadoNombre) {
     localStorage.removeItem(`croma_horarios_${sesionActual.empleadoNombre.replace(/\s+/g,'_')}`);
   }
+  const vieneDeCromaApp = sesionActual?.fromCromaApp;
   sesionActual = null;
   adminAutenticado = false;
   sessionStorage.removeItem('croma_admin_auth');
-  // Limpiar sesión persistida (el usuario tendrá que volver a ingresar PIN)
-  // pero mantenemos el nombre guardado para pre-rellenarlo
   localStorage.removeItem('croma_session');
-  mostrarLoginApp();
+
+  if (vieneDeCromaApp) {
+    // Limpiar token de Croma App y volver al login central
+    sessionStorage.clear();
+    ['croma_auth','croma_rol','croma_suc','croma_remember'].forEach(k => localStorage.removeItem(k));
+    location.href = 'https://depocroma-max.github.io/Croma-app/';
+  } else {
+    mostrarLoginApp();
+  }
 }
 
 // ── INICIAR APP SEGÚN ROL ──────────────────────────────
@@ -4150,26 +4155,41 @@ function cerrarAdmin(event) {
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // Verificar si hay sesión persistida (dispositivo de confianza)
-  const sesionGuardada = localStorage.getItem('croma_session');
-  if (sesionGuardada) {
-    try {
-      const { usuario } = JSON.parse(sesionGuardada);
-      if (usuario && usuario.nombre && usuario.rol) {
-        // Sesión válida → entrar directo sin pedir PIN
-        sesionActual = usuario;
-        iniciarAppConSesion();
-      } else {
+  // ── TOKEN CROMA APP ──────────────────────────────────
+  // Si el usuario viene desde el login central (Croma App), entrar directo como admin
+  const cromaSession = sessionStorage.getItem('croma_auth') === '1';
+  const cromaLocal   = localStorage.getItem('croma_auth') === '1' && localStorage.getItem('croma_remember') === '1';
+
+  if (cromaSession || cromaLocal) {
+    const store    = cromaSession ? sessionStorage : localStorage;
+    const userName = store.getItem('croma_user') || 'Admin';
+    sesionActual = {
+      nombre:    userName.charAt(0).toUpperCase() + userName.slice(1),
+      rol:       'admin',
+      sucursal:  store.getItem('croma_suc') || '',
+      fromCromaApp: true
+    };
+    iniciarAppConSesion();
+  } else {
+    // Sin token de Croma App → verificar sesión propia (empleados con PIN)
+    const sesionGuardada = localStorage.getItem('croma_session');
+    if (sesionGuardada) {
+      try {
+        const { usuario } = JSON.parse(sesionGuardada);
+        if (usuario && usuario.nombre && usuario.rol) {
+          sesionActual = usuario;
+          iniciarAppConSesion();
+        } else {
+          localStorage.removeItem('croma_session');
+          mostrarLoginApp();
+        }
+      } catch (e) {
         localStorage.removeItem('croma_session');
         mostrarLoginApp();
       }
-    } catch (e) {
-      localStorage.removeItem('croma_session');
+    } else {
       mostrarLoginApp();
     }
-  } else {
-    // Sin sesión guardada → mostrar login normal
-    mostrarLoginApp();
   }
 
   // Semana
