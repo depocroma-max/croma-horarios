@@ -5629,7 +5629,10 @@ async function guardarEventoPopover(fecha) {
 }
 
 // ── Modal nuevo evento ─────────────────────────────────
-function abrirNuevoEvento(fechaPreset) {
+async function abrirNuevoEvento(fechaPreset) {
+  if (!_configCache.emails_contactos) {
+    try { await cargarConfigAdmin(); } catch(e) {}
+  }
   const usuarios = getUsuarios().filter(function(u) { return u.rol === 'empleado' && u.empleadoNombre; });
   const hoy = new Date().toISOString().substring(0,10);
   const fechaVal = fechaPreset || hoy;
@@ -5728,18 +5731,16 @@ function abrirNuevoEvento(fechaPreset) {
         ${(function() {
           const contactos = getEmailsContactos();
           if (!contactos.length) return '';
-          return `<div class="admin-form-grupo" style="background:#f0f9ff;border-radius:10px;padding:12px;border:1px solid #bae6fd">
-            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0369a1;display:block;margin-bottom:8px">✉️ Notificar por email</label>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              ${contactos.map(function(c, i) {
-                return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                  <input type="checkbox" class="evento-email-cb" value="${c.email}" style="width:15px;height:15px;accent-color:#0369a1">
-                  <span style="font-size:13px;color:#1e293b">${c.nombre}</span>
-                  <span style="font-size:11px;color:#94a3b8">${c.email}</span>
-                </label>`;
-              }).join('')}
-            </div>
-          </div>`;
+          const lista = contactos.map(function(c){ return c.nombre; }).join(', ');
+          return '<div class="admin-form-grupo" style="background:#f0f9ff;border-radius:10px;padding:12px;border:1px solid #bae6fd">' +
+            '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">' +
+              '<input type="checkbox" id="eventoEmailAdmins" style="width:16px;height:16px;accent-color:#0369a1" />' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:600;color:#0369a1">✉️ Notificar a Administración</div>' +
+                '<div style="font-size:11px;color:#64748b;margin-top:2px">' + lista + '</div>' +
+              '</div>' +
+            '</label>' +
+          '</div>';
         })()}
 
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:0.5rem">
@@ -5823,7 +5824,8 @@ async function guardarEvento() {
 
   const conAnuncio = document.getElementById('eventoConAnuncio')?.checked;
   const anuncioMsg = document.getElementById('eventoAnuncioMsg')?.value.trim();
-  const emailsDest = [...document.querySelectorAll('.evento-email-cb:checked')].map(function(c) { return c.value; });
+  const notifAdmins = document.getElementById('eventoEmailAdmins')?.checked;
+  const emailsDest = notifAdmins ? getEmailsContactos().map(function(c){ return c.email; }) : [];
 
   try {
     const tipo  = document.getElementById('eventoLocalCerrado')?.checked ? 'local_cerrado' : '';
