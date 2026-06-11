@@ -3434,8 +3434,9 @@ function imprimirVistaEmpleado() {
 }
 
 // ── MI PERFIL (vista empleado) ─────────────────────────
-function abrirMiPerfil() {
-  const lista = getUsuarios();
+async function abrirMiPerfil() {
+  let lista = getUsuarios();
+  if (!lista.length) lista = await cargarUsuarios();
   const u = lista.find(u => u.nombre.toLowerCase() === sesionActual.nombre.toLowerCase());
   if (!u) { showToast('No se encontró tu usuario'); return; }
 
@@ -3517,7 +3518,8 @@ async function guardarMiPerfil() {
   const pinRepetir = document.getElementById('miPerfilPinRepetir')?.value;
   const errEl      = document.getElementById('miPerfilError');
 
-  const lista = getUsuarios();
+  let lista = getUsuarios();
+  if (!lista.length) lista = await cargarUsuarios();
   const idx   = lista.findIndex(u => u.nombre.toLowerCase() === sesionActual.nombre.toLowerCase());
   if (idx < 0) { showToast('Error: usuario no encontrado'); return; }
 
