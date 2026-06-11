@@ -5438,8 +5438,11 @@ async function cargarEventos(force) {
 }
 
 // ── Popover nuevo evento (click en celda del calendario) ──
-function abrirEventoPopover(fecha, celda) {
+async function abrirEventoPopover(fecha, celda) {
   cerrarEventoPopover();
+  if (!_configCache.emails_contactos) {
+    try { await cargarConfigAdmin(); } catch(e) {}
+  }
 
   const partes = fecha.split('-');
   const fechaLabel = partes[2] + '/' + partes[1] + '/' + partes[0];
@@ -5493,6 +5496,18 @@ function abrirEventoPopover(fecha, celda) {
         <input type="checkbox" id="epLocalCerrado" onchange="epLocalCerradoChange()" style="width:14px;height:14px;accent-color:#dc2626;flex-shrink:0;cursor:pointer" />
         <span style="color:#dc2626;font-weight:600">🔴 Local cerrado</span>
       </label>
+      ${(function(){
+        const contactos = getEmailsContactos();
+        if (!contactos.length) return '';
+        const nombres = contactos.map(function(c){ return c.nombre; }).join(', ');
+        return '<label class="ep-radio-opt" style="border-top:1px solid #f1f5f9;margin-top:2px;align-items:flex-start">' +
+          '<input type="checkbox" id="epEmailAdmins" style="width:14px;height:14px;accent-color:#0369a1;flex-shrink:0;cursor:pointer;margin-top:2px" />' +
+          '<div>' +
+            '<span style="color:#0369a1;font-weight:600">✉️ Notificar a Administración</span>' +
+            '<div style="font-size:11px;color:#94a3b8;margin-top:1px">' + nombres + '</div>' +
+          '</div>' +
+        '</label>';
+      })()}
       <button class="evento-popover-btn" onclick="guardarEventoPopover('${fecha}')">+ Crear evento</button>
     </div>
   `;
@@ -5610,7 +5625,8 @@ async function guardarEventoPopover(fecha) {
 
   try {
     const tipo  = document.getElementById('epLocalCerrado')?.checked ? 'local_cerrado' : '';
-    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha: fechaDesde, fecha_fin: fechaHasta, descripcion: desc, destinatario: dest, tipo }));
+    const epEmails = document.getElementById('epEmailAdmins')?.checked ? getEmailsContactos().map(function(c){ return c.email; }) : [];
+    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha: fechaDesde, fecha_fin: fechaHasta, descripcion: desc, destinatario: dest, tipo, emails: epEmails }));
     const res = await fetch(eventosApiUrl('guardar_evento', { datos }));
     const data = await res.json();
     if (data.ok) {
