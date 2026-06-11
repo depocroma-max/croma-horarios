@@ -3859,6 +3859,17 @@ function renderAdminInline() {
           "</div>" +
           "<p id='cfgSucStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
         "</div>" +
+        "<div class='admin-table-wrap' style='padding:1.5rem;margin-top:1rem'>" +
+          "<h3 style='font-size:14px;font-weight:600;margin:0 0 4px;color:#1e293b'>Lista de correos para eventos</h3>" +
+          "<p style='font-size:12px;color:#94a3b8;margin:0 0 1.25rem'>Estos correos estarán disponibles para elegir al crear un evento del calendario.</p>" +
+          "<div id='cfgEmailsLista'><p style='font-size:12px;color:#94a3b8'>Cargando...</p></div>" +
+          "<div style='display:flex;gap:8px;margin-top:12px'>" +
+            "<input type='text' class='admin-input' id='cfgNuevoNombre' placeholder='Nombre' style='margin:0;flex:1' />" +
+            "<input type='email' class='admin-input' id='cfgNuevoEmail' placeholder='correo@ejemplo.com' style='margin:0;flex:2' />" +
+            "<button class='btn-connect' style='margin:0;width:auto;padding:10px 18px;white-space:nowrap' onclick='agregarEmailContacto()'>+ Agregar</button>" +
+          "</div>" +
+          "<p id='cfgEmailsStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
+        "</div>" +
       "</div>" +
     "</div>" +
     "</div>";
@@ -4573,11 +4584,11 @@ async function cargarConfigAdmin() {
       _configCache = json.config || {};
       const el = document.getElementById('cfgEmailAdmin');
       if (el) el.value = _configCache.email_admin || '';
-      // Cargar emails de sucursales
       document.querySelectorAll('.cfg-suc-email').forEach(function(input) {
         const id = input.dataset.sucId;
         input.value = _configCache['email_suc_' + id] || '';
       });
+      renderEmailsLista();
     }
   } catch(e) { console.warn('Error cargando config:', e); }
 }
@@ -4612,6 +4623,62 @@ async function guardarConfigAdmin() {
     } else throw new Error(json.error);
   } catch(e) {
     if (statusEl) { statusEl.textContent = 'Error al guardar: ' + e.message; statusEl.style.color='#dc2626'; statusEl.style.display='block'; }
+  }
+}
+
+// ── LISTA DE EMAILS CONTACTOS ─────────────────────────
+function getEmailsContactos() {
+  try { return JSON.parse(_configCache.emails_contactos || '[]'); } catch(e) { return []; }
+}
+
+function renderEmailsLista() {
+  const lista = getEmailsContactos();
+  const el = document.getElementById('cfgEmailsLista');
+  if (!el) return;
+  if (!lista.length) {
+    el.innerHTML = '<p style="font-size:12px;color:#94a3b8;padding:4px 0">Sin correos agregados.</p>';
+    return;
+  }
+  el.innerHTML = lista.map(function(c, i) {
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9">' +
+      '<div style="flex:1">' +
+        '<div style="font-size:13px;font-weight:500;color:#1e293b">' + c.nombre + '</div>' +
+        '<div style="font-size:12px;color:#64748b">' + c.email + '</div>' +
+      '</div>' +
+      '<button onclick="eliminarEmailContacto(' + i + ')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:16px;padding:4px;line-height:1" title="Eliminar">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+async function agregarEmailContacto() {
+  const nombre = document.getElementById('cfgNuevoNombre')?.value.trim();
+  const email  = document.getElementById('cfgNuevoEmail')?.value.trim();
+  const statusEl = document.getElementById('cfgEmailsStatus');
+  if (!nombre || !email) { showToast('Completá nombre y correo'); return; }
+  const lista = getEmailsContactos();
+  lista.push({ nombre, email });
+  await guardarEmailsContactos(lista, statusEl);
+  document.getElementById('cfgNuevoNombre').value = '';
+  document.getElementById('cfgNuevoEmail').value = '';
+}
+
+async function eliminarEmailContacto(idx) {
+  const lista = getEmailsContactos();
+  lista.splice(idx, 1);
+  await guardarEmailsContactos(lista, document.getElementById('cfgEmailsStatus'));
+}
+
+async function guardarEmailsContactos(lista, statusEl) {
+  try {
+    const valor = JSON.stringify(lista);
+    const resp = await fetch(vacApiUrl('guardar_config', { clave: 'emails_contactos', valor }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error);
+    _configCache.emails_contactos = valor;
+    renderEmailsLista();
+    if (statusEl) { statusEl.textContent = '✓ Guardado'; statusEl.style.color='#065f46'; statusEl.style.display='block'; setTimeout(function(){ statusEl.style.display='none'; }, 2000); }
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = 'Error: ' + e.message; statusEl.style.color='#dc2626'; statusEl.style.display='block'; }
   }
 }
 
@@ -5658,6 +5725,23 @@ function abrirNuevoEvento(fechaPreset) {
           </div>
         </div>
 
+        ${(function() {
+          const contactos = getEmailsContactos();
+          if (!contactos.length) return '';
+          return `<div class="admin-form-grupo" style="background:#f0f9ff;border-radius:10px;padding:12px;border:1px solid #bae6fd">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0369a1;display:block;margin-bottom:8px">✉️ Notificar por email</label>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${contactos.map(function(c, i) {
+                return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <input type="checkbox" class="evento-email-cb" value="${c.email}" style="width:15px;height:15px;accent-color:#0369a1">
+                  <span style="font-size:13px;color:#1e293b">${c.nombre}</span>
+                  <span style="font-size:11px;color:#94a3b8">${c.email}</span>
+                </label>`;
+              }).join('')}
+            </div>
+          </div>`;
+        })()}
+
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:0.5rem">
           <button class="btn-connect" style="margin:0" onclick="guardarEvento()">Guardar evento</button>
           <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
@@ -5739,10 +5823,11 @@ async function guardarEvento() {
 
   const conAnuncio = document.getElementById('eventoConAnuncio')?.checked;
   const anuncioMsg = document.getElementById('eventoAnuncioMsg')?.value.trim();
+  const emailsDest = [...document.querySelectorAll('.evento-email-cb:checked')].map(function(c) { return c.value; });
 
   try {
     const tipo  = document.getElementById('eventoLocalCerrado')?.checked ? 'local_cerrado' : '';
-    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha, fecha_fin: fechaFin, descripcion: desc, destinatarios, tipo }));
+    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha, fecha_fin: fechaFin, descripcion: desc, destinatarios, tipo, emails: emailsDest }));
     const resp  = await fetch(eventosApiUrl('guardar_evento', { datos }));
     const json  = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
