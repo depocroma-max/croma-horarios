@@ -2580,6 +2580,35 @@ body {
 }
 .wa-btn:hover { background: #16a34a; color: #fff; border-color: #16a34a; }
 
+/* ══ TOGGLE FILTROS MOBILE ════════════════════════════ */
+.emp-filtros-toggle-btn {
+  display: none;
+}
+@media (max-width: 700px) {
+  .emp-filtros-toggle-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 1rem;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+    font-family: var(--font-body); font-size: 13px; font-weight: 600;
+    color: var(--black); cursor: pointer; margin-bottom: .75rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  }
+  .emp-filtros-panel {
+    display: none !important;
+  }
+  .emp-filtros-panel.mobile-open {
+    display: flex !important;
+    flex-direction: column;
+    border-radius: 12px;
+    padding: .85rem 1rem;
+    gap: .65rem;
+  }
+  /* Ocultar VER SOLO en mobile — demasiado cluttered */
+  .emp-filtros-panel .emp-filtro-grupo:first-child {
+    display: none;
+  }
+}
+
 /* ══ PANEL DE FILTROS ═════════════════════════════════ */
 .emp-filtros-panel {
   display: flex;

@@ -615,6 +615,9 @@ function renderEmpleados(datos) {
   ].join('');
 
   container.innerHTML = `
+    <button class="emp-filtros-toggle-btn" onclick="toggleEmpFiltrosMobile(this)">
+      <span>Filtros</span><span>▸</span>
+    </button>
     <div class="emp-filtros-panel">
       <div class="emp-filtro-grupo" style="flex:0 0 auto;justify-content:flex-end;border-right:1px solid var(--gray-100);padding-right:1.5rem;min-width:unset">
         <label class="emp-filtro-label">Ver solo</label>
@@ -6620,6 +6623,13 @@ function marcarAnuncioLeido(id, idx, empEnc) {
   if (_anunciosTodosCache.length) {
     renderAnunciosSeccion(_anunciosTodosCache, _anunciosEmpActual);
   }
+}
+
+function toggleEmpFiltrosMobile(btn) {
+  const panel = document.querySelector('.emp-filtros-panel');
+  if (!panel) return;
+  const open = panel.classList.toggle('mobile-open');
+  btn.querySelector('span:last-child').textContent = open ? '▾' : '▸';
 }
 
 // Llamar al iniciar sesión de empleado (hook en mostrarVistaEmpleado)
