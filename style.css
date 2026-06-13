@@ -1136,12 +1136,16 @@ body {
 
 .drawer {
   position: fixed; top: 0; left: 0; bottom: 0;
-  width: 280px; background: #111; z-index: 201;
+  width: 280px; background: #111 !important; background-color: #111 !important; z-index: 201;
   display: flex; flex-direction: column;
   transform: translateX(-100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 4px 0 20px rgba(0,0,0,0.4);
 }
+.drawer * { color: inherit; }
+.drawer-header { background: #111; }
+.drawer-nav { background: #111; }
+.drawer-footer { background: #111; }
 .drawer.open { transform: translateX(0); }
 
 .drawer-header {
