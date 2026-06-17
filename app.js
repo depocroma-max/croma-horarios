@@ -5509,9 +5509,13 @@ async function abrirNuevoEvento(fechaPreset) {
             <input type="radio" name="eventoDestTipo" id="eventoDestSucursal" value="sucursal" onchange="toggleEventoDest(this.value)" style="accent-color:#7c3aed" />
             <span style="font-size:13px;color:#374151">Sucursal específica</span>
           </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">
             <input type="radio" name="eventoDestTipo" id="eventoDestEspecifico" value="especifico" onchange="toggleEventoDest(this.value)" style="accent-color:#7c3aed" />
             <span style="font-size:13px;color:#374151">Empleados específicos</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="radio" name="eventoDestTipo" id="eventoDestPersonal" value="personal" onchange="toggleEventoDest(this.value)" style="accent-color:#7c3aed" />
+            <span style="font-size:13px;color:#374151">Solo yo (nota personal en el calendario)</span>
           </label>
 
           <div id="eventoDestSucursalWrap" style="display:none;margin-top:10px;max-height:180px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px">
@@ -5633,9 +5637,11 @@ async function guardarEvento() {
     const checks = [...document.querySelectorAll('.evento-dest-cb:checked')].map(function(c) { return c.value; });
     if (!checks.length) { showToast('Seleccioná al menos un empleado'); return; }
     destinatarios = JSON.stringify(checks);
+  } else if (destTipo === 'personal') {
+    destinatarios = 'personal';
   }
 
-  const conAnuncio = document.getElementById('eventoConAnuncio')?.checked;
+  const conAnuncio = destTipo !== 'personal' && document.getElementById('eventoConAnuncio')?.checked;
   const anuncioMsg = document.getElementById('eventoAnuncioMsg')?.value.trim();
   const notifAdmins = document.getElementById('eventoEmailAdmins')?.checked;
   const emailsDest = notifAdmins ? getEmailsContactos().map(function(c){ return c.email; }) : [];
