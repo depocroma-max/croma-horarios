@@ -5861,7 +5861,8 @@ async function guardarEvento() {
       const datosAnuncio = encodeURIComponent(JSON.stringify({
         titulo: '📌 ' + titulo,
         mensaje: msgAnuncio,
-        destinatarios: destsAnuncio
+        destinatarios: destsAnuncio,
+        vigencia: fechaFin  // El anuncio caduca al finalizar el evento
       }));
       await fetch(anunciosApiUrl('guardar_anuncio', { datos: datosAnuncio }));
       _anunciosCache = null;
@@ -6263,6 +6264,21 @@ async function cargarBancoDiasAnio(anio) {
 let _anunciosCache = null;
 let _anunciosLeidosEmp = new Set(JSON.parse(localStorage.getItem('croma_anuncios_leidos') || '[]'));
 
+// Un anuncio está vencido si tiene vigencia y esa fecha ya pasó.
+// Fallback: si no tiene vigencia, caduca a los 30 días de creado.
+function anuncioVencido(a) {
+  const hoy = new Date().toISOString().substring(0, 10);
+  if (a.vigencia) return a.vigencia < hoy;
+  // Sin vigencia: usar fecha de creación + 30 días como caducidad implícita
+  if (a.fecha) {
+    const fechaCreacion = a.fecha.substring(0, 10);
+    const d = new Date(fechaCreacion);
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().substring(0, 10) < hoy;
+  }
+  return false;
+}
+
 // ── HELPERS ───────────────────────────────────────────
 function anunciosApiUrl(accion, params) {
   let url = `${APPS_SCRIPT_URL}?accion=${accion}`;
@@ -6393,6 +6409,13 @@ function abrirNuevoAnuncio() {
             placeholder="Escribí el mensaje completo aquí..."></textarea>
         </div>
         <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Vigencia (opcional)</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="date" class="admin-input" id="anuncioVigencia" style="margin:0;flex:1" />
+            <span style="font-size:11px;color:#94a3b8;white-space:nowrap">Si no se pone, caduca a los 30 días</span>
+          </div>
+        </div>
+        <div class="admin-form-grupo">
           <label class="emp-filtro-label">Destinatarios</label>
           <label class="anuncio-dest-check" style="margin-bottom:6px;font-weight:600">
             <input type="checkbox" id="anuncioDestTodos" checked onchange="toggleTodosAnuncio(this)" />
@@ -6451,8 +6474,10 @@ async function publicarAnuncio() {
     });
   }
 
+  const vigencia = document.getElementById('anuncioVigencia')?.value || '';
+
   try {
-    const datos = encodeURIComponent(JSON.stringify({ titulo, mensaje, destinatarios }));
+    const datos = encodeURIComponent(JSON.stringify({ titulo, mensaje, destinatarios, vigencia }));
     const resp  = await fetch(anunciosApiUrl('guardar_anuncio', { datos }));
     const json  = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
@@ -6527,8 +6552,8 @@ async function verificarAnunciosEmpleado(nombreEmp) {
     _anunciosEmpActual  = nombreEmp;
     // Siempre poblar la seccion historial (con o sin no leidos)
     renderAnunciosSeccion(todos, nombreEmp);
-    // Banner solo para los no leidos
-    const nuevos = todos.filter(a => !_anunciosLeidosEmp.has(a.id));
+    // Banner y badge solo para los no leidos Y no vencidos
+    const nuevos = todos.filter(a => !_anunciosLeidosEmp.has(a.id) && !anuncioVencido(a));
     if (nuevos.length) mostrarBannerAnuncios(nuevos, nombreEmp);
     actualizarBadgeAnunciosEmp(todos);
   } catch(e) {}
@@ -6547,16 +6572,20 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
   }
 
   list.innerHTML = anuncios.map(function(a, i) {
-    const leido = _anunciosLeidosEmp.has(a.id);
-    const claseItem = leido ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo';
-    const icono     = leido ? '📋' : '📣';
-    const badgeNuevo = !leido ? '<span class="anuncio-hist-badge">Nuevo</span>' : '';
+    const leido   = _anunciosLeidosEmp.has(a.id);
+    const vencido = anuncioVencido(a);
+    const claseItem = (leido || vencido) ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo';
+    const icono     = (leido || vencido) ? '📋' : '📣';
+    let badge = '';
+    if (vencido)      badge = '<span class="anuncio-hist-badge" style="background:#e2e8f0;color:#94a3b8">Vencido</span>';
+    else if (!leido)  badge = '<span class="anuncio-hist-badge">Nuevo</span>';
+    const vigStr = a.vigencia ? ' · hasta ' + a.vigencia : '';
     return '<div class="anuncio-hist-item ' + claseItem + '" id="anuncioHist' + i + '">' +
       '<div class="anuncio-hist-top">' +
         '<span class="anuncio-hist-icono">' + icono + '</span>' +
         '<div class="anuncio-hist-titulo">' + a.titulo + '</div>' +
-        badgeNuevo +
-        '<span class="anuncio-hist-fecha">' + a.fecha + '</span>' +
+        badge +
+        '<span class="anuncio-hist-fecha">' + a.fecha.substring(0, 10) + vigStr + '</span>' +
       '</div>' +
       '<div class="anuncio-hist-msg">' + a.mensaje + '</div>' +
     '</div>';
@@ -6566,7 +6595,7 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
 }
 
 function actualizarBadgeAnunciosEmp(anuncios) {
-  const noLeidos = (anuncios || []).filter(a => !_anunciosLeidosEmp.has(a.id));
+  const noLeidos = (anuncios || []).filter(a => !_anunciosLeidosEmp.has(a.id) && !anuncioVencido(a));
   const badge = document.getElementById('bellBadgeEmp');
   if (!badge) return;
   const vacBadgeCount = parseInt(badge.textContent) || 0;
