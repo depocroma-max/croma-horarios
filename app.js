@@ -5656,16 +5656,30 @@ async function guardarEvento() {
     // Si también es anuncio, guardarlo en paralelo
     if (conAnuncio) {
       const msgAnuncio = anuncioMsg || titulo + (desc ? ': ' + desc : '');
-      const destsAnuncio = destTipo === 'todos' ? [] :
-        destTipo === 'especifico' ? JSON.parse(destinatarios) : [];
-      const datosAnuncio = encodeURIComponent(JSON.stringify({
-        titulo: '📌 ' + titulo,
-        mensaje: msgAnuncio,
-        destinatarios: destsAnuncio,
-        vigencia: fechaFin  // El anuncio caduca al finalizar el evento
-      }));
-      await fetch(anunciosApiUrl('guardar_anuncio', { datos: datosAnuncio }));
-      _anunciosCache = null;
+      let destsAnuncio = [];
+      if (destTipo === 'especifico') {
+        destsAnuncio = JSON.parse(destinatarios);
+      } else if (destTipo === 'sucursal') {
+        const sucIds = destinatarios.startsWith('[') ? JSON.parse(destinatarios).map(s => s.replace('suc_','')) : [destinatarios.replace('suc_','')];
+        destsAnuncio = getUsuarios().filter(function(u) {
+          if (u.rol !== 'empleado' || !u.empleadoNombre) return false;
+          const perfil = EMPLEADOS_PERFILES[u.empleadoNombre] || {};
+          const sucId  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === u.empleadoNombre; }) || {}).LOCAL || '';
+          return sucIds.indexOf(sucId) !== -1;
+        }).map(function(u) { return u.empleadoNombre; });
+      }
+      if ((destTipo === 'especifico' || destTipo === 'sucursal') && !destsAnuncio.length) {
+        showToast('Evento guardado, pero ningún empleado coincide para el anuncio');
+      } else {
+        const datosAnuncio = encodeURIComponent(JSON.stringify({
+          titulo: '📌 ' + titulo,
+          mensaje: msgAnuncio,
+          destinatarios: destsAnuncio,
+          vigencia: fechaFin  // El anuncio caduca al finalizar el evento
+        }));
+        await fetch(anunciosApiUrl('guardar_anuncio', { datos: datosAnuncio }));
+        _anunciosCache = null;
+      }
     }
 
     _eventosCache = null;
