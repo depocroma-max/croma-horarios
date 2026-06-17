@@ -5314,7 +5314,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       return isoFecha >= ev.fecha && isoFecha <= fin;
     });
     const eventosRows = eventosDelDia.map(function(ev) {
-      return '<div class="cal-vac-evento" title="' + (ev.descripcion || '') + '" onclick="eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
+      return '<div class="cal-vac-evento" title="' + (ev.descripcion || '') + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
         '<span style="font-size:9px">📌</span>' +
         '<span style="font-size:9px;font-weight:600;color:#7c3aed;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ev.titulo + '</span>' +
       '</div>';
