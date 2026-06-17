@@ -5314,9 +5314,10 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       return isoFecha >= ev.fecha && isoFecha <= fin;
     });
     const eventosRows = eventosDelDia.map(function(ev) {
-      return '<div class="cal-vac-evento" title="' + (ev.descripcion || '') + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
-        '<span style="font-size:9px">📌</span>' +
-        '<span style="font-size:9px;font-weight:600;color:#7c3aed;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ev.titulo + '</span>' +
+      const vencido = (ev.fecha_fin || ev.fecha) < hoyISO;
+      return '<div class="cal-vac-evento' + (vencido ? ' cal-vac-evento-vencido' : '') + '" title="' + (ev.descripcion || '') + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
+        '<span style="font-size:9px">' + (vencido ? '📋' : '📌') + '</span>' +
+        '<span style="font-size:9px;font-weight:600;color:' + (vencido ? '#94a3b8' : '#7c3aed') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ev.titulo + (vencido ? ' (Vencido)' : '') + '</span>' +
       '</div>';
     }).join('');
     celdasHTML += '<div class="cal-vac-cell' +
@@ -5747,6 +5748,11 @@ function descargarICS(ev) {
 }
 
 function renderEventosEnSemana(nombreEmp) {
+  // Limpiar chips de eventos inyectados en una pasada anterior antes de re-inyectar
+  document.querySelectorAll('.portal-week-card').forEach(function(card) {
+    card.classList.remove('is-cerrado');
+    card.querySelectorAll('.evento-semana-chip').forEach(function(chip) { chip.remove(); });
+  });
   if (!_eventosEmpCache.length) return;
   // Para cada card de la semana del empleado, inyectar eventos del día
   const lunes = getLunes(_empSemanaOffset);
@@ -5774,11 +5780,12 @@ function renderEventosEnSemana(nombreEmp) {
         }
         const evHtml = eventosDelDia.map(function(ev) {
           if (ev.tipo === 'local_cerrado') return ''; // ya se muestra en el header
+          const vencido = isoFecha < hoy.toISOString().substring(0,10);
           const icsBtn = '<button class="evento-ics-btn" onclick="descargarICS(' + JSON.stringify(ev).replace(/'/g,"&#39;") + ')" title="Agregar a mi calendario">📅</button>';
-          return '<div class="evento-semana-chip">' +
-            '<span class="evento-semana-icono">📌</span>' +
+          return '<div class="evento-semana-chip' + (vencido ? ' evento-semana-chip-vencido' : '') + '">' +
+            '<span class="evento-semana-icono">' + (vencido ? '📋' : '📌') + '</span>' +
             '<div style="flex:1">' +
-              '<div class="evento-semana-titulo">' + ev.titulo + '</div>' +
+              '<div class="evento-semana-titulo">' + ev.titulo + (vencido ? ' <span style="font-weight:400;color:#94a3b8;font-size:10px">(Vencido)</span>' : '') + '</div>' +
               (ev.descripcion ? '<div class="evento-semana-desc">' + ev.descripcion + '</div>' : '') +
             '</div>' +
             icsBtn +

@@ -3686,6 +3686,8 @@ body {
   font-weight: 500;
 }
 .cal-vac-evento:hover { background: #ddd6fe; }
+.cal-vac-evento-vencido { background: #f1f5f9; border-left-color: #cbd5e1; opacity: .75; }
+.cal-vac-evento-vencido:hover { background: #e2e8f0; }
 
 /* ── EVENTOS EN MI SEMANA DEL EMPLEADO ──────────────── */
 .evento-semana-chip {
@@ -3698,6 +3700,7 @@ body {
   padding: 6px 10px;
   margin-top: 8px;
 }
+.evento-semana-chip-vencido { background: #f1f5f9; border-left-color: #cbd5e1; opacity: .75; }
 .evento-semana-icono {
   font-size: 13px;
   flex-shrink: 0;
