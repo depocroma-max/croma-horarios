@@ -1471,6 +1471,23 @@ body {
 }
 .admin-input:focus { outline: none; border-color: var(--black); }
 .admin-input[readonly] { background: var(--gray-50); color: var(--gray-600); }
+
+/* Certificado: cobertura por día (rango de fechas) */
+.cert-dias-cont { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 8px; }
+.cert-dias-nota { font-size: 11px; color: var(--gray-400); margin-bottom: 6px; }
+.cert-dia-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 8px; }
+.cert-dia-finde { background: #fef2f2; }
+.cert-dia-lbl { font-size: 13px; font-weight: 600; color: var(--black); white-space: nowrap; }
+.cert-dia-finde .cert-dia-lbl { color: var(--accent); }
+.cert-seg-group { display: inline-flex; border: 1px solid var(--gray-200); border-radius: 999px; overflow: hidden; background: var(--white); flex-shrink: 0; }
+.cert-seg { border: none; background: transparent; padding: 5px 11px; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--gray-600); cursor: pointer; transition: background .12s, color .12s; }
+.cert-seg + .cert-seg { border-left: 1px solid var(--gray-200); }
+.cert-seg:hover { background: var(--gray-50); }
+.cert-seg.active { background: var(--black); color: var(--white); }
+.cert-seg.active[data-val="quitar"] { background: var(--accent); }
+.cert-bulk { border: 1px solid var(--gray-200); background: var(--white); border-radius: 999px; padding: 4px 10px; font-family: var(--font-body); font-size: 11px; font-weight: 600; color: var(--gray-600); cursor: pointer; }
+.cert-bulk:hover { background: var(--gray-50); border-color: var(--gray-400); }
+
 .admin-foto-preview {
   display: flex; justify-content: center; margin-bottom: 1.5rem;
 }

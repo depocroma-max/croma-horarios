@@ -2426,8 +2426,17 @@ function abrirFormCertificado(nombreEmp) {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Fecha</label>
-          <input type="date" class="admin-input" id="certFecha" />
+          <label class="emp-filtro-label">Rango de fechas</label>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:11px;color:#94a3b8">Desde</span>
+              <input type="date" class="admin-input" id="certDesde" onchange="renderCertRango()" />
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:11px;color:#94a3b8">Hasta</span>
+              <input type="date" class="admin-input" id="certHasta" onchange="renderCertRango()" />
+            </div>
+          </div>
         </div>
         <div class="admin-form-grupo">
           <label class="emp-filtro-label">Tipo de certificado</label>
@@ -2439,16 +2448,15 @@ function abrirFormCertificado(nombreEmp) {
           <label class="emp-filtro-label">Descripción</label>
           <input type="text" class="admin-input" id="certNotaPersonalizada" placeholder="Ej: Trámite migratorio" />
         </div>
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Horas que cubre</label>
-          <div style="display:flex;gap:10px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer">
-              <input type="radio" name="certHs" value="4" ${hsPorDefecto===4?'checked':''} /> 4 horas (Media jornada)
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer">
-              <input type="radio" name="certHs" value="8" ${hsPorDefecto===8?'checked':''} /> 8 horas (Jornada completa)
-            </label>
+        <div class="admin-form-grupo" id="certDiasGrupo" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
+            <label class="emp-filtro-label" style="margin:0">Cobertura por día</label>
+            <div style="display:flex;gap:6px">
+              <button type="button" class="cert-bulk" onclick="setCertTodos('completa')">Todos completa</button>
+              <button type="button" class="cert-bulk" onclick="setCertTodos('media')">Todos media</button>
+            </div>
           </div>
+          <div id="certDiasContainer"></div>
         </div>
         <p id="certError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1rem">
@@ -2462,10 +2470,89 @@ function abrirFormCertificado(nombreEmp) {
   </div>`;
   montarOverlayAdmin(html);
 
-  // Fecha por defecto: hoy
+  // Estado de cobertura por día y horas de jornada completa según categoría
+  CERT_HS_FULL = hsPorDefecto;
+  CERT_DIAS_STATE = {};
+
+  // Rango por defecto: hoy → hoy
   const hoy = new Date();
-  document.getElementById('certFecha').value =
-    `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+  const hoyISO = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+  document.getElementById('certDesde').value = hoyISO;
+  document.getElementById('certHasta').value = hoyISO;
+  renderCertRango();
+}
+
+// Estado del formulario de certificados por rango
+let CERT_DIAS_STATE = {};   // { 'YYYY-MM-DD': 'completa' | 'media' | 'quitar' }
+let CERT_HS_FULL = 8;       // horas de jornada completa del empleado
+
+function renderCertRango() {
+  const desde = document.getElementById('certDesde')?.value;
+  const hasta = document.getElementById('certHasta')?.value;
+  const grupo = document.getElementById('certDiasGrupo');
+  const cont  = document.getElementById('certDiasContainer');
+  if (!grupo || !cont) return;
+  if (!desde || !hasta) { grupo.style.display = 'none'; return; }
+
+  const [y1,m1,d1] = desde.split('-').map(Number);
+  const [y2,m2,d2] = hasta.split('-').map(Number);
+  const ini = new Date(y1, m1-1, d1);
+  const fin = new Date(y2, m2-1, d2);
+  grupo.style.display = 'block';
+  if (fin < ini) {
+    cont.innerHTML = '<p style="color:#dc2626;font-size:12px;margin:0">La fecha "Hasta" es anterior a "Desde".</p>';
+    return;
+  }
+
+  // Construir lista de días del rango (límite de seguridad: 120 días)
+  const dias = [];
+  const cur = new Date(ini);
+  let guard = 0;
+  while (cur <= fin && guard < 120) {
+    const iso = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
+    dias.push(iso);
+    if (!(iso in CERT_DIAS_STATE)) CERT_DIAS_STATE[iso] = 'completa';
+    cur.setDate(cur.getDate() + 1);
+    guard++;
+  }
+  // Limpiar días que ya no están en el rango
+  Object.keys(CERT_DIAS_STATE).forEach(k => { if (!dias.includes(k)) delete CERT_DIAS_STATE[k]; });
+
+  const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const hsMedia = CERT_HS_FULL / 2;
+  const seg = (iso, val, label) => {
+    const activo = CERT_DIAS_STATE[iso] === val ? 'active' : '';
+    return `<button type="button" class="cert-seg ${activo}" data-iso="${iso}" data-val="${val}" onclick="setCertDia('${iso}','${val}')">${label}</button>`;
+  };
+  const filas = dias.map(iso => {
+    const [yy,mm,dd] = iso.split('-').map(Number);
+    const dObj = new Date(yy, mm-1, dd);
+    const finde = dObj.getDay() === 0 || dObj.getDay() === 6;
+    return `<div class="cert-dia-row ${finde ? 'cert-dia-finde' : ''}">
+      <span class="cert-dia-lbl">${DIAS_SEMANA[dObj.getDay()]} ${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}</span>
+      <div class="cert-seg-group">
+        ${seg(iso,'completa','Completa')}
+        ${seg(iso,'media','Media')}
+        ${seg(iso,'quitar','Quitar')}
+      </div>
+    </div>`;
+  }).join('');
+
+  cont.innerHTML =
+    `<div class="cert-dias-nota">Completa = ${CERT_HS_FULL}h · Media = ${hsMedia}h · "Quitar" = no genera certificado ese día</div>
+     <div class="cert-dias-cont">${filas}</div>`;
+}
+
+function setCertDia(iso, val) {
+  CERT_DIAS_STATE[iso] = val;
+  document.querySelectorAll(`.cert-seg[data-iso="${iso}"]`).forEach(b => {
+    b.classList.toggle('active', b.dataset.val === val);
+  });
+}
+
+function setCertTodos(val) {
+  Object.keys(CERT_DIAS_STATE).forEach(k => CERT_DIAS_STATE[k] = val);
+  renderCertRango();
 }
 
 function onCertTipoChange() {
@@ -2475,37 +2562,48 @@ function onCertTipoChange() {
 }
 
 async function confirmarCertificado(nombreEmp) {
-  const fecha = document.getElementById('certFecha')?.value;
   const tipo  = document.getElementById('certTipo')?.value;
-  const hsEl  = document.querySelector('input[name="certHs"]:checked');
   const notaP = document.getElementById('certNotaPersonalizada')?.value.trim();
   const errEl = document.getElementById('certError');
+  errEl.style.display = 'none';
 
-  if (!fecha) { errEl.textContent = 'Seleccioná una fecha'; errEl.style.display='block'; return; }
-  if (!hsEl)  { errEl.textContent = 'Seleccioná las horas'; errEl.style.display='block'; return; }
+  // Días seleccionados (excluyendo los marcados como "quitar")
+  const dias = Object.keys(CERT_DIAS_STATE)
+    .filter(iso => CERT_DIAS_STATE[iso] !== 'quitar')
+    .sort();
+
+  if (!dias.length) {
+    errEl.textContent = 'Elegí al menos un día del rango.'; errEl.style.display='block'; return;
+  }
   if (tipo === 'Personalizado' && !notaP) {
     errEl.textContent = 'Escribí una descripción'; errEl.style.display='block'; return;
   }
 
-  const hs   = parseFloat(hsEl.value);
   const nota = tipo === 'Personalizado' ? notaP : tipo;
-
-  const btn = document.querySelector('#adminOverlay .btn-connect');
-  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-
   // Guardar nombre sin número (ej: "38 BRUNO ALONSO" → "BRUNO ALONSO")
   const empLimpio = nombreEmp.trim().replace(/^\d+\s+/, '');
-  const resultado = await guardarCertificado({ empleado: empLimpio, fecha, tipo, hs, nota });
 
-  if (resultado.ok) {
+  const btn = document.querySelector('#adminOverlay .btn-connect');
+  let okCount = 0, fail = 0;
+  for (let i = 0; i < dias.length; i++) {
+    const fecha = dias[i];
+    const hs = CERT_DIAS_STATE[fecha] === 'media' ? CERT_HS_FULL / 2 : CERT_HS_FULL;
+    if (btn) { btn.disabled = true; btn.textContent = `Guardando ${i+1}/${dias.length}...`; }
+    const r = await guardarCertificado({ empleado: empLimpio, fecha, tipo, hs, nota });
+    if (r.ok) okCount++; else fail++;
+  }
+
+  if (okCount > 0) {
     cerrarAdmin();
-    showToast('✓ Certificado guardado');
-    // Reabrir la ficha del empleado para ver el certificado
+    showToast(fail
+      ? `Guardados ${okCount} · fallaron ${fail}`
+      : `✓ ${okCount} certificado${okCount > 1 ? 's' : ''} guardado${okCount > 1 ? 's' : ''}`);
+    // Reabrir la ficha del empleado para ver los certificados
     const suc = state.datos.find(r => r.EMPLEADO === nombreEmp);
     if (suc) abrirDetalleEmpleado(nombreEmp, suc.LOCAL);
   } else {
     if (btn) { btn.disabled = false; btn.textContent = 'Guardar certificado'; }
-    errEl.textContent = 'Error al guardar'; errEl.style.display='block';
+    errEl.textContent = 'Error al guardar. Revisá la conexión.'; errEl.style.display='block';
   }
 }
 
