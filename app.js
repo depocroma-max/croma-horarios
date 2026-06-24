@@ -2511,7 +2511,11 @@ function renderCertRango() {
   while (cur <= fin && guard < 120) {
     const iso = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
     dias.push(iso);
-    if (!(iso in CERT_DIAS_STATE)) CERT_DIAS_STATE[iso] = 'completa';
+    if (!(iso in CERT_DIAS_STATE)) {
+      // Default según día: domingo → quitar, sábado → media, resto → completa
+      const dow = cur.getDay();
+      CERT_DIAS_STATE[iso] = dow === 0 ? 'quitar' : (dow === 6 ? 'media' : 'completa');
+    }
     cur.setDate(cur.getDate() + 1);
     guard++;
   }
