@@ -3028,9 +3028,43 @@ body {
   color: #fff;
 }
 .portal-week-card.is-free {
+  background: #f8fafc;
+  border-color: var(--gray-100);
+}
+/* Tipos de turno */
+.portal-week-card.turno-corrido {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.portal-week-card.turno-corrido .portal-week-shift {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.portal-week-card.turno-corrido .portal-week-day-num { color: #1d4ed8; }
+.portal-week-card.turno-corrido.is-today .portal-week-day-num { background: #1d4ed8; color: #fff; }
+
+.portal-week-card.turno-cortado {
+  background: #fefce8;
+  border-color: #fde68a;
+}
+.portal-week-card.turno-cortado .portal-week-shift {
+  background: #fef08a;
+  color: #854d0e;
+}
+.portal-week-card.turno-cortado .portal-week-day-num { color: #854d0e; }
+.portal-week-card.turno-cortado.is-today .portal-week-day-num { background: #ca8a04; color: #fff; }
+
+.portal-week-card.turno-media {
   background: #f0fdf4;
   border-color: #bbf7d0;
 }
+.portal-week-card.turno-media .portal-week-shift {
+  background: #bbf7d0;
+  color: #15803d;
+}
+.portal-week-card.turno-media .portal-week-day-num { color: #15803d; }
+.portal-week-card.turno-media.is-today .portal-week-day-num { background: #16a34a; color: #fff; }
+
 /* .portal-week-day → ver bloque principal más arriba */
 .portal-week-body {
   display: flex;
