@@ -3157,7 +3157,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       if (!libre) {
         if (regs.length >= 2) tipoTurno = 'cortado';
         else if (total <= 4) tipoTurno = 'media';
-        else tipoTurno = 'corrido';
+        else if (total >= 7) tipoTurno = 'corrido';
       }
 
       const turnos = libre
