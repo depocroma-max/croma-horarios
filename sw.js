@@ -1,11 +1,11 @@
-const CACHE = 'croma-v1';
+const CACHE = 'croma-v2';
 const ASSETS = [
-  '/croma-horarios/',
-  '/croma-horarios/index.html',
-  '/croma-horarios/style.css',
-  '/croma-horarios/app.js',
-  '/croma-horarios/tridente_solo.png',
-  '/croma-horarios/favicon.svg',
+  '/',
+  '/index.html',
+  '/style.css',
+  '/app.js',
+  '/tridente_solo.png',
+  '/favicon.svg',
 ];
 
 self.addEventListener('install', e => {
