@@ -4592,7 +4592,7 @@ function iniciarAutoRefresh() {
 }
 
 // ── CAMBIO DE FOTO DE EMPLEADO (proxy backend) ────────
-const BACKEND_URL = 'https://cromawave.dyndns.org:3000';
+const BACKEND_URL = 'https://cromawave.dyndns.org';
 
 function _getToken() {
   return sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
