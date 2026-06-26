@@ -2792,10 +2792,9 @@ function cerrarSesion() {
   localStorage.removeItem('croma_session');
 
   if (vieneDeCromaApp) {
-    // Limpiar token de Croma App y volver al login central
     sessionStorage.clear();
     ['croma_auth','croma_rol','croma_suc','croma_remember'].forEach(k => localStorage.removeItem(k));
-    location.href = 'https://croma-app.com.ar/';
+    location.href = 'https://croma-app.com.ar/?logout=1';
   } else {
     mostrarLoginApp();
   }
