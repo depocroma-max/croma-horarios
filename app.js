@@ -4290,10 +4290,10 @@ function init() {
   // Si viene con ?token= en la URL, guardarlo en sessionStorage
   const _urlParams = new URLSearchParams(location.search);
   const _urlToken = _urlParams.get('token');
-  if (_urlToken) {
-    sessionStorage.setItem('croma_token', _urlToken);
-    history.replaceState(null, '', location.pathname);
-  }
+  const _urlHsession = _urlParams.get('hsession');
+  if (_urlToken) sessionStorage.setItem('croma_token', _urlToken);
+  if (_urlHsession) sessionStorage.setItem('croma_horarios_session', _urlHsession);
+  if (_urlToken || _urlHsession) history.replaceState(null, '', location.pathname);
 
   // ── JWT CROMA APP ─────────────────────────────────────
   function _getJwtUser() {
