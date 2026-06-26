@@ -2821,6 +2821,8 @@ function iniciarAppConSesion() {
     cargarDatos({ unica: APPS_SCRIPT_URL });
     setTimeout(actualizarBadgeCampana, 1500);
   } else {
+    const btnSel = document.getElementById('btnSelector');
+    if (btnSel) btnSel.style.display = 'none';
     document.getElementById('btnRefresh')?.style && (document.getElementById('btnRefresh').style.display = 'none');
     document.getElementById('btnPrint')?.style && (document.getElementById('btnPrint').style.display = 'none');
     document.querySelector('.top-nav') && (document.querySelector('.top-nav').style.display = 'none');
