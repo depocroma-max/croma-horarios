@@ -899,6 +899,12 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     .concat(periodos.map(p => `<option value="${p}" ${p === periodoInicial ? 'selected' : ''}>${p}</option>`))
     .join('');
 
+  // Empresa y tipo de jornada del empleado (desde el perfil)
+  const perfilEmp  = EMPLEADOS_PERFILES[nombreEmp] || {};
+  const catEmp     = CATEGORIAS_CONFIG.find(c => c.id === perfilEmp.categoria_id);
+  const empresaEmp = (perfilEmp.empresa || '').trim();
+  const jornadaEmp = (catEmp?.nombre || '').trim();
+
   const html = `
   <div class="detalle-overlay" onclick="cerrarDetalle(event)">
     <div class="detalle-panel" onclick="event.stopPropagation()">
@@ -920,6 +926,10 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                   ${nomMostrar}
                 </div>
                 <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
+                ${(empresaEmp || jornadaEmp) ? `<div class="detalle-chips">
+                  ${empresaEmp ? `<span class="detalle-chip detalle-chip-empresa">🏢 ${empresaEmp}</span>` : ''}
+                  ${jornadaEmp ? `<span class="detalle-chip detalle-chip-jornada"${catEmp?.descripcion ? ` title="${catEmp.descripcion}"` : ''}>🕒 ${jornadaEmp}</span>` : ''}
+                </div>` : ''}
               </div>
             </div>
             <div class="detalle-acciones">
