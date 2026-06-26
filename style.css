@@ -2226,9 +2226,7 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(circle at top left, rgba(232, 37, 26, .08), transparent 28rem),
-    linear-gradient(180deg, #fbfbf8 0%, var(--page-bg) 44%, #eeeeea 100%);
+  background: #f7f7f5;
 }
 
 /* TOPBAR más clara y con mejor jerarquía */
