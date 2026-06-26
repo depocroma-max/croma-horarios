@@ -2647,7 +2647,7 @@ async function verificarCredencialesAsync(usuario, pin) {
 // ── PANTALLA DE LOGIN ──────────────────────────────────
 function mostrarLoginApp() {
   // Redirigir al login central de Croma App
-  location.href = 'https://depocroma-max.github.io/Croma-app/';
+  location.href = 'https://croma-app.com.ar/';
 }
 
 function _mostrarLoginAppLegado() {
@@ -2795,7 +2795,7 @@ function cerrarSesion() {
     // Limpiar token de Croma App y volver al login central
     sessionStorage.clear();
     ['croma_auth','croma_rol','croma_suc','croma_remember'].forEach(k => localStorage.removeItem(k));
-    location.href = 'https://depocroma-max.github.io/Croma-app/';
+    location.href = 'https://croma-app.com.ar/';
   } else {
     mostrarLoginApp();
   }
@@ -4313,7 +4313,7 @@ function init() {
         } else { throw new Error('sesión inválida'); }
       } catch(e) {
         sessionStorage.removeItem('croma_token'); localStorage.removeItem('croma_token');
-        location.href = 'https://depocroma-max.github.io/Croma-app/';
+        location.href = 'https://croma-app.com.ar/';
         return;
       }
     } else {
@@ -4328,7 +4328,7 @@ function init() {
     }
   } else {
     // Sin token → redirigir a Croma App (todos pasan por ahí)
-    location.href = 'https://depocroma-max.github.io/Croma-app/';
+    location.href = 'https://croma-app.com.ar/';
     return;
   }
 
@@ -4588,7 +4588,7 @@ function iniciarAutoRefresh() {
 }
 
 // ── CAMBIO DE FOTO DE EMPLEADO (proxy backend) ────────
-const BACKEND_URL = 'https://cromawave.dyndns.org';
+const BACKEND_URL = 'https://api.croma-app.com.ar';
 
 function _getToken() {
   return sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
