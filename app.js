@@ -3698,13 +3698,6 @@ function renderAdminUsuariosInner() {
           <tr><th>Usuario</th><th>Empleado vinculado</th><th>Rol</th><th>PIN</th><th></th></tr>
         </thead>
         <tbody>
-          <tr style="background:#fafafa">
-            <td><strong>Admin</strong></td>
-            <td><span style="color:#94a3b8;font-size:12px">—</span></td>
-            <td><span class="pill pill-falta" style="font-size:10px">admin</span></td>
-            <td><code style="font-size:12px;background:#f1f5f9;padding:2px 8px;border-radius:4px">${'•'.repeat(ADMIN_PIN.length)}</code></td>
-            <td><span style="font-size:11px;color:#94a3b8">PIN fijo en código</span></td>
-          </tr>
           ${filas || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8">Sin usuarios creados aún</td></tr>'}
         </tbody>
       </table>
