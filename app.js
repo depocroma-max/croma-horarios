@@ -2635,10 +2635,6 @@ async function eliminarCertificado(id, nombreEmp, mesAnio) {
 
 // ── Login: carga usuarios del Sheet y verifica ──
 async function verificarCredencialesAsync(usuario, pin) {
-  // Admin especial (hardcodeado, no necesita Sheet)
-  if (usuario.trim().toUpperCase() === 'ADMINHORAS' && pin === ADMIN_PIN) {
-    return { ok: true, usuario: { nombre: 'Admin', rol: 'admin', empleadoNombre: null } };
-  }
   // Cargar desde Sheet si no está en cache
   const lista = _usuariosCache !== null ? _usuariosCache : await cargarUsuarios();
   const u = lista.find(u =>
@@ -3849,8 +3845,16 @@ function eliminarUsuario(idx) {
   if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
 }
 // ── PANEL ADMIN ────────────────────────────────────────
-const ADMIN_PIN = '4268';
-let adminAutenticado = sessionStorage.getItem('croma_admin_auth') === '1';
+// adminAutenticado: true si el JWT tiene rol admin o jefe
+function _isAdminJwt() {
+  try {
+    const t = sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
+    if (!t) return false;
+    const p = JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return p.exp * 1000 > Date.now() && (p.rol === 'admin' || p.rol === 'jefe');
+  } catch(e) { return false; }
+}
+let adminAutenticado = _isAdminJwt();
 
 function abrirAdmin() { setView('administracion'); }
 
@@ -4288,38 +4292,40 @@ function cerrarAdmin(event) {
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // ── TOKEN CROMA APP ──────────────────────────────────
-  // Si el usuario viene desde el login central (Croma App), entrar directo como admin
-  const cromaSession = sessionStorage.getItem('croma_auth') === '1';
-  const cromaLocal   = localStorage.getItem('croma_auth') === '1' && localStorage.getItem('croma_remember') === '1';
+  // ── JWT CROMA APP ─────────────────────────────────────
+  function _getJwtUser() {
+    const t = sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
+    if (!t) return null;
+    try {
+      const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (payload.exp * 1000 < Date.now()) return null;
+      return payload;
+    } catch(e) { return null; }
+  }
 
-  if (cromaSession || cromaLocal) {
-    const store = cromaSession ? sessionStorage : localStorage;
+  const jwtUser = _getJwtUser();
 
-    // Empleado que viene de Croma App → usar su sesión completa
-    const empSesionStr = store.getItem('croma_horarios_session');
-    if (empSesionStr) {
+  if (jwtUser) {
+    // Empleado que viene de Croma App → usar sesión de horarios guardada
+    const empSesionStr = sessionStorage.getItem('croma_horarios_session') || localStorage.getItem('croma_horarios_session');
+    if (jwtUser.rol === 'empleado' && empSesionStr) {
       try {
         const { usuario } = JSON.parse(empSesionStr);
-        if (usuario && usuario.nombre) {
-          sesionActual = { ...usuario, fromCromaApp: true };
+        if (usuario && (usuario.nombre || usuario.empleadoNombre)) {
+          sesionActual = { ...usuario, nombre: usuario.empleadoNombre || usuario.nombre, fromCromaApp: true };
           iniciarAppConSesion();
-          // continuar con el resto del init después del if/else
         } else { throw new Error('sesión inválida'); }
       } catch(e) {
-        // sesión corrupta → volver a Croma App
-        sessionStorage.clear();
-        ['croma_auth','croma_rol','croma_suc','croma_remember','croma_horarios_session'].forEach(k=>localStorage.removeItem(k));
+        sessionStorage.removeItem('croma_token'); localStorage.removeItem('croma_token');
         location.href = 'https://depocroma-max.github.io/Croma-app/';
         return;
       }
     } else {
-      // Admin / encargado → acceso completo como admin
-      const userName = store.getItem('croma_user') || 'Admin';
+      // Admin / encargado / jefe → acceso completo
       sesionActual = {
-        nombre:      userName.charAt(0).toUpperCase() + userName.slice(1),
-        rol:         'admin',
-        sucursal:    store.getItem('croma_suc') || '',
+        nombre:       jwtUser.usuario ? jwtUser.usuario.charAt(0).toUpperCase() + jwtUser.usuario.slice(1) : 'Admin',
+        rol:          jwtUser.rol || 'admin',
+        sucursal:     jwtUser.sucursal || '',
         fromCromaApp: true
       };
       iniciarAppConSesion();
@@ -4585,8 +4591,12 @@ function iniciarAutoRefresh() {
   }, AUTO_REFRESH_MIN * 60 * 1000);
 }
 
-// ── CAMBIO DE FOTO DE EMPLEADO (ImgBB) ────────────────
-const IMGBB_API_KEY = 'ffe26c9576b3bfbe561fc8c078b69b27';
+// ── CAMBIO DE FOTO DE EMPLEADO (proxy backend) ────────
+const BACKEND_URL = 'https://cromawave.dyndns.org:3000';
+
+function _getToken() {
+  return sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
+}
 
 function triggerCambiarFoto(nombreEmp) {
   const input = document.getElementById('inputFotoEmpleado');
@@ -4606,14 +4616,21 @@ async function subirFotoEmpleado(input, nombreEmp) {
   showToast('Subiendo foto…');
 
   try {
-    // 1 — Subir a ImgBB
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('key', IMGBB_API_KEY);
+    // 1 — Subir a ImgBB via proxy del backend (la API key nunca llega al cliente)
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    const imgbbResp = await fetch('https://api.imgbb.com/1/upload', {
+    const imgbbResp = await fetch(`${BACKEND_URL}/api/upload`, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${_getToken()}`
+      },
+      body: JSON.stringify({ image: base64 })
     });
     const imgbbData = await imgbbResp.json();
     if (!imgbbData.success) throw new Error('Error subiendo a ImgBB');
