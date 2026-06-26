@@ -4305,7 +4305,7 @@ function init() {
       try {
         const { usuario } = JSON.parse(empSesionStr);
         if (usuario && (usuario.nombre || usuario.empleadoNombre)) {
-          sesionActual = { ...usuario, nombre: usuario.empleadoNombre || usuario.nombre, fromCromaApp: true };
+          sesionActual = { ...usuario, nombre: usuario.nombre, fromCromaApp: true };
           iniciarAppConSesion();
           return; // la vista de empleado no tiene weekRange ni los controles de admin
         } else { throw new Error('sesión inválida'); }
