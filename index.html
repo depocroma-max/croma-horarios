@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="tridente_solo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260624-empresajornada" />
+  <link rel="stylesheet" href="style.css?v=20260627-envivo" />
 </head>
 <body>
 
@@ -37,6 +37,7 @@
     </div>
     <nav class="top-nav" id="topNav">
       <button class="nav-btn active" data-view="empleados">Empleados</button>
+      <button class="nav-btn" data-view="envivo" id="navBtnEnvivo" style="display:none">🟢 En vivo</button>
       <button class="nav-btn" data-view="calendario" id="navBtnCalendario" style="display:none">Calendario</button>
       <button class="nav-btn" data-view="administracion" id="navBtnAdmin" style="display:none">Administración</button>
     </nav>
@@ -91,6 +92,10 @@
       <button class="drawer-nav-btn active" data-view="empleados">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Empleados
+      </button>
+      <button class="drawer-nav-btn" data-view="envivo" id="drawerNavEnvivo" style="display:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        En vivo
       </button>
       <button class="drawer-nav-btn" data-view="calendario" id="drawerNavCalendario" style="display:none">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -230,6 +235,12 @@
       <div id="grillaContainer"></div>
     </div>
 
+    <!-- VISTA EN VIVO -->
+    <div class="view" id="viewEnvivo">
+      <div class="envivo-bar" id="enVivoBar"></div>
+      <div class="envivo-board" id="enVivoContainer"></div>
+    </div>
+
     <!-- VISTA MES -->
     <div class="view" id="viewMes">
       <div id="calendarioContainer"></div>
@@ -258,7 +269,7 @@
 
   <footer class="app-footer">Croma · Sistema interno v1.0 © 2026</footer>
 
-  <script src="app.js?v=20260624-empresajornada"></script>
+  <script src="app.js?v=20260627-envivo"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/croma-horarios/sw.js');

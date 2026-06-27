@@ -399,6 +399,179 @@ function renderGrilla(datos) {
     '<p style="padding:2rem;color:#999;font-size:14px">No hay datos para los filtros seleccionados.</p>';
 }
 
+// ════════════════════════════════════════════════════════
+//  EN VIVO — quién está en cada sucursal AHORA MISMO
+//  (calculado con los registros de hoy: H_ENTRADA / H_SALIDA)
+// ════════════════════════════════════════════════════════
+const DIAS_FULL_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+let enVivoInterval = null;
+
+function iniciarEnVivoAuto() {
+  if (enVivoInterval) return;
+  enVivoInterval = setInterval(() => {
+    if (state.tabActual !== 'envivo') return;
+    renderEnVivo();
+  }, 60000); // re-render cada minuto para que la presencia y el reloj avancen
+}
+function detenerEnVivoAuto() {
+  if (enVivoInterval) { clearInterval(enVivoInterval); enVivoInterval = null; }
+}
+
+function hhmmAMin(s) {
+  const x = String(s || '').trim().split(':');
+  const h = parseInt(x[0], 10);
+  if (isNaN(h)) return NaN;
+  const m = parseInt(x[1] || '0', 10);
+  return h * 60 + (isNaN(m) ? 0 : m);
+}
+
+// Devuelve el estado de un empleado según sus bloques [{ent,sal}] del día
+function estadoEnVivo(bloquesRaw, nowMin) {
+  const bloques = bloquesRaw
+    .map(b => {
+      const ini = hhmmAMin(b.ent);
+      let fin = hhmmAMin(b.sal);
+      if (isNaN(ini) || isNaN(fin)) return null;
+      if (fin <= ini) fin += 1440; // cruza medianoche
+      return { ini, fin, iniStr: b.ent, finStr: b.sal };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.ini - b.ini);
+  if (!bloques.length) return { estado: 'sinhora' };
+
+  const primero = bloques[0];
+  const ultimo  = bloques[bloques.length - 1];
+  for (const bl of bloques) {
+    if (nowMin >= bl.ini && nowMin < bl.fin) {
+      return { estado: 'presente', salida: ultimo.finStr, salidaMin: ultimo.fin };
+    }
+  }
+  if (nowMin < primero.ini) return { estado: 'proximo', entra: primero.iniStr, entraMin: primero.ini };
+  if (nowMin >= ultimo.fin)  return { estado: 'fin', salida: ultimo.finStr };
+  for (let i = 0; i < bloques.length - 1; i++) {
+    if (nowMin >= bloques[i].fin && nowMin < bloques[i + 1].ini) {
+      return { estado: 'pausa', vuelve: bloques[i + 1].iniStr, vuelveMin: bloques[i + 1].ini, salida: ultimo.finStr };
+    }
+  }
+  return { estado: 'fin', salida: ultimo.finStr };
+}
+
+function inicialesEnVivo(nombre) {
+  const limpio = String(nombre || '').replace(/^\d+\s+/, '');
+  return limpio.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('');
+}
+function nombreCortoEnVivo(nombre) {
+  return String(nombre || '').replace(/^\d+\s+/, '');
+}
+
+function avatarEnVivoHTML(nombre, suc, estadoDot) {
+  const perfil = EMPLEADOS_PERFILES[nombre] || {};
+  const inic = inicialesEnVivo(nombre);
+  const dot = estadoDot ? `<span class="estado-dot ${estadoDot}"></span>` : '';
+  if (perfil.foto_url) {
+    return `<div class="envivo-emp-avatar"><img src="${perfil.foto_url}" alt="" onerror="this.style.display='none';this.parentElement.insertAdjacentText('afterbegin','${inic}')">${dot}</div>`;
+  }
+  return `<div class="envivo-emp-avatar" style="background:${suc.colorLight};color:${suc.color}">${inic}${dot}</div>`;
+}
+
+function renderEnVivo() {
+  const container = document.getElementById('enVivoContainer');
+  if (!container) return;
+
+  const ahora  = new Date();
+  const nowMin = ahora.getHours() * 60 + ahora.getMinutes();
+  const mesHoy = MESES_ES[ahora.getMonth()];
+
+  // Registros de hoy
+  const registrosHoy = state.datos.filter(r =>
+    String(r.AÑO) === String(ahora.getFullYear()) &&
+    r.MES === mesHoy &&
+    String(r.DIA) === String(ahora.getDate())
+  );
+
+  let totalPresentes = 0;
+  let cards = '';
+
+  SUCURSALES.forEach(suc => {
+    const regsSuc = registrosHoy.filter(r => r.LOCAL === suc.id);
+
+    // Agrupar por empleado (puede tener varios registros = turno cortado)
+    const porEmp = {};
+    regsSuc.forEach(r => {
+      if (!porEmp[r.EMPLEADO]) porEmp[r.EMPLEADO] = [];
+      if (r.H_ENTRADA && r.H_SALIDA) porEmp[r.EMPLEADO].push({ ent: r.H_ENTRADA, sal: r.H_SALIDA });
+    });
+
+    const presentes = [], proximos = [], pausados = [], terminados = [];
+    Object.keys(porEmp).forEach(emp => {
+      const est = estadoEnVivo(porEmp[emp], nowMin);
+      if (est.estado === 'presente') presentes.push({ emp, est });
+      else if (est.estado === 'proximo') proximos.push({ emp, est });
+      else if (est.estado === 'pausa') pausados.push({ emp, est });
+      else if (est.estado === 'fin') terminados.push({ emp, est });
+    });
+    presentes.sort((a, b) => a.est.salidaMin - b.est.salidaMin);
+    proximos.sort((a, b) => a.est.entraMin - b.est.entraMin);
+    totalPresentes += presentes.length;
+
+    const hayDatos = Object.keys(porEmp).length > 0;
+
+    cards += `<div class="envivo-card ${presentes.length ? 'activa' : 'vacia'}" style="--card-suc:${suc.color}">`;
+    cards += `<div class="envivo-card-head">
+        <span class="envivo-card-pin" style="color:${suc.color}">📍</span>
+        <span class="envivo-card-suc">${suc.nombre}</span>
+        <span class="envivo-card-count ${presentes.length ? '' : 'cero'}"><b>${presentes.length}</b><span>en turno</span></span>
+      </div>`;
+
+    if (presentes.length) {
+      cards += '<div class="envivo-presentes">';
+      presentes.forEach(o => {
+        cards += `<div class="envivo-emp">
+          ${avatarEnVivoHTML(o.emp, suc, 'presente')}
+          <div class="envivo-emp-info">
+            <span class="envivo-emp-nombre">${nombreCortoEnVivo(o.emp)}</span>
+            <span class="envivo-emp-meta">Sale ${o.est.salida}</span>
+          </div>
+        </div>`;
+      });
+      cards += '</div>';
+    } else if (hayDatos) {
+      cards += '<div class="envivo-vacia-msg">Nadie en turno ahora</div>';
+    } else {
+      cards += '<div class="envivo-vacia-msg">Sin registros hoy</div>';
+    }
+
+    if (pausados.length || proximos.length || terminados.length) {
+      cards += '<div class="envivo-card-foot">';
+      pausados.forEach(o => {
+        cards += `<div class="envivo-foot-line">⏸️ <b>${nombreCortoEnVivo(o.emp)}</b> en pausa · vuelve ${o.est.vuelve}</div>`;
+      });
+      proximos.forEach(o => {
+        cards += `<div class="envivo-foot-line">🕒 <b>${nombreCortoEnVivo(o.emp)}</b> entra ${o.est.entra}</div>`;
+      });
+      terminados.sort((a, b) => (a.emp).localeCompare(b.emp)).forEach(o => {
+        cards += `<div class="envivo-foot-line fin">✓ <b>${nombreCortoEnVivo(o.emp)}</b> terminó ${o.est.salida}</div>`;
+      });
+      cards += '</div>';
+    }
+
+    cards += '</div>';
+  });
+
+  container.innerHTML = cards;
+
+  // Barra superior
+  const bar = document.getElementById('enVivoBar');
+  if (bar) {
+    const hh = String(ahora.getHours()).padStart(2, '0');
+    const mm = String(ahora.getMinutes()).padStart(2, '0');
+    bar.innerHTML =
+      `<span class="envivo-bar-dia">${DIAS_FULL_ES[ahora.getDay()]} ${ahora.getDate()} ${MESES_ES[ahora.getMonth()].toLowerCase()}</span>` +
+      `<span class="envivo-bar-hora">actualizado <b>${hh}:${mm}</b></span>` +
+      `<span class="envivo-bar-total"><span class="envivo-live-dot"></span>EN VIVO · <b>${totalPresentes}</b>&nbsp;trabajando</span>`;
+  }
+}
+
 // ── RENDER EMPLEADOS ───────────────────────────────────
 function renderEmpleados(datos) {
   const container = document.getElementById('empContainer');
@@ -1825,6 +1998,7 @@ function renderAll() {
   renderCalendario(datos);
   renderResumenMes(datos);
   renderEmpleados(datos);
+  renderEnVivo();
   poblarFiltroEmpleados(datos);
 }
 
@@ -2062,6 +2236,7 @@ function showToast(msg, duration = 2500) {
 
 function setView(view) {
   state.tabActual = view;
+  if (view !== 'envivo') detenerEnVivoAuto();
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById(`view${capitalize(view)}`)?.classList.add('active');
@@ -2080,7 +2255,7 @@ function setView(view) {
   const controlsBar = document.querySelector('.controls-bar');
 
   // Vistas que NO usan la barra de controles
-  const sinControls = ['empleados', 'administracion', 'calendario'];
+  const sinControls = ['empleados', 'administracion', 'calendario', 'envivo'];
   if (controlsBar) controlsBar.style.display = sinControls.includes(view) ? 'none' : '';
 
   if (view === 'semana') {
@@ -2117,6 +2292,14 @@ function setView(view) {
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);
     renderCalendarioView();
+  } else if (view === 'envivo') {
+    weekNav.style.display  = 'none';
+    mesNav.style.display   = 'none';
+    statsRow.style.display = 'none';
+    filters.style.display  = 'none';
+    mostrarFiltrosDiaEnBarra(false);
+    renderEnVivo();
+    iniciarEnVivoAuto();
   } else {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';

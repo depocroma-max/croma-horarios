@@ -3807,3 +3807,75 @@ body {
   align-self: center;
 }
 .evento-ics-btn:hover { opacity: 1; }
+
+/* ════════════════════════════════════════════════════════
+   EN VIVO — tablero de presencia por sucursal
+   ════════════════════════════════════════════════════════ */
+.envivo-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+  background: var(--white); border: 1px solid var(--gray-100);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  padding: 14px 18px; margin-bottom: 1.25rem;
+}
+.envivo-bar-dia  { font-family: var(--font-display); font-size: 24px; letter-spacing: 1px; color: var(--black); text-transform: capitalize; }
+.envivo-bar-hora { font-size: 13px; color: var(--gray-600); }
+.envivo-bar-hora b { color: var(--black); font-variant-numeric: tabular-nums; }
+.envivo-bar-total { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray-600); }
+.envivo-bar-total b { font-family: var(--font-display); font-size: 28px; line-height: 1; color: #15803d; }
+.envivo-live-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34,197,94,.5); animation: envivoPulse 1.8s infinite;
+}
+@keyframes envivoPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+
+.envivo-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.envivo-card {
+  background: var(--white); border: 1px solid var(--gray-100);
+  border-top: 3px solid var(--gray-200); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); overflow: hidden; display: flex; flex-direction: column;
+}
+.envivo-card.activa { border-top-color: var(--card-suc, var(--gray-400)); }
+.envivo-card.vacia  { opacity: .72; }
+.envivo-card-head   { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px; }
+.envivo-card-pin    { font-size: 14px; }
+.envivo-card-suc    { font-weight: 600; font-size: 14px; letter-spacing: .2px; color: var(--black); }
+.envivo-card-count  { margin-left: auto; display: inline-flex; align-items: baseline; gap: 4px; }
+.envivo-card-count b { font-family: var(--font-display); font-size: 30px; line-height: 1; color: #15803d; }
+.envivo-card-count.cero b { color: var(--gray-400); }
+.envivo-card-count span { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-400); }
+
+.envivo-presentes { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px; }
+.envivo-emp       { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--radius-sm); }
+.envivo-emp:hover { background: var(--gray-50); }
+.envivo-emp-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: var(--gray-100); color: var(--gray-600);
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+}
+.envivo-emp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.envivo-emp-avatar .estado-dot {
+  position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px;
+  border-radius: 50%; border: 2px solid var(--white);
+}
+.estado-dot.presente { background: #22c55e; }
+.estado-dot.pausa    { background: #f59e0b; }
+.envivo-emp-info     { display: flex; flex-direction: column; min-width: 0; }
+.envivo-emp-nombre   { font-size: 13px; font-weight: 600; color: var(--black); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.envivo-emp-meta     { font-size: 11px; color: var(--gray-600); }
+
+.envivo-card-foot { margin-top: auto; border-top: 1px dashed var(--gray-100); padding: 9px 16px; display: flex; flex-direction: column; gap: 4px; }
+.envivo-foot-line { font-size: 11.5px; color: var(--gray-600); display: flex; align-items: center; gap: 6px; }
+.envivo-foot-line b { color: var(--gray-800); font-weight: 600; }
+.envivo-foot-line.fin   { color: var(--gray-400); }
+.envivo-foot-line.fin b { color: var(--gray-500); font-weight: 500; }
+.envivo-vacia-msg { padding: 18px 16px; font-size: 12.5px; color: var(--gray-400); text-align: center; }
+
+@media (max-width: 560px) {
+  .envivo-board { grid-template-columns: 1fr; }
+  .envivo-bar-total { margin-left: 0; }
+}
