@@ -4478,11 +4478,12 @@ function cerrarAdmin(event) {
 
 // ── INIT ───────────────────────────────────────────────
 function init() {
-  // Si viene con ?token= en la URL, guardarlo en sessionStorage
-  const _urlParams = new URLSearchParams(location.search);
-  const _urlToken = _urlParams.get('token');
-  const _urlHsession = _urlParams.get('hsession');
-  if (_urlToken) sessionStorage.setItem('croma_token', _urlToken);
+  // Lee token desde el hash (#token=...) para que no quede en logs del servidor
+  const _hashParams   = new URLSearchParams(location.hash.slice(1));
+  const _searchParams = new URLSearchParams(location.search);
+  const _urlToken     = _hashParams.get('token')    || _searchParams.get('token');
+  const _urlHsession  = _hashParams.get('hsession') || _searchParams.get('hsession');
+  if (_urlToken)    sessionStorage.setItem('croma_token', _urlToken);
   if (_urlHsession) sessionStorage.setItem('croma_horarios_session', _urlHsession);
   if (_urlToken || _urlHsession) history.replaceState(null, '', location.pathname);
 
