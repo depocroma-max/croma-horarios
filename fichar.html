@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Croma · Cargar turno</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --black:    #0d0d0d;
+      --white:    #ffffff;
+      --gray-50:  #f7f7f5;
+      --gray-100: #efefec;
+      --gray-200: #ddddd8;
+      --gray-400: #a0a09a;
+      --gray-600: #666660;
+      --gray-800: #333330;
+      --accent:   #e8251a;
+      --green:    #16a34a;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body:    'DM Sans', sans-serif;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.10);
+    }
+    html { font-size: 16px; }
+    body {
+      font-family: var(--font-body);
+      background: var(--gray-50);
+      color: var(--black);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 20px; height: 52px;
+      background: var(--black);
+      border-bottom: 1px solid #222;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-brand { display: flex; align-items: baseline; gap: 8px; }
+    .topbar-logo { font-family: var(--font-display); font-size: 20px; letter-spacing: 2px; color: var(--white); }
+    .topbar-sep  { color: #444; font-size: 13px; }
+    .topbar-sub  { font-size: 11px; font-weight: 500; letter-spacing: 3px; color: var(--gray-400); text-transform: uppercase; }
+    .topbar-img  { height: 26px; width: 26px; object-fit: contain; opacity: .85; }
+    .topbar-back {
+      margin-left: auto; display: flex; align-items: center; gap: 6px;
+      color: var(--gray-400); font-size: 13px; text-decoration: none;
+      border: 1px solid #333; border-radius: var(--radius-sm);
+      padding: 5px 10px; transition: color .15s, border-color .15s;
+    }
+    .topbar-back:hover { color: var(--white); border-color: #555; }
+
+    /* ── PANTALLAS ── */
+    .screen { display: none; min-height: calc(100vh - 52px); }
+    .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+    /* ── LOGIN ── */
+    #screenLogin {
+      justify-content: center;
+      padding: 32px 20px;
+    }
+    .login-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 40px 36px;
+      width: 100%; max-width: 380px;
+      box-shadow: var(--shadow-md);
+    }
+    .login-logo {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      margin-bottom: 28px;
+    }
+    .login-logo img { height: 48px; object-fit: contain; }
+    .login-brand { font-family: var(--font-display); font-size: 28px; letter-spacing: 3px; color: var(--black); }
+    .login-sub   { font-size: 11px; letter-spacing: 3px; color: var(--gray-400); text-transform: uppercase; }
+    .login-grupo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .login-label { font-size: 12px; font-weight: 500; color: var(--gray-600); letter-spacing: .3px; }
+    .login-input {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+      font-family: var(--font-body); font-size: 15px; color: var(--black);
+      background: var(--gray-50); transition: border-color .15s;
+      outline: none;
+    }
+    .login-input:focus { border-color: var(--black); background: var(--white); }
+    .pin-wrap { position: relative; }
+    .pin-wrap .login-input { padding-right: 40px; }
+    .pin-toggle {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--gray-400);
+      display: flex; align-items: center; padding: 4px;
+    }
+    .login-error {
+      color: var(--accent); font-size: 12px; text-align: center;
+      margin-bottom: 10px; display: none;
+    }
+    .btn-primary {
+      width: 100%; padding: 12px;
+      background: var(--black); color: var(--white);
+      border: none; border-radius: var(--radius-sm);
+      font-family: var(--font-body); font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: background .15s; letter-spacing: .3px;
+    }
+    .btn-primary:hover { background: #222; }
+    .btn-primary:disabled { background: var(--gray-400); cursor: not-allowed; }
+
+    /* ── GEO STATUS ── */
+    #screenGeo {
+      justify-content: center; padding: 32px 20px;
+    }
+    .geo-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 48px 36px; text-align: center;
+      width: 100%; max-width: 380px;
+      box-shadow: var(--shadow-md);
+    }
+    .geo-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--gray-100);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .geo-icon svg { width: 28px; height: 28px; }
+    .geo-icon.ok   { background: #dcfce7; color: var(--green); }
+    .geo-icon.err  { background: #fee2e2; color: var(--accent); }
+    .geo-icon.warn { background: #fef9c3; color: #b45309; }
+    .geo-title { font-family: var(--font-display); font-size: 26px; letter-spacing: 1px; margin-bottom: 10px; }
+    .geo-msg   { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 24px; }
+    .geo-dist  { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .geo-dist.lejos { color: var(--accent); }
+    .geo-dist.cerca { color: var(--green); }
+    .geo-spinner {
+      width: 36px; height: 36px; margin: 0 auto 20px;
+      border: 3px solid var(--gray-200); border-top-color: var(--black);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── FORMULARIO ── */
+    #screenForm { padding: 24px 16px; width: 100%; max-width: 480px; }
+    .form-header {
+      display: flex; flex-direction: column; gap: 2px;
+      margin-bottom: 20px;
+    }
+    .form-emp  { font-family: var(--font-display); font-size: 24px; letter-spacing: 1px; }
+    .form-suc  {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 500; letter-spacing: 1px;
+      color: var(--gray-600); text-transform: uppercase;
+    }
+    .suc-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .geo-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 500;
+      padding: 3px 8px; border-radius: 20px; margin-top: 6px;
+    }
+    .geo-badge.ok  { background: #dcfce7; color: var(--green); }
+    .geo-badge.err { background: #fee2e2; color: var(--accent); }
+
+    .form-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 24px 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .form-card-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 2px;
+      color: var(--gray-400); text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { font-size: 12px; font-weight: 500; color: var(--gray-600); }
+    .field input[type="date"],
+    .field input[type="time"],
+    .field input[type="text"],
+    .field textarea {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+      font-family: var(--font-body); font-size: 15px; color: var(--black);
+      background: var(--gray-50); outline: none; transition: border-color .15s;
+    }
+    .field input:focus, .field textarea:focus { border-color: var(--black); background: var(--white); }
+    .field textarea { resize: vertical; min-height: 68px; }
+
+    .horas-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .total-display {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--gray-50); border-radius: var(--radius-sm);
+      border: 1.5px solid var(--gray-200);
+      margin-top: 12px;
+    }
+    .total-label { font-size: 12px; color: var(--gray-600); font-weight: 500; }
+    .total-val   { font-size: 20px; font-weight: 700; font-family: var(--font-display); letter-spacing: 1px; }
+
+    /* toggle recuperación */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-top: 1px solid var(--gray-100);
+    }
+    .toggle-label { font-size: 13px; font-weight: 500; }
+    .toggle-sub   { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+    .toggle {
+      position: relative; width: 44px; height: 24px; flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: var(--gray-200); border-radius: 12px; cursor: pointer;
+      transition: background .2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 18px; height: 18px; left: 3px; top: 3px;
+      background: var(--white); border-radius: 50%; transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--black); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    .recup-fecha { margin-top: 12px; display: none; }
+    .recup-fecha.visible { display: block; }
+
+    /* submit */
+    .btn-submit {
+      width: 100%; padding: 14px;
+      background: var(--black); color: var(--white);
+      border: none; border-radius: var(--radius-md);
+      font-family: var(--font-body); font-size: 15px; font-weight: 600;
+      cursor: pointer; letter-spacing: .3px;
+      transition: background .15s, transform .1s;
+      margin-bottom: 8px;
+    }
+    .btn-submit:hover:not(:disabled) { background: #222; }
+    .btn-submit:active:not(:disabled) { transform: scale(.99); }
+    .btn-submit:disabled { background: var(--gray-400); cursor: not-allowed; }
+    .submit-hint { font-size: 11px; color: var(--gray-400); text-align: center; }
+
+    /* ── ÉXITO ── */
+    #screenOk {
+      justify-content: center; padding: 32px 20px;
+    }
+    .ok-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg);
+      padding: 48px 36px; text-align: center;
+      width: 100%; max-width: 380px;
+      box-shadow: var(--shadow-md);
+    }
+    .ok-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #dcfce7; color: var(--green);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .ok-title { font-family: var(--font-display); font-size: 30px; letter-spacing: 1px; margin-bottom: 8px; }
+    .ok-detail { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 28px; }
+    .ok-actions { display: flex; flex-direction: column; gap: 10px; }
+    .btn-outline {
+      padding: 11px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+      background: none; font-family: var(--font-body); font-size: 14px;
+      color: var(--gray-800); cursor: pointer; transition: border-color .15s, color .15s;
+    }
+    .btn-outline:hover { border-color: var(--black); color: var(--black); }
+
+    /* ── HISTORIAL ── */
+    .historial-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; width: 100%; }
+    .hist-item {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: var(--radius-md); padding: 12px 14px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .hist-fecha { font-size: 12px; font-weight: 600; color: var(--gray-600); min-width: 80px; }
+    .hist-horas { font-size: 14px; font-weight: 500; }
+    .hist-total { font-family: var(--font-display); font-size: 16px; margin-left: auto; }
+    .hist-badge {
+      font-size: 10px; font-weight: 600; letter-spacing: .5px;
+      padding: 2px 7px; border-radius: 10px;
+      background: #fef9c3; color: #b45309;
+    }
+    .hist-badge.normal { background: var(--gray-100); color: var(--gray-600); }
+
+    /* responsive */
+    @media (max-width: 440px) {
+      .login-card, .geo-card, .ok-card { padding: 32px 20px; }
+      #screenForm { padding: 16px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <img src="tridente_solo.png" class="topbar-img" alt="Croma" onerror="this.style.display='none'" />
+  <div class="topbar-brand">
+    <span class="topbar-logo">CROMA</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-sub">Cargar turno</span>
+  </div>
+  <a href="index.html" class="topbar-back" id="btnBack" style="display:none">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Horarios
+  </a>
+</header>
+
+<!-- LOGIN -->
+<section class="screen active" id="screenLogin">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="tridente_solo.png" alt="Croma" onerror="this.style.display='none'" />
+      <span class="login-brand">CROMA</span>
+      <span class="login-sub">Cargar turno</span>
+    </div>
+    <div class="login-grupo">
+      <label class="login-label" for="loginUsuario">Usuario</label>
+      <input type="text" id="loginUsuario" class="login-input" placeholder="Nombre de usuario"
+        autocomplete="username" autocapitalize="none"
+        onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()" />
+    </div>
+    <div class="login-grupo">
+      <label class="login-label" for="loginPin">PIN</label>
+      <div class="pin-wrap">
+        <input type="password" id="loginPin" class="login-input" placeholder="••••"
+          inputmode="numeric" autocomplete="current-password"
+          onkeydown="if(event.key==='Enter')intentarLogin()" />
+        <button class="pin-toggle" type="button" onclick="togglePin()" title="Mostrar PIN" aria-label="Mostrar PIN">
+          <svg id="pinEyeOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg id="pinEyeOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+    </div>
+    <p class="login-error" id="loginError"></p>
+    <button class="btn-primary" id="btnLogin" onclick="intentarLogin()">Ingresar</button>
+  </div>
+</section>
+
+<!-- GEO CHECKING -->
+<section class="screen" id="screenGeo">
+  <div class="geo-card">
+    <div class="geo-spinner" id="geoSpinner"></div>
+    <div class="geo-icon" id="geoIcon" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    </div>
+    <div class="geo-title" id="geoTitle">Verificando ubicación</div>
+    <div class="geo-dist" id="geoDist" style="display:none"></div>
+    <div class="geo-msg"  id="geoMsg">Asegurate de tener el GPS activado y dar permiso cuando te lo pida el navegador.</div>
+    <button class="btn-primary" id="geoBtn" style="display:none" onclick="reintentarGeo()">Reintentar</button>
+    <button class="btn-primary" style="display:none;margin-top:10px" id="geoBtnContinuar" onclick="mostrarFormulario()">Continuar de todas formas</button>
+  </div>
+</section>
+
+<!-- FORMULARIO -->
+<section class="screen" id="screenForm">
+  <div class="form-header">
+    <span class="form-emp" id="formEmpNombre"></span>
+    <span class="form-suc" id="formSucursal"><span class="suc-dot" id="formSucDot"></span><span id="formSucNombre"></span></span>
+    <div class="geo-badge ok" id="formGeoBadge">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      <span id="formGeoDist"></span>
+    </div>
+  </div>
+
+  <!-- FECHA -->
+  <div class="form-card">
+    <div class="form-card-title">Fecha del turno</div>
+    <div class="field">
+      <label for="campoFecha">Fecha</label>
+      <input type="date" id="campoFecha" />
+    </div>
+  </div>
+
+  <!-- HORAS -->
+  <div class="form-card">
+    <div class="form-card-title">Horario</div>
+    <div class="horas-row">
+      <div class="field">
+        <label for="campoEntrada">Entrada</label>
+        <input type="time" id="campoEntrada" />
+      </div>
+      <div class="field">
+        <label for="campoSalida">Salida</label>
+        <input type="time" id="campoSalida" />
+      </div>
+    </div>
+    <div class="total-display">
+      <span class="total-label">Total</span>
+      <span class="total-val" id="totalHs">—</span>
+    </div>
+  </div>
+
+  <!-- TIPO / RECUPERACIÓN -->
+  <div class="form-card">
+    <div class="form-card-title">Tipo de registro</div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Recuperación de horas</div>
+        <div class="toggle-sub">Activar si estás compensando horas de otro día</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggleRecup" onchange="onToggleRecup()" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="recup-fecha" id="recupFechaWrap">
+      <div class="field" style="margin-bottom:0">
+        <label for="campoFechaRecup">Fecha que recuperás</label>
+        <input type="date" id="campoFechaRecup" />
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTA -->
+  <div class="form-card">
+    <div class="form-card-title">Nota adicional</div>
+    <div class="field" style="margin-bottom:0">
+      <label for="campoNota">Observaciones (opcional)</label>
+      <textarea id="campoNota" placeholder="Ej: corte de luz, carga tarde, etc."></textarea>
+    </div>
+  </div>
+
+  <button class="btn-submit" id="btnSubmit" onclick="enviarFichada()">Guardar turno</button>
+  <p class="submit-hint" id="submitHint"></p>
+
+  <!-- HISTORIAL -->
+  <div id="historialWrap" style="display:none;width:100%;margin-top:8px">
+    <div style="font-size:11px;font-weight:600;letter-spacing:2px;color:var(--gray-400);text-transform:uppercase;margin-bottom:8px">Últimas fichadas</div>
+    <div class="historial-list" id="historialList"></div>
+  </div>
+</section>
+
+<!-- ÉXITO -->
+<section class="screen" id="screenOk">
+  <div class="ok-card">
+    <div class="ok-icon">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="ok-title">Turno guardado</div>
+    <div class="ok-detail" id="okDetalle"></div>
+    <div class="ok-actions">
+      <button class="btn-primary" onclick="nuevoTurno()">Cargar otro turno</button>
+      <button class="btn-outline" onclick="window.location.href='index.html'">Ir a Horarios</button>
+    </div>
+  </div>
+</section>
+
+<script>
+// ── CONFIG ──
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
+
+const SUCURSALES = [
+  { id: '01', nombre: '01 PASEO',          color: '#185FA5' },
+  { id: '05', nombre: '05 WAVE',           color: '#0F6E56' },
+  { id: '09', nombre: '09 CIPO SAN MARTIN',color: '#B45309' },
+  { id: '10', nombre: '10 PERITO MORENO',  color: '#9B2563' },
+  { id: '12', nombre: '12 CENTENARIO',     color: '#534AB7' },
+  { id: '14', nombre: '14 ROCA',           color: '#3B6D11' },
+];
+
+const DIAS_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+// ── ESTADO ──
+let sesion = null;         // { nombre, rol, empleadoNombre }
+let sucursalGeo = null;    // { local, lat, lon, radio_m }
+let geoPos = null;         // { lat, lon, distancia_m }
+let _usuarios = [];
+
+// ── INIT ──
+(async function init() {
+  // Restaurar sesión previa
+  try {
+    const saved = localStorage.getItem('croma_session');
+    if (saved) sesion = JSON.parse(saved);
+  } catch(e) {}
+
+  if (sesion) {
+    document.getElementById('btnBack').style.display = '';
+    await arrancarConSesion();
+  } else {
+    // Precargar usuarios en background
+    cargarUsuarios();
+    mostrarScreen('screenLogin');
+    document.getElementById('loginUsuario').focus();
+  }
+})();
+
+// ── USUARIOS ──
+async function cargarUsuarios() {
+  try {
+    const cached = localStorage.getItem('croma_usuarios_cache');
+    if (cached) {
+      _usuarios = JSON.parse(cached) || [];
+      fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`)
+        .then(r => r.json()).then(j => {
+          if (j?.ok && j.usuarios?.length) {
+            _usuarios = j.usuarios;
+            localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuarios));
+          }
+        }).catch(() => {});
+      return;
+    }
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
+    const json = await resp.json();
+    if (json.ok) {
+      _usuarios = json.usuarios || [];
+      localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuarios));
+    }
+  } catch(e) {}
+}
+
+// ── LOGIN ──
+function togglePin() {
+  const inp = document.getElementById('loginPin');
+  const on  = document.getElementById('pinEyeOn');
+  const off = document.getElementById('pinEyeOff');
+  if (inp.type === 'password') {
+    inp.type = 'text'; on.style.display = 'none'; off.style.display = '';
+  } else {
+    inp.type = 'password'; on.style.display = ''; off.style.display = 'none';
+  }
+}
+
+async function intentarLogin() {
+  const usuario = document.getElementById('loginUsuario').value.trim();
+  const pin     = document.getElementById('loginPin').value.trim();
+  const errEl   = document.getElementById('loginError');
+  const btnEl   = document.getElementById('btnLogin');
+
+  errEl.style.display = 'none';
+  if (!usuario || !pin) { mostrarError(errEl, 'Completá usuario y PIN.'); return; }
+
+  btnEl.disabled = true; btnEl.textContent = 'Verificando...';
+
+  if (!_usuarios.length) await cargarUsuarios();
+
+  const match = _usuarios.find(u =>
+    u.nombre.toLowerCase() === usuario.toLowerCase() && String(u.pin) === String(pin)
+  );
+
+  btnEl.disabled = false; btnEl.textContent = 'Ingresar';
+
+  if (!match) { mostrarError(errEl, 'Usuario o PIN incorrecto.'); return; }
+
+  sesion = { nombre: match.nombre, rol: match.rol, empleadoNombre: match.empleadoNombre || match.nombre };
+  localStorage.setItem('croma_session', JSON.stringify(sesion));
+  document.getElementById('btnBack').style.display = '';
+  await arrancarConSesion();
+}
+
+function mostrarError(el, msg) {
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ── FLUJO PRINCIPAL ──
+async function arrancarConSesion() {
+  mostrarScreen('screenGeo');
+  await cargarSucursalYGeo();
+}
+
+async function cargarSucursalYGeo() {
+  // 1. Buscar perfil del empleado para saber su sucursal
+  let sucursalId = null;
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=perfiles`);
+    const json = await resp.json();
+    const empNombre = sesion.empleadoNombre || sesion.nombre;
+    const perfil = (json.empleados || []).find(e =>
+      e.nombre.toLowerCase() === empNombre.toLowerCase()
+    );
+    if (perfil) sucursalId = perfil.sucursal_id;
+  } catch(e) {}
+
+  const suc = SUCURSALES.find(s => s.id === sucursalId);
+
+  // 2. Cargar coordenadas geo de esa sucursal
+  if (suc) {
+    try {
+      const resp = await fetch(`${APPS_SCRIPT_URL}?accion=get_sucursales_geo`);
+      const json = await resp.json();
+      sucursalGeo = (json.sucursales || []).find(s =>
+        s.local.toUpperCase() === suc.nombre.toUpperCase()
+      ) || null;
+    } catch(e) {}
+  }
+
+  // 3. Pedir geolocalización
+  if (!navigator.geolocation) {
+    mostrarGeoError('Tu navegador no soporta geolocalización. Podés continuar sin verificación.');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => onGeoOk(pos, suc),
+    err => onGeoErr(err),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+function onGeoOk(pos, suc) {
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+
+  if (sucursalGeo && sucursalGeo.lat && sucursalGeo.lon) {
+    const dist = haversine(lat, lon, sucursalGeo.lat, sucursalGeo.lon);
+    geoPos = { lat, lon, distancia_m: Math.round(dist) };
+
+    if (dist <= sucursalGeo.radio_m) {
+      mostrarFormulario();
+    } else {
+      mostrarGeoBloqueado(dist, sucursalGeo.radio_m);
+    }
+  } else {
+    // No hay coordenadas cargadas — permitir con advertencia
+    geoPos = { lat, lon, distancia_m: null };
+    mostrarFormulario();
+  }
+}
+
+function onGeoErr(err) {
+  geoPos = null;
+  const msgs = {
+    1: 'Permiso de ubicación denegado. Habilitá el GPS en la configuración del navegador.',
+    2: 'No se pudo obtener la ubicación. Verificá que el GPS esté activo.',
+    3: 'Tiempo agotado al obtener la ubicación.',
+  };
+  mostrarGeoError(msgs[err.code] || 'Error al obtener ubicación.');
+}
+
+function mostrarGeoError(msg) {
+  document.getElementById('geoSpinner').style.display = 'none';
+  const icon = document.getElementById('geoIcon');
+  icon.style.display = 'flex'; icon.className = 'geo-icon warn';
+  document.getElementById('geoTitle').textContent = 'Sin ubicación';
+  document.getElementById('geoMsg').textContent   = msg;
+  document.getElementById('geoBtn').style.display = '';
+  document.getElementById('geoBtnContinuar').style.display = '';
+}
+
+function mostrarGeoBloqueado(dist, radio) {
+  document.getElementById('geoSpinner').style.display = 'none';
+  const icon = document.getElementById('geoIcon');
+  icon.style.display = 'flex'; icon.className = 'geo-icon err';
+  document.getElementById('geoTitle').textContent = 'Fuera de rango';
+  const distEl = document.getElementById('geoDist');
+  distEl.style.display = ''; distEl.className = 'geo-dist lejos';
+  distEl.textContent = `${Math.round(dist)} m del local (máx. ${radio} m)`;
+  document.getElementById('geoMsg').textContent = 'Tenés que estar dentro del rango del local para registrar el turno.';
+  document.getElementById('geoBtn').style.display = '';
+}
+
+function reintentarGeo() {
+  document.getElementById('geoSpinner').style.display = '';
+  document.getElementById('geoIcon').style.display    = 'none';
+  document.getElementById('geoDist').style.display    = 'none';
+  document.getElementById('geoBtn').style.display     = 'none';
+  document.getElementById('geoBtnContinuar').style.display = 'none';
+  document.getElementById('geoTitle').textContent = 'Verificando ubicación';
+  document.getElementById('geoMsg').textContent   = 'Asegurate de tener el GPS activado.';
+  const suc = SUCURSALES.find(s => sucursalGeo && s.nombre === sucursalGeo.local) || null;
+  navigator.geolocation.getCurrentPosition(
+    pos => onGeoOk(pos, suc),
+    err => onGeoErr(err),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+// ── FORMULARIO ──
+async function mostrarFormulario() {
+  const empNombre = sesion.empleadoNombre || sesion.nombre;
+
+  // Completar cabecera
+  document.getElementById('formEmpNombre').textContent = empNombre;
+
+  let sucNombre = '—'; let sucColor = '#888';
+  if (sucursalGeo) {
+    const suc = SUCURSALES.find(s => s.nombre.toUpperCase() === sucursalGeo.local.toUpperCase());
+    if (suc) { sucNombre = suc.nombre; sucColor = suc.color; }
+  }
+  document.getElementById('formSucNombre').textContent = sucNombre;
+  document.getElementById('formSucDot').style.background = sucColor;
+
+  // Badge geo
+  const badge = document.getElementById('formGeoBadge');
+  const distEl = document.getElementById('formGeoDist');
+  if (geoPos && geoPos.distancia_m !== null) {
+    badge.style.display = '';
+    distEl.textContent  = `${geoPos.distancia_m} m del local`;
+  } else {
+    badge.style.display = 'none';
+  }
+
+  // Fecha default = hoy
+  document.getElementById('campoFecha').value = hoy();
+
+  // Calcular total en tiempo real
+  ['campoEntrada','campoSalida'].forEach(id =>
+    document.getElementById(id).addEventListener('change', calcularTotal)
+  );
+
+  mostrarScreen('screenForm');
+  cargarHistorial(empNombre);
+}
+
+function hoy() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function calcularTotal() {
+  const entrada = document.getElementById('campoEntrada').value;
+  const salida  = document.getElementById('campoSalida').value;
+  if (!entrada || !salida) { document.getElementById('totalHs').textContent = '—'; return; }
+  const [he, me] = entrada.split(':').map(Number);
+  const [hs, ms] = salida.split(':').map(Number);
+  let mins = (hs * 60 + ms) - (he * 60 + me);
+  if (mins < 0) mins += 1440;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  document.getElementById('totalHs').textContent = rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+}
+
+function onToggleRecup() {
+  const on = document.getElementById('toggleRecup').checked;
+  document.getElementById('recupFechaWrap').classList.toggle('visible', on);
+}
+
+async function enviarFichada() {
+  const fecha    = document.getElementById('campoFecha').value;
+  const entrada  = document.getElementById('campoEntrada').value;
+  const salida   = document.getElementById('campoSalida').value;
+  const nota     = document.getElementById('campoNota').value.trim();
+  const esRecup  = document.getElementById('toggleRecup').checked;
+  const fechaRec = document.getElementById('campoFechaRecup').value;
+
+  if (!fecha)   { alert('Seleccioná la fecha del turno.'); return; }
+  if (!entrada) { alert('Completá la hora de entrada.'); return; }
+  if (!salida)  { alert('Completá la hora de salida.'); return; }
+  if (esRecup && !fechaRec) { alert('Indicá qué fecha recuperás.'); return; }
+
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const empNombre  = sesion.empleadoNombre || sesion.nombre;
+  const localNombre = sucursalGeo ? sucursalGeo.local : '—';
+
+  const payload = {
+    local:              localNombre,
+    empleado:           empNombre,
+    fecha,
+    hora_entrada:       entrada,
+    hora_salida:        salida,
+    nota,
+    tipo_registro:      esRecup ? 'RECUPERACION' : 'NORMAL',
+    fecha_a_recuperar:  esRecup ? fechaRec : '',
+    modo_carga:         'INDIVIDUAL',
+    lat:                geoPos ? geoPos.lat         : '',
+    lon:                geoPos ? geoPos.lon         : '',
+    distancia_m:        geoPos ? geoPos.distancia_m : '',
+  };
+
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardarFichada`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify(payload),
+    });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+
+    // Mostrar pantalla de éxito
+    const [anio, mes, dia] = fecha.split('-').map(Number);
+    const fechaObj = new Date(anio, mes - 1, dia);
+    document.getElementById('okDetalle').innerHTML =
+      `<strong>${empNombre}</strong><br>` +
+      `${DIAS_ES[fechaObj.getDay()]} ${dia} de ${MESES_ES[mes-1]} — ${entrada} a ${salida}` +
+      (esRecup ? `<br><small>Recuperación del ${fechaRec}</small>` : '');
+    mostrarScreen('screenOk');
+
+  } catch(err) {
+    alert('No se pudo guardar el turno. Verificá tu conexión e intentá de nuevo.\n(' + err.message + ')');
+    btn.disabled = false; btn.textContent = 'Guardar turno';
+  }
+}
+
+function nuevoTurno() {
+  document.getElementById('campoFecha').value    = hoy();
+  document.getElementById('campoEntrada').value  = '';
+  document.getElementById('campoSalida').value   = '';
+  document.getElementById('campoNota').value     = '';
+  document.getElementById('toggleRecup').checked = false;
+  document.getElementById('recupFechaWrap').classList.remove('visible');
+  document.getElementById('campoFechaRecup').value = '';
+  document.getElementById('totalHs').textContent = '—';
+  document.getElementById('btnSubmit').disabled  = false;
+  document.getElementById('btnSubmit').textContent = 'Guardar turno';
+  mostrarScreen('screenForm');
+}
+
+// ── HISTORIAL ──
+async function cargarHistorial(empNombre) {
+  try {
+    const url  = `${APPS_SCRIPT_URL}?accion=get_fichadas_empleado&empleado=${encodeURIComponent(empNombre)}`;
+    const resp = await fetch(url);
+    const json = await resp.json();
+    if (!json.ok || !json.fichadas.length) return;
+
+    const wrap = document.getElementById('historialWrap');
+    const list = document.getElementById('historialList');
+    list.innerHTML = '';
+    json.fichadas.slice(0, 10).forEach(f => {
+      const [a, m, d] = f.fecha.split('-');
+      const li = document.createElement('div');
+      li.className = 'hist-item';
+      li.innerHTML =
+        `<span class="hist-fecha">${d}/${m}/${a}</span>` +
+        `<span class="hist-horas">${f.entrada} – ${f.salida}</span>` +
+        `<span class="hist-badge ${f.tipo === 'NORMAL' ? 'normal' : ''}">${f.tipo === 'RECUPERACION' ? 'RECUP' : f.tipo}</span>` +
+        `<span class="hist-total">${f.total}h</span>`;
+      list.appendChild(li);
+    });
+    wrap.style.display = '';
+  } catch(e) {}
+}
+
+// ── UTILS ──
+function mostrarScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+</script>
+</body>
+</html>

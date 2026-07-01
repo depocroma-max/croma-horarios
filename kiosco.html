@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Croma · Kiosco</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --black:    #0d0d0d;
+      --white:    #ffffff;
+      --gray-50:  #f7f7f5;
+      --gray-100: #efefec;
+      --gray-200: #ddddd8;
+      --gray-400: #a0a09a;
+      --gray-600: #666660;
+      --gray-800: #333330;
+      --accent:   #e8251a;
+      --green:    #16a34a;
+      --suc-color: #0d0d0d;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body:    'DM Sans', sans-serif;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.10);
+    }
+    html { font-size: 16px; }
+    body {
+      font-family: var(--font-body);
+      background: var(--gray-50);
+      color: var(--black);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 20px; height: 52px;
+      background: var(--black);
+      border-bottom: 1px solid #222;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-img  { height: 26px; width: 26px; object-fit: contain; opacity: .85; }
+    .topbar-logo { font-family: var(--font-display); font-size: 20px; letter-spacing: 2px; color: var(--white); }
+    .topbar-sep  { color: #444; font-size: 13px; }
+    .topbar-suc  {
+      font-family: var(--font-display); font-size: 18px; letter-spacing: 2px;
+      color: var(--white); opacity: .9;
+    }
+    .topbar-mode {
+      margin-left: auto; font-size: 10px; font-weight: 600; letter-spacing: 2px;
+      color: var(--gray-400); text-transform: uppercase;
+      border: 1px solid #333; border-radius: 4px; padding: 3px 8px;
+    }
+
+    /* ── PANTALLAS ── */
+    .screen { display: none; }
+    .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+    /* ── LOADING ── */
+    #screenLoading {
+      min-height: calc(100vh - 52px);
+      justify-content: center; align-items: center;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--gray-200); border-top-color: var(--black);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SELECTOR DE EMPLEADO ── */
+    #screenEmpleados {
+      min-height: calc(100vh - 52px);
+      padding: 24px 16px; width: 100%; max-width: 560px;
+    }
+    .screen-title {
+      font-family: var(--font-display); font-size: 28px; letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .screen-sub {
+      font-size: 13px; color: var(--gray-600); margin-bottom: 20px;
+    }
+    .emp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+    }
+    .emp-btn {
+      background: var(--white); border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-md); padding: 16px 12px;
+      text-align: center; cursor: pointer;
+      transition: border-color .15s, box-shadow .15s, transform .1s;
+      font-family: var(--font-body); color: var(--black);
+    }
+    .emp-btn:hover { border-color: var(--black); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .emp-btn:active { transform: scale(.97); }
+    .emp-avatar {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--gray-100); margin: 0 auto 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 22px; letter-spacing: 1px;
+      color: var(--gray-600); overflow: hidden;
+    }
+    .emp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .emp-nombre { font-size: 13px; font-weight: 500; line-height: 1.3; }
+
+    /* ── PIN ── */
+    #screenPin {
+      min-height: calc(100vh - 52px);
+      justify-content: center; padding: 32px 20px;
+    }
+    .pin-card {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg); padding: 36px 28px;
+      width: 100%; max-width: 340px;
+      box-shadow: var(--shadow-md); text-align: center;
+    }
+    .pin-avatar {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--gray-100); margin: 0 auto 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 28px; color: var(--gray-600);
+      overflow: hidden;
+    }
+    .pin-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .pin-nombre { font-family: var(--font-display); font-size: 24px; letter-spacing: 1px; margin-bottom: 4px; }
+    .pin-sub    { font-size: 12px; color: var(--gray-400); margin-bottom: 24px; }
+
+    .pin-dots {
+      display: flex; justify-content: center; gap: 12px; margin-bottom: 24px;
+    }
+    .pin-dot {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid var(--gray-200); background: transparent;
+      transition: background .15s, border-color .15s;
+    }
+    .pin-dot.filled { background: var(--black); border-color: var(--black); }
+
+    .numpad {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      margin-bottom: 14px;
+    }
+    .num-btn {
+      padding: 16px 0; background: var(--gray-50); border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm); font-family: var(--font-display);
+      font-size: 22px; letter-spacing: 1px; cursor: pointer;
+      transition: background .1s, transform .1s; color: var(--black);
+      user-select: none;
+    }
+    .num-btn:hover  { background: var(--gray-100); }
+    .num-btn:active { transform: scale(.93); }
+    .num-btn.del    { font-family: var(--font-body); font-size: 16px; background: none; }
+    .num-btn.spacer { visibility: hidden; }
+
+    .pin-error { color: var(--accent); font-size: 12px; min-height: 18px; margin-bottom: 4px; }
+    .btn-volver {
+      width: 100%; padding: 10px; background: none; border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 13px;
+      color: var(--gray-600); cursor: pointer; transition: border-color .15s, color .15s;
+    }
+    .btn-volver:hover { border-color: var(--black); color: var(--black); }
+
+    /* ── FORMULARIO ── */
+    #screenForm { padding: 20px 16px; width: 100%; max-width: 480px; }
+    .form-header { margin-bottom: 18px; }
+    .form-emp  { font-family: var(--font-display); font-size: 24px; letter-spacing: 1px; }
+    .form-suc  {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 500; color: var(--gray-600);
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .suc-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .kiosco-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 10px; font-weight: 600; letter-spacing: 1px;
+      padding: 2px 8px; border-radius: 10px;
+      background: var(--gray-100); color: var(--gray-600);
+      text-transform: uppercase; margin-top: 4px;
+    }
+
+    .form-card {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg); padding: 20px 18px;
+      margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .form-card-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 2px;
+      color: var(--gray-400); text-transform: uppercase; margin-bottom: 14px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { font-size: 12px; font-weight: 500; color: var(--gray-600); }
+    .field input[type="date"],
+    .field input[type="time"],
+    .field textarea {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+      font-family: var(--font-body); font-size: 15px; color: var(--black);
+      background: var(--gray-50); outline: none; transition: border-color .15s;
+    }
+    .field input:focus, .field textarea:focus { border-color: var(--black); background: var(--white); }
+    .field textarea { resize: vertical; min-height: 62px; }
+    .horas-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .total-display {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; background: var(--gray-50);
+      border-radius: var(--radius-sm); border: 1.5px solid var(--gray-200);
+      margin-top: 10px;
+    }
+    .total-label { font-size: 12px; color: var(--gray-600); font-weight: 500; }
+    .total-val   { font-family: var(--font-display); font-size: 20px; letter-spacing: 1px; }
+
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-top: 1px solid var(--gray-100);
+    }
+    .toggle-label { font-size: 13px; font-weight: 500; }
+    .toggle-sub   { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+    .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; background: var(--gray-200);
+      border-radius: 12px; cursor: pointer; transition: background .2s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 18px; height: 18px; left: 3px; top: 3px;
+      background: var(--white); border-radius: 50%; transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--black); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+    .recup-fecha { margin-top: 10px; display: none; }
+    .recup-fecha.visible { display: block; }
+
+    .btn-submit {
+      width: 100%; padding: 14px;
+      background: var(--black); color: var(--white);
+      border: none; border-radius: var(--radius-md);
+      font-family: var(--font-body); font-size: 15px; font-weight: 600;
+      cursor: pointer; letter-spacing: .3px;
+      transition: background .15s, transform .1s; margin-bottom: 10px;
+    }
+    .btn-submit:hover:not(:disabled) { background: #222; }
+    .btn-submit:disabled { background: var(--gray-400); cursor: not-allowed; }
+    .btn-cancelar {
+      width: 100%; padding: 11px; background: none;
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+      font-family: var(--font-body); font-size: 13px; color: var(--gray-600);
+      cursor: pointer; transition: border-color .15s, color .15s;
+    }
+    .btn-cancelar:hover { border-color: var(--black); color: var(--black); }
+
+    /* ── ÉXITO ── */
+    #screenOk {
+      min-height: calc(100vh - 52px);
+      justify-content: center; padding: 32px 20px;
+    }
+    .ok-card {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg); padding: 44px 32px; text-align: center;
+      width: 100%; max-width: 380px; box-shadow: var(--shadow-md);
+    }
+    .ok-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #dcfce7; color: var(--green);
+      display: flex; align-items: center; justify-content: center; margin: 0 auto 18px;
+    }
+    .ok-title  { font-family: var(--font-display); font-size: 30px; letter-spacing: 1px; margin-bottom: 8px; }
+    .ok-detail { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 28px; }
+    .ok-countdown {
+      font-size: 12px; color: var(--gray-400); margin-bottom: 20px;
+    }
+
+    /* error pantalla entera */
+    #screenError {
+      min-height: calc(100vh - 52px);
+      justify-content: center; padding: 32px 20px;
+    }
+    .err-card {
+      background: var(--white); border: 1px solid var(--gray-200);
+      border-radius: var(--radius-lg); padding: 44px 32px; text-align: center;
+      width: 100%; max-width: 380px; box-shadow: var(--shadow-md);
+    }
+    .err-title { font-family: var(--font-display); font-size: 26px; letter-spacing: 1px; margin-bottom: 10px; color: var(--accent); }
+    .err-msg   { font-size: 14px; color: var(--gray-600); line-height: 1.6; }
+
+    @media (max-width: 440px) {
+      .emp-grid { grid-template-columns: repeat(2, 1fr); }
+      #screenForm { padding: 14px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <img src="tridente_solo.png" class="topbar-img" alt="Croma" onerror="this.style.display='none'" />
+  <span class="topbar-logo">CROMA</span>
+  <span class="topbar-sep">|</span>
+  <span class="topbar-suc" id="topbarSuc">—</span>
+  <span class="topbar-mode">Kiosco</span>
+</header>
+
+<!-- LOADING -->
+<section class="screen active" id="screenLoading">
+  <div class="spinner"></div>
+</section>
+
+<!-- ERROR -->
+<section class="screen" id="screenError">
+  <div class="err-card">
+    <div class="err-title">Sin configuración</div>
+    <div class="err-msg" id="errMsg">Usá la URL con el parámetro del local, por ejemplo:<br><code>kiosco.html?local=05</code></div>
+  </div>
+</section>
+
+<!-- SELECCIÓN DE EMPLEADO -->
+<section class="screen" id="screenEmpleados">
+  <div class="screen-title">Seleccioná tu nombre</div>
+  <div class="screen-sub" id="empSubtitle"></div>
+  <div class="emp-grid" id="empGrid"></div>
+</section>
+
+<!-- PIN -->
+<section class="screen" id="screenPin">
+  <div class="pin-card">
+    <div class="pin-avatar" id="pinAvatar"></div>
+    <div class="pin-nombre" id="pinNombre"></div>
+    <div class="pin-sub">Ingresá tu PIN</div>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+    </div>
+    <p class="pin-error" id="pinError"></p>
+    <div class="numpad" id="numpad">
+      <button class="num-btn" onclick="numPress('1')">1</button>
+      <button class="num-btn" onclick="numPress('2')">2</button>
+      <button class="num-btn" onclick="numPress('3')">3</button>
+      <button class="num-btn" onclick="numPress('4')">4</button>
+      <button class="num-btn" onclick="numPress('5')">5</button>
+      <button class="num-btn" onclick="numPress('6')">6</button>
+      <button class="num-btn" onclick="numPress('7')">7</button>
+      <button class="num-btn" onclick="numPress('8')">8</button>
+      <button class="num-btn" onclick="numPress('9')">9</button>
+      <button class="num-btn spacer"></button>
+      <button class="num-btn" onclick="numPress('0')">0</button>
+      <button class="num-btn del" onclick="numDel()">⌫</button>
+    </div>
+    <button class="btn-volver" onclick="volverAEmpleados()">Volver</button>
+  </div>
+</section>
+
+<!-- FORMULARIO -->
+<section class="screen" id="screenForm">
+  <div class="form-header">
+    <div class="form-emp" id="formEmpNombre"></div>
+    <div class="form-suc" id="formSucursal">
+      <span class="suc-dot" id="formSucDot"></span>
+      <span id="formSucNombre"></span>
+    </div>
+    <div class="kiosco-badge">Kiosco · sin verificación GPS</div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">Fecha del turno</div>
+    <div class="field">
+      <label for="campoFecha">Fecha</label>
+      <input type="date" id="campoFecha" />
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">Horario</div>
+    <div class="horas-row">
+      <div class="field">
+        <label for="campoEntrada">Entrada</label>
+        <input type="time" id="campoEntrada" />
+      </div>
+      <div class="field">
+        <label for="campoSalida">Salida</label>
+        <input type="time" id="campoSalida" />
+      </div>
+    </div>
+    <div class="total-display">
+      <span class="total-label">Total</span>
+      <span class="total-val" id="totalHs">—</span>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">Tipo de registro</div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Recuperación de horas</div>
+        <div class="toggle-sub">Activar si estás compensando horas de otro día</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggleRecup" onchange="onToggleRecup()" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="recup-fecha" id="recupFechaWrap">
+      <div class="field" style="margin-bottom:0">
+        <label for="campoFechaRecup">Fecha que recuperás</label>
+        <input type="date" id="campoFechaRecup" />
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">Nota adicional</div>
+    <div class="field" style="margin-bottom:0">
+      <label for="campoNota">Observaciones (opcional)</label>
+      <textarea id="campoNota" placeholder="Ej: corte de luz, carga tarde, etc."></textarea>
+    </div>
+  </div>
+
+  <button class="btn-submit" id="btnSubmit" onclick="enviarFichada()">Guardar turno</button>
+  <button class="btn-cancelar" onclick="volverAEmpleados()">Cancelar</button>
+</section>
+
+<!-- ÉXITO -->
+<section class="screen" id="screenOk">
+  <div class="ok-card">
+    <div class="ok-icon">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="ok-title">Turno guardado</div>
+    <div class="ok-detail" id="okDetalle"></div>
+    <div class="ok-countdown" id="okCountdown"></div>
+    <button class="btn-submit" style="max-width:240px;margin:0 auto" onclick="volverAEmpleados()">Siguiente empleado</button>
+  </div>
+</section>
+
+<script>
+// ── CONFIG ──
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
+
+const SUCURSALES = [
+  { id: '01', nombre: '01 PASEO',           color: '#185FA5' },
+  { id: '05', nombre: '05 WAVE',            color: '#0F6E56' },
+  { id: '09', nombre: '09 CIPO SAN MARTIN', color: '#B45309' },
+  { id: '10', nombre: '10 PERITO MORENO',   color: '#9B2563' },
+  { id: '12', nombre: '12 CENTENARIO',      color: '#534AB7' },
+  { id: '14', nombre: '14 ROCA',            color: '#3B6D11' },
+];
+
+const DIAS_ES  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+// ── ESTADO ──
+let sucursal    = null;   // objeto SUCURSALES
+let empleados   = [];     // lista filtrada por sucursal
+let usuariosSel = null;   // usuario seleccionado { nombre, pin, empleadoNombre }
+let pinActual   = '';
+let countdownTimer = null;
+
+// ── INIT ──
+(async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const localId = params.get('local') || '';
+
+  sucursal = SUCURSALES.find(s => s.id === localId) || null;
+
+  if (!sucursal) {
+    mostrarScreen('screenError');
+    return;
+  }
+
+  document.title = `Croma · Kiosco ${sucursal.nombre}`;
+  document.getElementById('topbarSuc').textContent = sucursal.nombre;
+
+  // Color de sucursal en topbar (solo un toque sutil)
+  document.documentElement.style.setProperty('--suc-color', sucursal.color);
+
+  await cargarEmpleadosYUsuarios();
+})();
+
+// ── CARGA DE DATOS ──
+async function cargarEmpleadosYUsuarios() {
+  try {
+    const [respPerf, respUsr] = await Promise.all([
+      fetch(`${APPS_SCRIPT_URL}?accion=perfiles`),
+      fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`),
+    ]);
+    const [jsonPerf, jsonUsr] = await Promise.all([respPerf.json(), respUsr.json()]);
+
+    const todosEmp = jsonPerf.empleados || [];
+    const usuarios = jsonUsr.usuarios   || [];
+
+    // Filtrar activos de esta sucursal que tienen usuario con rol empleado/admin
+    empleados = todosEmp
+      .filter(e => e.activo && e.sucursal_id === sucursal.id)
+      .map(e => {
+        const usr = usuarios.find(u =>
+          (u.empleadoNombre || '').toLowerCase() === e.nombre.toLowerCase() ||
+          u.nombre.toLowerCase() === e.nombre.toLowerCase()
+        );
+        return usr ? { ...e, pin: usr.pin, usuarioNombre: usr.nombre } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    if (!empleados.length) {
+      document.getElementById('errMsg').textContent =
+        `No hay empleados activos configurados para ${sucursal.nombre}. ` +
+        `Verificá que los empleados tengan la sucursal asignada en la hoja EMPLEADOS.`;
+      mostrarScreen('screenError');
+      return;
+    }
+
+    renderEmpleados();
+    mostrarScreen('screenEmpleados');
+
+  } catch(err) {
+    document.getElementById('errMsg').textContent = 'Error al cargar datos: ' + err.message;
+    mostrarScreen('screenError');
+  }
+}
+
+// ── LISTA DE EMPLEADOS ──
+function renderEmpleados() {
+  document.getElementById('empSubtitle').textContent =
+    `${empleados.length} empleado${empleados.length !== 1 ? 's' : ''} · ${sucursal.nombre}`;
+
+  const grid = document.getElementById('empGrid');
+  grid.innerHTML = '';
+
+  empleados.forEach(emp => {
+    const btn  = document.createElement('button');
+    btn.className = 'emp-btn';
+    const iniciales = emp.nombre.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+    const avatarHTML = emp.foto_url
+      ? `<img src="${emp.foto_url}" alt="${emp.nombre}" onerror="this.parentElement.textContent='${iniciales}'" />`
+      : iniciales;
+
+    btn.innerHTML =
+      `<div class="emp-avatar">${avatarHTML}</div>` +
+      `<div class="emp-nombre">${emp.nombre}</div>`;
+
+    btn.addEventListener('click', () => seleccionarEmpleado(emp));
+    grid.appendChild(btn);
+  });
+}
+
+// ── PIN ──
+function seleccionarEmpleado(emp) {
+  usuariosSel = emp;
+  pinActual   = '';
+
+  const iniciales = emp.nombre.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  const avatar    = document.getElementById('pinAvatar');
+  avatar.innerHTML = emp.foto_url
+    ? `<img src="${emp.foto_url}" alt="${emp.nombre}" onerror="this.parentElement.textContent='${iniciales}'" />`
+    : iniciales;
+
+  document.getElementById('pinNombre').textContent = emp.nombre;
+  document.getElementById('pinError').textContent  = '';
+  actualizarDots();
+  mostrarScreen('screenPin');
+}
+
+function numPress(n) {
+  if (pinActual.length >= 4) return;
+  pinActual += n;
+  actualizarDots();
+  if (pinActual.length === 4) {
+    setTimeout(verificarPin, 120);
+  }
+}
+
+function numDel() {
+  pinActual = pinActual.slice(0, -1);
+  actualizarDots();
+  document.getElementById('pinError').textContent = '';
+}
+
+function actualizarDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(`d${i}`).classList.toggle('filled', i < pinActual.length);
+  }
+}
+
+function verificarPin() {
+  if (String(usuariosSel.pin) !== pinActual) {
+    document.getElementById('pinError').textContent = 'PIN incorrecto';
+    pinActual = '';
+    actualizarDots();
+    // vibración feedback
+    if (navigator.vibrate) navigator.vibrate(200);
+    return;
+  }
+  mostrarFormulario();
+}
+
+function volverAEmpleados() {
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  pinActual = '';
+  usuariosSel = null;
+  renderEmpleados();
+  mostrarScreen('screenEmpleados');
+}
+
+// ── FORMULARIO ──
+function mostrarFormulario() {
+  document.getElementById('formEmpNombre').textContent = usuariosSel.nombre;
+  document.getElementById('formSucNombre').textContent = sucursal.nombre;
+  document.getElementById('formSucDot').style.background = sucursal.color;
+
+  document.getElementById('campoFecha').value    = hoy();
+  document.getElementById('campoEntrada').value  = '';
+  document.getElementById('campoSalida').value   = '';
+  document.getElementById('campoNota').value     = '';
+  document.getElementById('toggleRecup').checked = false;
+  document.getElementById('recupFechaWrap').classList.remove('visible');
+  document.getElementById('campoFechaRecup').value = '';
+  document.getElementById('totalHs').textContent = '—';
+  document.getElementById('btnSubmit').disabled  = false;
+  document.getElementById('btnSubmit').textContent = 'Guardar turno';
+
+  ['campoEntrada','campoSalida'].forEach(id =>
+    document.getElementById(id).addEventListener('change', calcularTotal)
+  );
+
+  mostrarScreen('screenForm');
+}
+
+function calcularTotal() {
+  const entrada = document.getElementById('campoEntrada').value;
+  const salida  = document.getElementById('campoSalida').value;
+  if (!entrada || !salida) { document.getElementById('totalHs').textContent = '—'; return; }
+  const [he, me] = entrada.split(':').map(Number);
+  const [hs, ms] = salida.split(':').map(Number);
+  let mins = (hs * 60 + ms) - (he * 60 + me);
+  if (mins < 0) mins += 1440;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  document.getElementById('totalHs').textContent = rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+}
+
+function onToggleRecup() {
+  const on = document.getElementById('toggleRecup').checked;
+  document.getElementById('recupFechaWrap').classList.toggle('visible', on);
+}
+
+async function enviarFichada() {
+  const fecha    = document.getElementById('campoFecha').value;
+  const entrada  = document.getElementById('campoEntrada').value;
+  const salida   = document.getElementById('campoSalida').value;
+  const nota     = document.getElementById('campoNota').value.trim();
+  const esRecup  = document.getElementById('toggleRecup').checked;
+  const fechaRec = document.getElementById('campoFechaRecup').value;
+
+  if (!fecha)   { alert('Seleccioná la fecha del turno.'); return; }
+  if (!entrada) { alert('Completá la hora de entrada.'); return; }
+  if (!salida)  { alert('Completá la hora de salida.'); return; }
+  if (esRecup && !fechaRec) { alert('Indicá qué fecha recuperás.'); return; }
+
+  const btn = document.getElementById('btnSubmit');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const payload = {
+    local:              sucursal.nombre,
+    empleado:           usuariosSel.nombre,
+    fecha,
+    hora_entrada:       entrada,
+    hora_salida:        salida,
+    nota,
+    tipo_registro:      esRecup ? 'RECUPERACION' : 'NORMAL',
+    fecha_a_recuperar:  esRecup ? fechaRec : '',
+    modo_carga:         'KIOSCO',
+    lat:  '', lon: '', distancia_m: '',
+  };
+
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardarFichada`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify(payload),
+    });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+
+    const [a, m, d] = fecha.split('-').map(Number);
+    const fObj = new Date(a, m - 1, d);
+    document.getElementById('okDetalle').innerHTML =
+      `<strong>${usuariosSel.nombre}</strong><br>` +
+      `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m-1]} — ${entrada} a ${salida}` +
+      (esRecup ? `<br><small>Recuperación del ${fechaRec}</small>` : '');
+
+    mostrarScreen('screenOk');
+    iniciarCountdown(8);
+
+  } catch(err) {
+    alert('No se pudo guardar. Verificá la conexión e intentá de nuevo.\n(' + err.message + ')');
+    btn.disabled = false; btn.textContent = 'Guardar turno';
+  }
+}
+
+// ── COUNTDOWN AUTO-VOLVER ──
+function iniciarCountdown(seg) {
+  if (countdownTimer) clearInterval(countdownTimer);
+  let restante = seg;
+  const el = document.getElementById('okCountdown');
+  el.textContent = `Volviendo al inicio en ${restante}s...`;
+  countdownTimer = setInterval(() => {
+    restante--;
+    if (restante <= 0) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      volverAEmpleados();
+    } else {
+      el.textContent = `Volviendo al inicio en ${restante}s...`;
+    }
+  }, 1000);
+}
+
+// ── UTILS ──
+function mostrarScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function hoy() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+</script>
+</body>
+</html>
