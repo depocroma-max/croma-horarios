@@ -730,7 +730,8 @@ function doGet(e) {
   if (accion === 'get_sucursales_geo')    return getSucursalesGeo();
   if (accion === 'get_fichadas_empleado') return getFichadasEmpleado(e);
   if (accion === 'get_banco_horas')       return getBancoHoras(e);
-  if (accion === 'get_banco_horas_todos') return getBancoHorasTodos();
+  if (accion === 'get_banco_horas_todos')  return getBancoHorasTodos();
+  if (accion === 'get_fichadas_hoy_local') return getFichadasHoyLocal();
 
   return ContentService
     .createTextOutput(JSON.stringify({ error: 'Acción no reconocida' }))
@@ -2282,6 +2283,57 @@ function getBancoHorasTodos() {
 
     return ContentService
       .createTextOutput(JSON.stringify({ ok: true, empleados }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ── FICHADAS HOY ───────────────────────────────────────
+function getFichadasHoyLocal() {
+  try {
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const hoja = ss.getSheetByName('FICHADAS');
+    if (!hoja) return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, fichadas: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+    const tz  = Session.getScriptTimeZone();
+    const hoy = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+
+    const vals    = hoja.getDataRange().getValues();
+    if (vals.length < 2) return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, fichadas: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+    const headers  = vals[0].map(function(h) { return String(h).trim().toUpperCase(); });
+    const iEmp     = headers.indexOf('EMPLEADO/A');
+    const iFecha   = headers.indexOf('FECHA');
+    const iEntrada = headers.indexOf('HORA ENTRADA');
+    const iSalida  = headers.indexOf('HORA SALIDA');
+
+    const fichadas = [];
+    for (var i = 1; i < vals.length; i++) {
+      var row   = vals[i];
+      var fecha = row[iFecha];
+      if (fecha instanceof Date) {
+        fecha = Utilities.formatDate(fecha, tz, 'yyyy-MM-dd');
+      } else {
+        fecha = String(fecha || '').substring(0, 10);
+      }
+      if (fecha !== hoy) continue;
+      fichadas.push({
+        empleado:     String(row[iEmp]     || '').trim(),
+        hora_entrada: String(row[iEntrada] || '').trim(),
+        hora_salida:  String(row[iSalida]  || '').trim(),
+      });
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, fichadas: fichadas }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch(err) {
