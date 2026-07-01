@@ -2839,8 +2839,9 @@ function renderCertRango() {
     const [yy,mm,dd] = iso.split('-').map(Number);
     const dObj = new Date(yy, mm-1, dd);
     const finde = dObj.getDay() === 0 || dObj.getDay() === 6;
-    return `<div class="cert-dia-row ${finde ? 'cert-dia-finde' : ''}">
-      <span class="cert-dia-lbl">${DIAS_SEMANA[dObj.getDay()]} ${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}</span>
+    const fer   = esFeriado(dObj);
+    return `<div class="cert-dia-row ${finde ? 'cert-dia-finde' : ''} ${fer ? 'cert-dia-feriado' : ''}">
+      <span class="cert-dia-lbl">${DIAS_SEMANA[dObj.getDay()]} ${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}${fer ? ' <span class="cert-dia-fer-tag">Feriado</span>' : ''}</span>
       <div class="cert-seg-group">
         ${seg(iso,'completa','Completa')}
         ${seg(iso,'media','Media')}

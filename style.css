@@ -1589,8 +1589,11 @@ body {
 .cert-dias-nota { font-size: 11px; color: var(--gray-400); margin-bottom: 6px; }
 .cert-dia-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 8px; }
 .cert-dia-finde { background: #fef2f2; }
+.cert-dia-feriado { background: #FFF7ED; }
 .cert-dia-lbl { font-size: 13px; font-weight: 600; color: var(--black); white-space: nowrap; }
 .cert-dia-finde .cert-dia-lbl { color: var(--accent); }
+.cert-dia-feriado .cert-dia-lbl { color: #C2410C; }
+.cert-dia-fer-tag { display: inline-block; margin-left: 6px; background: #FED7AA; color: #C2410C; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; vertical-align: middle; }
 .cert-seg-group { display: inline-flex; border: 1px solid var(--gray-200); border-radius: 999px; overflow: hidden; background: var(--white); flex-shrink: 0; }
 .cert-seg { border: none; background: transparent; padding: 5px 11px; font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--gray-600); cursor: pointer; transition: background .12s, color .12s; }
 .cert-seg + .cert-seg { border-left: 1px solid var(--gray-200); }
