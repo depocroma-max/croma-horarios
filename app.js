@@ -1147,6 +1147,10 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
   const empresaEmp = (perfilEmp.empresa || '').trim();
   const jornadaEmp = (catEmp?.nombre || '').trim();
 
+  // Footer: última actualización de los datos
+  const _ua = state.ultimaActualizacion instanceof Date ? state.ultimaActualizacion : new Date();
+  const ultActStr = `${_ua.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${_ua.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+
   const html = `
   <div class="detalle-overlay" onclick="cerrarDetalle(event)">
     <div class="detalle-panel" onclick="event.stopPropagation()">
@@ -1155,12 +1159,15 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <div class="detalle-header-inner">
           <div class="detalle-header-top">
             <div style="display:flex;align-items:center;gap:14px">
+              <button class="detalle-close-btn" onclick="cerrarDetalle()" title="Cerrar" aria-label="Cerrar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
               ${(() => {
                 const perfil = EMPLEADOS_PERFILES[nombreEmp];
                 const fotoUrl = perfil?.foto_url;
                 return fotoUrl
-                  ? `<div class="detalle-foto emp-avatar-foto" style="width:52px;height:52px;border-radius:14px;overflow:hidden;flex-shrink:0"><img src="${fotoUrl}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover" /></div>`
-                  : `<div class="detalle-foto" style="width:52px;height:52px;border-radius:14px;background:${suc.colorLight};color:${suc.color};display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue';font-size:22px;flex-shrink:0">${nomMostrar.charAt(0)}</div>`;
+                  ? `<div class="detalle-foto emp-avatar-foto" style="width:84px;height:84px;border-radius:18px;overflow:hidden;flex-shrink:0"><img src="${fotoUrl}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover" /></div>`
+                  : `<div class="detalle-foto" style="width:84px;height:84px;border-radius:18px;background:${suc.colorLight};color:${suc.color};display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue';font-size:34px;flex-shrink:0">${nomMostrar.charAt(0)}</div>`;
               })()}
               <div>
                 <div class="detalle-titulo">
@@ -1201,7 +1208,6 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                        Reactivar empleado
                      </button>`
               ) : ''}
-              <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
             </div>
           </div>
         </div>
@@ -1281,6 +1287,18 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <div id="vacAdminContent_inner">
           <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
         </div>
+      </div>
+      <div class="detalle-footer">
+        <span class="detalle-footer-nota">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          Los horarios corresponden a registros del sistema
+        </span>
+        <span class="detalle-footer-update">
+          Última actualización: ${ultActStr}
+          <button class="detalle-footer-refresh" onclick="document.getElementById('btnRefresh')?.click()" title="Actualizar datos" aria-label="Actualizar datos">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+          </button>
+        </span>
       </div>
     </div>
   </div>`;
@@ -2232,6 +2250,7 @@ async function cargarDatos(urls) {
       };
     });
     state.cargando = false;
+    state.ultimaActualizacion = new Date();
 
     showToast(`✓ ${state.datos.length} registros cargados`);
     setConnected(true);
