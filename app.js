@@ -695,10 +695,22 @@ function renderEmpleados(datos) {
     empMap[key].hsExtra += calcularHsExtra(d.emp, d.hs, fecha);
   });
 
-  const lista = Object.values(empMap).sort((a, b) => {
+  let lista = Object.values(empMap).sort((a, b) => {
     const na = parseInt(a.nombre) || 999, nb = parseInt(b.nombre) || 999;
     return na !== nb ? na - nb : a.nombre.localeCompare(b.nombre);
   });
+
+  // "Ver solo Certificados": dejar solo empleados con certificados en el período
+  if (filtrosDia.verSolo === 'certificados') {
+    const certEnPeriodo = (c) => {
+      if (!c.fecha) return false;
+      if (selPeriodo === 'all') return true;
+      const [anioSel, mesSel] = selPeriodo.split('||');
+      const [cy, cm] = String(c.fecha).split('-').map(Number);
+      return String(cy) === anioSel && MESES_ES[cm - 1] === mesSel;
+    };
+    lista = lista.filter(e => getCertificadosDe(e.nombre).some(certEnPeriodo));
+  }
 
   // Separar activos de ex-empleados (perfil.activo === false)
   const listaActivos   = lista.filter(e => e.activo !== false);
@@ -790,6 +802,7 @@ function renderEmpleados(datos) {
   const chkSab = filtrosDia.verSolo === 'sabados';
   const chkDom = filtrosDia.verSolo === 'domingos';
   const chkLab = filtrosDia.verSolo === 'laborales';
+  const chkCert = filtrosDia.verSolo === 'certificados';
 
   const empresaOpts = [`<option value="all">Todas las empresas</option>`,
     ...EMPRESAS.map(emp => `<option value="${emp}" ${emp === selEmpresa ? 'selected' : ''}>${emp}</option>`)
@@ -822,6 +835,10 @@ function renderEmpleados(datos) {
           <label class="filtro-dia-check">
             <input type="checkbox" id="chkLaborales" ${chkLab?'checked':''} onchange="toggleFiltroDia('laborales',this.checked)" />
             <span>Solo laborales</span>
+          </label>
+          <label class="filtro-dia-check">
+            <input type="checkbox" id="chkCertificados" ${chkCert?'checked':''} onchange="toggleFiltroDia('certificados',this.checked)" />
+            <span>Certificados</span>
           </label>
         </div>
       </div>
@@ -2562,10 +2579,11 @@ function toggleFiltroDia(tipo, activo) {
   filtrosDia.verSolo = activo ? tipo : 'todos';
 
   const mapa = {
-    feriados:  ['chkFeriados','chkFerBarra'],
-    sabados:   ['chkSabados','chkSabBarra'],
-    domingos:  ['chkDomingos','chkDomBarra'],
-    laborales: ['chkLaborales','chkLabBarra'],
+    feriados:     ['chkFeriados','chkFerBarra'],
+    sabados:      ['chkSabados','chkSabBarra'],
+    domingos:     ['chkDomingos','chkDomBarra'],
+    laborales:    ['chkLaborales','chkLabBarra'],
+    certificados: ['chkCertificados'],
   };
   Object.entries(mapa).forEach(([t, ids]) => {
     ids.forEach(id => {
