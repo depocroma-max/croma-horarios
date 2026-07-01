@@ -57,6 +57,7 @@ let CATEGORIAS_CONFIG = [
 // Formato: { nombre, empresa, categoria_id, hs_base, dias_base, foto_url, activo, regla_custom }
 let EMPLEADOS_PERFILES = {};   // clave: nombre exacto del empleado
 let CERTIFICADOS_CACHE = [];   // lista de certificados cargados del Sheet
+let _verInactivos = false;     // panel Empleados: mostrar u ocultar la sección de ex-empleados
 
 const TIPOS_CERTIFICADO = [
   'Médico', 'Estudio', 'Maternidad / Paternidad', 'Duelo',
@@ -676,7 +677,7 @@ function renderEmpleados(datos) {
       const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
       empMap[key] = { nombre: r.EMPLEADO, suc: perfil.sucursal_id || r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(),
                       empresa: perfil.empresa || '—', categoria: cat?.nombre || '—', foto_url: perfil.foto_url || '',
-                      diasProcesados: new Set() };
+                      activo: perfil.activo !== false, diasProcesados: new Set() };
     }
     empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
     empMap[key].dias.add(`${r.DIA}-${r.MES}-${r.AÑO}`);
@@ -699,7 +700,12 @@ function renderEmpleados(datos) {
     return na !== nb ? na - nb : a.nombre.localeCompare(b.nombre);
   });
 
-  const grilla = lista.map(e => {
+  // Separar activos de ex-empleados (perfil.activo === false)
+  const listaActivos   = lista.filter(e => e.activo !== false);
+  const listaInactivos = lista.filter(e => e.activo === false);
+  const puedeGestionar = sesionActual?.rol === 'admin';
+
+  const buildEmpCard = (e, inactivo) => {
     const s = suc(e.suc);
     const numMatch = e.nombre.match(/^(\d+)\s+(.+)$/);
     const numVend  = numMatch ? numMatch[1] : '';
@@ -735,8 +741,20 @@ function renderEmpleados(datos) {
          </a>`
       : '';
 
-    return `<div class="emp-card" onclick="abrirDetalleEmpleadoDesdePanel('${e.nombre.replace(/'/g,"\\'")}', '${e.suc}')" style="cursor:pointer">
+    const nombreEsc = e.nombre.replace(/'/g,"\\'");
+
+    // Acción rápida: ocultar (marcar que ya no trabaja) o reactivar — solo admin
+    const hideBtn = (puedeGestionar && !inactivo)
+      ? `<button class="emp-hide-btn" title="Marcar que ya no trabaja" onclick="event.stopPropagation();marcarEmpleadoInactivo('${nombreEsc}')">✕</button>`
+      : '';
+    const footerBtn = (inactivo && puedeGestionar)
+      ? `<button class="emp-reactivar-btn" onclick="event.stopPropagation();reactivarEmpleado('${nombreEsc}')">↩ Reactivar</button>`
+      : waBtn;
+    const inactivoBadge = inactivo ? `<span class="emp-inactivo-badge">Ya no trabaja</span>` : '';
+
+    return `<div class="emp-card ${inactivo ? 'emp-card-inactivo' : ''}" onclick="abrirDetalleEmpleadoDesdePanel('${nombreEsc}', '${e.suc}')" style="cursor:pointer">
       <span class="emp-card-stripe" style="background:${s.color}"></span>
+      ${hideBtn}
       <div class="emp-card-body">
         <div class="emp-card-head">
           <div class="emp-avatar ${e.foto_url ? 'emp-avatar-foto' : ''}" style="${e.foto_url ? '' : `background:${s.colorLight};color:${s.color}`}">
@@ -745,7 +763,7 @@ function renderEmpleados(datos) {
           <div style="flex:1;min-width:0">
             <div class="emp-nombre">${nomMostrar}</div>
             <div class="emp-suc" style="color:${s.color}">${s.nombre}${numVend ? ` · #${numVend}` : ''}</div>
-            <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
+            <div class="emp-badges-row">${inactivoBadge}${empresaBadge}${catBadge}</div>
           </div>
         </div>
         <div class="emp-stats">
@@ -768,11 +786,14 @@ function renderEmpleados(datos) {
         </div>
       </div>
       <div class="emp-card-footer">
-        ${waBtn}
+        ${footerBtn}
         <span class="emp-card-footer-link">Ver jornada →</span>
       </div>
     </div>`;
-  }).join('');
+  };
+
+  const grilla = listaActivos.map(e => buildEmpCard(e, false)).join('');
+  const grillaInactivos = listaInactivos.map(e => buildEmpCard(e, true)).join('');
 
   const chkFer = filtrosDia.verSolo === 'feriados';
   const chkSab = filtrosDia.verSolo === 'sabados';
@@ -846,11 +867,60 @@ function renderEmpleados(datos) {
     </div>
     <div class="emp-section-header">
       <span class="emp-section-title">EMPLEADOS</span>
-      <span class="emp-section-count">${lista.length} ${lista.length === 1 ? 'empleado' : 'empleados'}</span>
+      <span class="emp-section-count">${listaActivos.length} ${listaActivos.length === 1 ? 'empleado' : 'empleados'}</span>
     </div>
     <div class="emp-grid" id="empGrid">
       ${grilla || '<p style="padding:2rem;color:#999;font-size:14px">No hay empleados para los filtros seleccionados.</p>'}
-    </div>`;
+    </div>
+    ${listaInactivos.length ? `
+      <div class="emp-inactivos-section">
+        <button class="emp-inactivos-toggle ${_verInactivos ? 'abierto' : ''}" onclick="toggleVerInactivos()">
+          <span class="emp-inactivos-caret">▸</span>
+          <span>Ex-empleados / Ya no trabajan</span>
+          <span class="emp-inactivos-count">${listaInactivos.length}</span>
+        </button>
+        <div class="emp-grid emp-grid-inactivos" style="${_verInactivos ? '' : 'display:none'}">
+          ${grillaInactivos}
+        </div>
+      </div>` : ''}`;
+}
+
+// Mostrar/ocultar la sección de ex-empleados sin re-renderizar todo el panel
+function toggleVerInactivos() {
+  _verInactivos = !_verInactivos;
+  const grid   = document.querySelector('.emp-grid-inactivos');
+  const toggle = document.querySelector('.emp-inactivos-toggle');
+  if (grid)   grid.style.display = _verInactivos ? '' : 'none';
+  if (toggle) toggle.classList.toggle('abierto', _verInactivos);
+}
+
+// Marcar un empleado como que ya no trabaja (pasa a la sección de ex-empleados)
+async function marcarEmpleadoInactivo(nombre) {
+  const nomMostrar = nombre.replace(/^\d+\s+/, '');
+  if (!confirm(`¿Marcar a ${nomMostrar} como que ya no trabaja?\n\nSe moverá a la sección de ex-empleados. Podés reactivarlo cuando quieras.`)) return;
+  await _setEmpleadoActivo(nombre, false);
+  showToast(`✓ ${nomMostrar} movido a ex-empleados`);
+}
+
+// Reactivar un ex-empleado (vuelve a la lista principal)
+async function reactivarEmpleado(nombre) {
+  const nomMostrar = nombre.replace(/^\d+\s+/, '');
+  await _setEmpleadoActivo(nombre, true);
+  _verInactivos = true; // mantener visible la sección tras reactivar
+  showToast(`✓ ${nomMostrar} reactivado`);
+}
+
+// Persistir el estado activo/inactivo del perfil (backend + sessionStorage) y re-render
+async function _setEmpleadoActivo(nombre, activo) {
+  const perfil = { ...(EMPLEADOS_PERFILES[nombre] || { nombre }), nombre, activo, _editadoLocal: true };
+  EMPLEADOS_PERFILES[nombre] = perfil;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('croma_perfiles_locales') || '{}');
+    saved[nombre] = perfil;
+    sessionStorage.setItem('croma_perfiles_locales', JSON.stringify(saved));
+  } catch (e) {}
+  await guardarPerfil(perfil);
+  renderEmpleados(state.datos);
 }
 
 function empCambioLocal() {
@@ -4346,7 +4416,7 @@ async function guardarPerfilDesdeForm() {
     foto_url:      fotoFinal,
     sucursal_id:   sucursalId,
     fecha_ingreso: fechaIngreso,
-    activo: true,
+    activo: EMPLEADOS_PERFILES[nombre]?.activo !== false, // preservar estado; no reactivar al editar
     _editadoLocal: true,  // marca para sobrevivir recargas del Sheet
   };
 
@@ -5346,7 +5416,7 @@ function abrirModalSolicitudVac(empEnc) {
         </div>
         <p id="vacSolError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0" onclick="confirmarSolicitudVac('${empEnc}')">Enviar solicitud</button>
+          <button class="btn-connect" style="margin:0" id="btnEnviarSolicitudVac" onclick="confirmarSolicitudVac('${empEnc}')">Enviar solicitud</button>
           <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
@@ -5371,6 +5441,8 @@ function calcularDiasVacForm() {
 }
 
 async function confirmarSolicitudVac(empEnc) {
+  const btn = document.getElementById('btnEnviarSolicitudVac');
+  if (btn && btn.disabled) return; // evita doble envío por doble click
   const nombreEmp = decodeURIComponent(empEnc);
   const desde  = document.getElementById('vacDesde')?.value;
   const hasta  = document.getElementById('vacHasta')?.value;
@@ -5383,6 +5455,7 @@ async function confirmarSolicitudVac(empEnc) {
   }
   const dias = calcularDiasVacForm();
   const datos = encodeURIComponent(JSON.stringify({ empleado: nombreEmp, fecha_desde: desde, fecha_hasta: hasta, dias }));
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
   try {
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=solicitar_vac&datos=${datos}`);
     const json = await resp.json();
@@ -5394,6 +5467,7 @@ async function confirmarSolicitudVac(empEnc) {
   } catch(e) {
     errEl.textContent = e.message;
     errEl.style.display = 'block';
+    if (btn) { btn.disabled = false; btn.textContent = 'Enviar solicitud'; }
   }
 }
 
