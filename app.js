@@ -886,11 +886,18 @@ function toggleVerInactivos() {
 }
 
 // Marcar un empleado como que ya no trabaja (pasa a la sección de ex-empleados)
-async function marcarEmpleadoInactivo(nombre) {
+function marcarEmpleadoInactivo(nombre) {
   const nomMostrar = nombre.replace(/^\d+\s+/, '');
-  if (!confirm(`¿Marcar a ${nomMostrar} como que ya no trabaja?\n\nSe moverá a la sección de ex-empleados. Podés reactivarlo cuando quieras.`)) return;
-  await _setEmpleadoActivo(nombre, false);
-  showToast(`✓ ${nomMostrar} movido a ex-empleados`);
+  mostrarConfirm({
+    titulo: '¿Marcar como que ya no trabaja?',
+    mensaje: `<strong>${nomMostrar}</strong> se moverá a la sección de ex-empleados, al final del panel. Sus datos y su historial se conservan y podés reactivarlo cuando quieras.`,
+    textoOk: 'Marcar como ya no trabaja',
+    peligro: true,
+    onOk: async () => {
+      await _setEmpleadoActivo(nombre, false);
+      showToast(`✓ ${nomMostrar} movido a ex-empleados`);
+    }
+  });
 }
 
 // Reactivar un ex-empleado (vuelve a la lista principal)
@@ -4547,6 +4554,55 @@ function cerrarAdmin(event) {
   const el = document.getElementById('adminOverlay');
   if (el) el.remove();
   document.body.style.overflow = '';
+}
+
+// ── DIÁLOGO DE CONFIRMACIÓN (estilo Croma, reemplaza confirm() nativo) ──
+let _confirmCallback = null;
+
+function mostrarConfirm({ titulo, mensaje, textoOk = 'Confirmar', textoCancel = 'Cancelar', peligro = false, onOk }) {
+  _confirmCallback = onOk;
+  const existing = document.getElementById('confirmOverlay');
+  if (existing) existing.remove();
+
+  const iconoPeligro = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+  const iconoInfo = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+
+  const div = document.createElement('div');
+  div.id = 'confirmOverlay';
+  div.className = 'admin-overlay confirm-overlay';
+  div.onclick = (e) => { if (e.target === div) cerrarConfirm(); };
+  div.innerHTML = `
+    <div class="admin-panel admin-panel-sm confirm-panel" onclick="event.stopPropagation()">
+      <div class="confirm-body">
+        <div class="confirm-icono ${peligro ? 'confirm-icono-peligro' : 'confirm-icono-info'}">
+          ${peligro ? iconoPeligro : iconoInfo}
+        </div>
+        <div class="confirm-titulo">${titulo}</div>
+        <div class="confirm-mensaje">${mensaje}</div>
+      </div>
+      <div class="confirm-acciones">
+        <button class="btn-demo" onclick="cerrarConfirm()">${textoCancel}</button>
+        <button class="btn-connect ${peligro ? 'btn-connect-peligro' : ''}" onclick="_confirmAceptar()">${textoOk}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarConfirm() {
+  const el = document.getElementById('confirmOverlay');
+  if (el) el.remove();
+  _confirmCallback = null;
+  // No restaurar el scroll si todavía hay otro overlay abierto detrás
+  if (!document.getElementById('detalleOverlay') && !document.getElementById('adminOverlay')) {
+    document.body.style.overflow = '';
+  }
+}
+
+function _confirmAceptar() {
+  const cb = _confirmCallback;
+  cerrarConfirm();
+  if (typeof cb === 'function') cb();
 }
 
 // ── INIT ───────────────────────────────────────────────

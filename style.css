@@ -1326,6 +1326,43 @@ body {
   100% { transform: scale(1); opacity: 1; }
 }
 .admin-panel-sm { max-width: 480px; }
+
+/* ── DIÁLOGO DE CONFIRMACIÓN (estilo Croma) ─────────── */
+.confirm-overlay { z-index: 3000; } /* por encima del detalle (500) y admin (600) */
+.confirm-panel { max-width: 400px; }
+.confirm-body {
+  padding: 1.75rem 1.6rem 1.25rem;
+  text-align: center;
+}
+.confirm-icono {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1rem;
+}
+.confirm-icono-peligro { background: #fef2f2; color: #dc2626; }
+.confirm-icono-info    { background: #eff6ff; color: #2563eb; }
+.confirm-titulo {
+  font-family: var(--font-display);
+  font-size: 22px; letter-spacing: .5px;
+  color: #0d0d0d; line-height: 1.15;
+  margin-bottom: .55rem;
+}
+.confirm-mensaje {
+  font-family: var(--font-body);
+  font-size: 13.5px; line-height: 1.55;
+  color: #64748b;
+}
+.confirm-mensaje strong { color: #0d0d0d; font-weight: 600; }
+.confirm-acciones {
+  display: flex; gap: 10px;
+  padding: 0 1.6rem 1.5rem;
+}
+.confirm-acciones .btn-demo,
+.confirm-acciones .btn-connect { margin: 0; flex: 1; }
+.btn-connect-peligro { background: #dc2626; }
+.btn-connect-peligro:hover { background: #b91c1c; }
+
 .admin-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 1.2rem 1.5rem 1rem;
