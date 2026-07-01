@@ -421,10 +421,11 @@
   <!-- FECHA -->
   <div class="form-card">
     <div class="form-card-title">Fecha del turno</div>
-    <div class="field">
-      <label for="campoFecha">Fecha</label>
-      <input type="date" id="campoFecha" />
+    <div class="total-display">
+      <span class="total-label">Hoy</span>
+      <span class="total-val" id="fechaHoyDisplay" style="font-size:16px;letter-spacing:.5px"></span>
     </div>
+    <input type="hidden" id="campoFecha" />
   </div>
 
   <!-- HORAS -->
@@ -773,8 +774,13 @@ async function mostrarFormulario() {
     badge.style.display = 'none';
   }
 
-  // Fecha default = hoy
-  document.getElementById('campoFecha').value = hoy();
+  // Fecha = hoy, fija
+  const fechaHoy = hoy();
+  document.getElementById('campoFecha').value = fechaHoy;
+  const [a, m, d] = fechaHoy.split('-').map(Number);
+  const fObj = new Date(a, m - 1, d);
+  document.getElementById('fechaHoyDisplay').textContent =
+    `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
 
   // Calcular total en tiempo real
   ['campoEntrada','campoSalida'].forEach(id =>
@@ -867,7 +873,12 @@ async function enviarFichada() {
 }
 
 function nuevoTurno() {
-  document.getElementById('campoFecha').value    = hoy();
+  const _hoy = hoy();
+  document.getElementById('campoFecha').value = _hoy;
+  const [_a, _m, _d] = _hoy.split('-').map(Number);
+  const _fObj = new Date(_a, _m - 1, _d);
+  document.getElementById('fechaHoyDisplay').textContent =
+    `${DIAS_ES[_fObj.getDay()]} ${_d} de ${MESES_ES[_m - 1]}`;
   document.getElementById('campoEntrada').value  = '';
   document.getElementById('campoSalida').value   = '';
   document.getElementById('campoNota').value     = '';
