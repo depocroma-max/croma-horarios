@@ -902,6 +902,9 @@ body {
 .detalle-stat.stat-sabs  .detalle-stat-icon { background: #fef3c7; color: #d97706; }
 .detalle-stat.stat-certs { background: #f4f8ff; border-color: #e6effe; }
 .detalle-stat.stat-certs .detalle-stat-icon { background: #dbeafe; color: #2563eb; }
+.detalle-stat.stat-feriado { background: #f2fdff; border-color: #cffafe; }
+.detalle-stat.stat-feriado .detalle-stat-icon { background: #cffafe; color: #0891b2; }
+.detalle-stat.stat-feriado .detalle-stat-val  { color: #0e7490; }
 
 /* ── Tabs pills ──────────────────────────────── */
 .detalle-tabs {
@@ -952,6 +955,10 @@ body {
 .hora-reg { font-size: 12px; color: var(--gray-400); }
 .hs-extra {
   background: #FEF3C7; color: #B45309;
+  padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.hs-feriado {
+  background: #cffafe; color: #0e7490;
   padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600;
 }
 .check-sab { color: #0F6E56; font-weight: 700; }
@@ -1944,6 +1951,7 @@ body {
 .ev-card-turno { font-size: 13px; color: #666660; background: #f7f7f5; border: 1px solid #efefec; border-radius: 6px; padding: 3px 8px; }
 .ev-card-hora-reg { font-size: 11px; color: #a0a09a; margin-left: auto; }
 .ev-card-extra { font-size: 11px; font-weight: 600; color: #d97706; background: #fef3c7; border-radius: 10px; padding: 2px 7px; }
+.ev-card-feriado-hs { font-size: 11px; font-weight: 600; color: #0e7490; background: #cffafe; border-radius: 10px; padding: 2px 7px; }
 .ev-card-sab { font-size: 11px; font-weight: 600; color: #b45309; background: #fef3c7; border-radius: 10px; padding: 2px 7px; }
 .ev-card-nota { margin-top: 6px; font-size: 12px; color: #666660; font-style: italic; padding-top: 6px; border-top: 1px solid #efefec; }
 .ev-card-totales { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; margin-top: 4px; background: #f7f7f5; border-radius: 8px; border: 1px solid #efefec; font-size: 13px; font-weight: 600; color: #333330; }
@@ -2650,7 +2658,7 @@ body {
 /* ══ STATS ════════════════════════════════════════════ */
 .emp-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   padding-top: 10px;
   border-top: 1px solid #f1f5f9;

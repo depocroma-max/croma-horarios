@@ -71,10 +71,15 @@ function getCategoriaEmpleado(nombreEmp) {
   return CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id) || null;
 }
 
+// Helper: horas de feriado (todo lo trabajado en un feriado es hora feriado, aparte del extra)
+function calcularHsFeriado(hsTotal, fechaDate) {
+  return (fechaDate && esFeriado(fechaDate)) ? (Math.round((hsTotal || 0) * 100) / 100) : 0;
+}
+
 // Helper: calcular horas extra según categoría personalizada
 function calcularHsExtra(nombreEmp, hsTotal, fechaDate) {
-  // Feriado: todo lo trabajado es hora extra, sin excepción (incluso franqueros)
-  if (fechaDate && esFeriado(fechaDate)) return hsTotal;
+  // Feriado: las horas van al bucket "Hs feriado", NO cuentan como extra
+  if (fechaDate && esFeriado(fechaDate)) return 0;
 
   const perfil = EMPLEADOS_PERFILES[nombreEmp];
   if (!perfil) return Math.round(Math.max(0, hsTotal - 8) * 100) / 100; // fallback genérico
@@ -675,7 +680,7 @@ function renderEmpleados(datos) {
     if (!empMap[key]) {
       const perfil = EMPLEADOS_PERFILES[r.EMPLEADO] || {};
       const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
-      empMap[key] = { nombre: r.EMPLEADO, suc: perfil.sucursal_id || r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set(),
+      empMap[key] = { nombre: r.EMPLEADO, suc: perfil.sucursal_id || r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, hsFeriado: 0, sabados: new Set(),
                       empresa: perfil.empresa || '—', categoria: cat?.nombre || '—', foto_url: perfil.foto_url || '',
                       activo: perfil.activo !== false, diasProcesados: new Set() };
     }
@@ -692,7 +697,8 @@ function renderEmpleados(datos) {
     if (empMap[key].diasProcesados.has(`${d.anio}-${d.mes}-${d.dia}`)) return;
     empMap[key].diasProcesados.add(`${d.anio}-${d.mes}-${d.dia}`);
     const fecha = new Date(d.anio, MESES_ES.indexOf(d.mes), parseInt(d.dia));
-    empMap[key].hsExtra += calcularHsExtra(d.emp, d.hs, fecha);
+    empMap[key].hsExtra   += calcularHsExtra(d.emp, d.hs, fecha);
+    empMap[key].hsFeriado += calcularHsFeriado(d.hs, fecha);
   });
 
   let lista = Object.values(empMap).sort((a, b) => {
@@ -781,6 +787,10 @@ function renderEmpleados(datos) {
           <div class="emp-stat-item">
             <div class="emp-stat-val" style="${e.hsExtra > 0 ? 'color:#e8251a' : ''}">${e.hsExtra.toFixed(0)}</div>
             <div class="emp-stat-label">Extra</div>
+          </div>
+          <div class="emp-stat-item">
+            <div class="emp-stat-val" style="${e.hsFeriado > 0 ? 'color:#0891b2' : ''}">${e.hsFeriado.toFixed(0)}</div>
+            <div class="emp-stat-label">Feriado</div>
           </div>
           <div class="emp-stat-item">
             <div class="emp-stat-val">${e.sabados.size}</div>
@@ -1035,13 +1045,14 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       const turno2  = regs[1] && regs[1].H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
       const hsTotal = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
       const hsExtra = calcularHsExtra(nombreEmp, hsTotal, fecha);
+      const hsFeriado = calcularHsFeriado(hsTotal, fecha);
       const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
       const localStr = regs.map(r => {
         const s = SUCURSALES.find(x => x.id === r.LOCAL);
         return s ? s.nombre : r.LOCAL;
       }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
-      return { fechaStr, diaSem, horaReg, horaReg2, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, localStr,
+      return { fechaStr, diaSem, horaReg, horaReg2, turno1, turno2, hsTotal, hsExtra, hsFeriado, esSab, esDom, esFer, nota, localStr,
                fechaISO: `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-${String(fecha.getDate()).padStart(2,'0')}` };
     }).filter(Boolean);
 
@@ -1066,6 +1077,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         turno2:   '',
         hsTotal:  c.hs,
         hsExtra:  0,
+        hsFeriado: 0,
         esSab:    fechaCert.getDay() === 6,
         esDom:    fechaCert.getDay() === 0,
         esFer:    esFeriado(fechaCert),
@@ -1086,22 +1098,25 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
     });
 
     // Totales calculados desde las filas ya filtradas
-    const totalHoras   = filas.reduce((a, f) => a + f.hsTotal, 0);
-    const diasUnicos   = filas.length;
-    const totalHsExtra = filas.reduce((a, f) => a + f.hsExtra, 0);
-    const totalSabs    = filas.filter(f => f.esSab).length;
+    const totalHoras     = filas.reduce((a, f) => a + f.hsTotal, 0);
+    const diasUnicos     = filas.length;
+    const totalHsExtra   = filas.reduce((a, f) => a + f.hsExtra, 0);
+    const totalHsFeriado = filas.reduce((a, f) => a + (f.hsFeriado || 0), 0);
+    const totalSabs      = filas.filter(f => f.esSab).length;
 
-    return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos };
+    return { filas, totalHoras, totalHsExtra, totalHsFeriado, totalSabs, diasUnicos };
   }
 
   // Función para re-renderizar tabla y stats al cambiar mes
   function renderDetalle(periodo) {
-    const { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcularContenido(periodo);
+    const { filas, totalHoras, totalHsExtra, totalHsFeriado, totalSabs, diasUnicos } = calcularContenido(periodo);
     const periodoLabel = periodo === 'TODOS' ? 'Todos los registros' : periodo;
 
     document.getElementById('detalleStatDias').textContent  = diasUnicos;
     document.getElementById('detalleStatHs').textContent    = totalHoras.toFixed(1);
     document.getElementById('detalleStatExtra').textContent = totalHsExtra.toFixed(1);
+    const ferEl = document.getElementById('detalleStatFeriado');
+    if (ferEl) ferEl.textContent = totalHsFeriado.toFixed(1);
     document.getElementById('detalleStatSabs').textContent  = totalSabs;
     const certEl = document.getElementById('detalleStatCerts');
     if (certEl) certEl.textContent = filas.filter(f => f.esCert).length;
@@ -1109,19 +1124,20 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
 
     document.getElementById('detalleTbody').innerHTML = filas.map(f => {
       if (f.esCert) return `
-      <tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="${f.esSab?1:0}" data-cert="1">
+      <tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-feriado="0" data-sab="${f.esSab?1:0}" data-cert="1">
         <td>${f.fechaStr}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
         <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
         <td>—</td>
+        <td>—</td>
         <td></td>
         <td>—</td>
         <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar certificado">✕</button></td>
       </tr>`;
       return `
-      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-sab="${f.esSab?1:0}" data-cert="0">
+      <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
         <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">${f.horaReg||'—'}${f.horaReg2 ? `<br><span class="hora-reg-2">${f.horaReg2}</span>` : ''}</td>
@@ -1129,6 +1145,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td class="turno-cell">${f.turno2 || '—'}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
         <td>${f.hsExtra > 0 ? `<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>` : '—'}</td>
+        <td>${f.hsFeriado > 0 ? `<span class="hs-feriado">${f.hsFeriado.toFixed(1)}</span>` : '—'}</td>
         <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
         <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
         <td class="nota-cell">${f.nota || ''}</td>
@@ -1143,6 +1160,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td colspan="2"></td>
         <td><strong>${totalHoras.toFixed(1)}</strong></td>
         <td>${totalHsExtra > 0 ? `<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>` : '—'}</td>
+        <td>${totalHsFeriado > 0 ? `<span class="hs-feriado">${totalHsFeriado.toFixed(1)}</span>` : '—'}</td>
         <td>${totalSabs}</td>
         <td colspan="2"></td>
       </tr>`;
@@ -1152,7 +1170,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
   const periodoInicial = (periodoForzado && periodos.includes(periodoForzado))
     ? periodoForzado
     : (periodos[periodos.length - 1] || 'TODOS');
-  const { filas: filasIni, totalHoras: thIni, totalHsExtra: theIni, totalSabs: tsIni, diasUnicos: duIni } = calcularContenido(periodoInicial);
+  const { filas: filasIni, totalHoras: thIni, totalHsExtra: theIni, totalHsFeriado: thFerIni, totalSabs: tsIni, diasUnicos: duIni } = calcularContenido(periodoInicial);
 
   const opcionesMes = [`<option value="TODOS">Todos los registros</option>`]
     .concat(periodos.map(p => `<option value="${p}" ${p === periodoInicial ? 'selected' : ''}>${p}</option>`))
@@ -1241,6 +1259,10 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
             <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatExtra">${theIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
           </div>
+          <div class="detalle-stat stat-feriado">
+            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg></div>
+            <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatFeriado">${thFerIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs feriado</span></div>
+          </div>
           <div class="detalle-stat stat-sabs">
             <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatSabs">${tsIni}</span><span class="detalle-stat-lbl">Sábados</span></div>
@@ -1274,19 +1296,19 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 Fecha <span id="detalleOrdenIcon">↑</span>
               </th><th>Día</th><th>Hora reg.</th>
               <th>Turno 1</th><th>Turno 2</th>
-              <th>Hs total</th><th>Hs extra</th>
+              <th>Hs total</th><th>Hs extra</th><th>Hs feriado</th>
               <th>Sáb.</th><th>Local</th><th>Nota</th>
             </tr>
           </thead>
           <tbody id="detalleTbody">
             ${filasIni.map(f => {
-              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-sab="${f.esSab?1:0}" data-cert="1">
+              if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-feriado="0" data-sab="${f.esSab?1:0}" data-cert="1">
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
-                <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td></td><td>—</td>
+                <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td>—</td><td></td><td>—</td>
                 <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar">✕</button></td>
               </tr>`;
-              return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-sab="${f.esSab?1:0}" data-cert="0">
+              return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
               <td>${f.diaSem}</td>
               <td class="hora-reg">${f.horaReg}</td>
@@ -1294,6 +1316,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               <td class="turno-cell">${f.turno2 || '—'}</td>
               <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
               <td>${f.hsExtra > 0 ? `<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>` : '—'}</td>
+              <td>${f.hsFeriado > 0 ? `<span class="hs-feriado">${f.hsFeriado.toFixed(1)}</span>` : '—'}</td>
               <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
               <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
               <td class="nota-cell">${f.nota || ''}</td>
@@ -1306,6 +1329,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               <td colspan="2"></td>
               <td><strong>${thIni.toFixed(1)}</strong></td>
               <td>${theIni > 0 ? `<span class="hs-extra">${theIni.toFixed(1)}</span>` : '—'}</td>
+              <td>${thFerIni > 0 ? `<span class="hs-feriado">${thFerIni.toFixed(1)}</span>` : '—'}</td>
               <td>${tsIni}</td>
               <td colspan="2"></td>
             </tr>
@@ -1477,7 +1501,8 @@ function imprimirDetalleEmpleado() {
         tr.fila-sabado td { background: #fffbeb; }
         tfoot td { background: #f8fafc; border-top: 2px solid #ddd; font-weight: 600; }
         .detalle-acciones { display: none; }
-        .detalle-close { display: none; }
+        .detalle-close, .detalle-close-btn { display: none; }
+        .detalle-footer { display: none; }
         @media print { body { padding: 10px; } }
       </style>
     </head>
@@ -1536,19 +1561,21 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
     const turno1  = r0.H_ENTRADA && r0.H_SALIDA ? `${r0.H_ENTRADA} - ${r0.H_SALIDA}` : '';
     const turno2  = regs[1]?.H_ENTRADA ? `${regs[1].H_ENTRADA} - ${regs[1].H_SALIDA}` : '';
     const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
-    const hsExtra = Math.max(0, hsTotal - 8);
+    const hsExtra   = calcularHsExtra(nombreEmp, hsTotal, fecha);
+    const hsFeriado = calcularHsFeriado(hsTotal, fecha);
     const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
     const local   = regs.map(r => {
       const s = SUCURSALES.find(x => x.id === r.LOCAL);
       return s ? s.nombre : r.LOCAL;
     }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
-    return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, esSab, local, nota };
+    return { fechaStr, diaSem, horaReg, turno1, turno2, hsTotal, hsExtra, hsFeriado, esSab, local, nota };
   });
 
-  const totalHoras = filas.reduce((a,f) => a + f.hsTotal, 0);
-  const totalExtra = filas.reduce((a,f) => a + f.hsExtra, 0);
-  const totalSabs  = filas.filter(f => f.esSab).length;
+  const totalHoras   = filas.reduce((a,f) => a + f.hsTotal, 0);
+  const totalExtra   = filas.reduce((a,f) => a + f.hsExtra, 0);
+  const totalFeriado = filas.reduce((a,f) => a + (f.hsFeriado||0), 0);
+  const totalSabs    = filas.filter(f => f.esSab).length;
 
   // ── Construir workbook ──
   const wb = XLSX.utils.book_new();
@@ -1561,13 +1588,13 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
   // Fila 3: vacía
   ws_data.push([]);
   // Fila 4: encabezados
-  ws_data.push(['FECHA','DÍA','HORA REG.','TURNO 1','TURNO 2','HS TOTAL','HS EXTRA','SÁBADO','LOCAL','NOTA']);
+  ws_data.push(['FECHA','DÍA','HORA REG.','TURNO 1','TURNO 2','HS TOTAL','HS EXTRA','HS FERIADO','SÁBADO','LOCAL','NOTA']);
   // Filas de datos
   filas.forEach(f => {
     ws_data.push([
       f.fechaStr, f.diaSem, f.horaReg,
       f.turno1, f.turno2,
-      f.hsTotal, f.hsExtra > 0 ? f.hsExtra : 0,
+      f.hsTotal, f.hsExtra > 0 ? f.hsExtra : 0, f.hsFeriado > 0 ? f.hsFeriado : 0,
       f.esSab ? 'Sí' : '',
       f.local, f.nota
     ]);
@@ -1575,7 +1602,7 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
   // Fila vacía
   ws_data.push([]);
   // Fila totales
-  ws_data.push(['TOTALES', '', filas.length + ' días', '', '', totalHoras, totalExtra, totalSabs, '', '']);
+  ws_data.push(['TOTALES', '', filas.length + ' días', '', '', totalHoras, totalExtra, totalFeriado, totalSabs, '', '']);
 
   const ws = XLSX.utils.aoa_to_sheet(ws_data);
 
@@ -1588,6 +1615,7 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
     { wch: 14 }, // TURNO 2
     { wch: 9  }, // HS TOTAL
     { wch: 9  }, // HS EXTRA
+    { wch: 10 }, // HS FERIADO
     { wch: 7  }, // SÁBADO
     { wch: 16 }, // LOCAL
     { wch: 35 }, // NOTA
@@ -1596,7 +1624,7 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
   // ── Estilos (negrita en encabezados y totales) ──
   const headerRow = 3; // índice 0-based fila 4
   const totalRow  = ws_data.length - 1;
-  const cols = ['A','B','C','D','E','F','G','H','I','J'];
+  const cols = ['A','B','C','D','E','F','G','H','I','J','K'];
 
   // Título — fila 1
   if (ws['A1']) {
@@ -1661,12 +1689,17 @@ function generarEvolucionHTML(datos, nombreEmp, suc) {
   const porMes = {};
   registros.forEach(r => {
     const key = `${r.AÑO}||${r.MES}`;
-    if (!porMes[key]) porMes[key] = { horas: 0, dias: new Set(), hsExtra: 0, sabados: new Set() };
+    if (!porMes[key]) porMes[key] = { horas: 0, dias: new Set(), hsExtra: 0, hsFeriado: 0, sabados: new Set() };
     const hs = parseFloat(r.TOTAL_HS) || 0;
+    const fecha = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA));
     porMes[key].horas += hs;
     porMes[key].dias.add(r.DIA);
-    if (hs > 8) porMes[key].hsExtra += hs - 8;
-    const dow = new Date(r.AÑO, MESES_ES.indexOf(r.MES), parseInt(r.DIA)).getDay();
+    if (esFeriado(fecha)) {
+      porMes[key].hsFeriado += hs;                 // feriado: aparte, no cuenta como extra
+    } else if (hs > 8) {
+      porMes[key].hsExtra += hs - 8;
+    }
+    const dow = fecha.getDay();
     if (dow === 6) porMes[key].sabados.add(r.DIA);
   });
 
@@ -1692,6 +1725,7 @@ function generarEvolucionHTML(datos, nombreEmp, suc) {
         </div>
       </td>
       <td>${v.hsExtra > 0 ? `<span class="hs-extra">${v.hsExtra.toFixed(0)}h</span>` : '—'}</td>
+      <td>${v.hsFeriado > 0 ? `<span class="hs-feriado">${v.hsFeriado.toFixed(0)}h</span>` : '—'}</td>
       <td>${v.sabados.size || '—'}</td>
     </tr>`;
   }).join('');
@@ -1706,7 +1740,7 @@ function generarEvolucionHTML(datos, nombreEmp, suc) {
       <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${promH.toFixed(0)}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Hs promedio/mes</span></div>
     </div>
     <table class="detalle-tabla">
-      <thead><tr><th>Mes</th><th>Días</th><th>Horas</th><th>Hs extra</th><th>Sábados</th></tr></thead>
+      <thead><tr><th>Mes</th><th>Días</th><th>Horas</th><th>Hs extra</th><th>Hs feriado</th><th>Sábados</th></tr></thead>
       <tbody>${filas}</tbody>
     </table>`;
 }
@@ -2048,13 +2082,15 @@ function renderResumenMes(datos) {
     if (esFeriado(fechaObj)) empMap[key].feriados.add(diaKey);
   });
 
-  // Calcular hsExtra por día usando categoría del empleado
+  // Calcular hsExtra y hsFeriado por día usando categoría del empleado
   Object.values(empMap).forEach(e => {
-    e.hsExtra = Object.entries(e.hsPorDia).reduce((acc, [diaKey, hsDia]) => {
+    e.hsExtra = 0; e.hsFeriado = 0;
+    Object.entries(e.hsPorDia).forEach(([diaKey, hsDia]) => {
       const [anio, mes, dia] = diaKey.split('-');
       const fecha = new Date(parseInt(anio), MESES_ES.indexOf(mes), parseInt(dia));
-      return acc + calcularHsExtra(e.nombre, hsDia, fecha);
-    }, 0);
+      e.hsExtra   += calcularHsExtra(e.nombre, hsDia, fecha);
+      e.hsFeriado += calcularHsFeriado(hsDia, fecha);
+    });
   });
 
   const lista = Object.values(empMap).sort((a, b) => b.horas - a.horas);
@@ -2078,6 +2114,7 @@ function renderResumenMes(datos) {
           <th>Días</th>
           <th>Horas</th>
           <th>Hs extra</th>
+          <th>Hs feriado</th>
           <th>Sábados</th>
           <th>Feriados</th>
         </tr>
@@ -2094,6 +2131,7 @@ function renderResumenMes(datos) {
       <td>${e.dias.size}</td>
       <td><strong>${e.horas.toFixed(1)}</strong></td>
       <td>${e.hsExtra > 0 ? `<span class="hs-extra">${e.hsExtra.toFixed(1)}</span>` : '—'}</td>
+      <td>${e.hsFeriado > 0 ? `<span class="hs-feriado">${e.hsFeriado.toFixed(1)}</span>` : '—'}</td>
       <td>${e.sabados.size || '—'}</td>
       <td>${e.feriados.size ? `<span class="tag-feriado">${e.feriados.size}</span>` : '—'}</td>
     </tr>`;
@@ -2105,7 +2143,7 @@ function renderResumenMes(datos) {
         <tr>
           <td colspan="3"><strong>TOTAL</strong></td>
           <td><strong>${totalHoras.toFixed(1)}</strong></td>
-          <td colspan="3"></td>
+          <td colspan="4"></td>
         </tr>
       </tfoot>
     </table></div></div>`;
@@ -2543,23 +2581,26 @@ function actualizarTablaDetalle() {
   ocultas.forEach(tr => tbody.appendChild(tr));
 
   // 3. Recalcular stats desde data attributes
-  let dias = 0, hs = 0, extra = 0, sabs = 0, certs = 0;
+  let dias = 0, hs = 0, extra = 0, feriado = 0, sabs = 0, certs = 0;
   visibles.forEach(tr => {
     dias++;
-    hs    += parseFloat(tr.dataset.hs)    || 0;
-    extra += parseFloat(tr.dataset.extra) || 0;
-    sabs  += parseInt(tr.dataset.sab)     || 0;
-    certs += parseInt(tr.dataset.cert)    || 0;
+    hs      += parseFloat(tr.dataset.hs)      || 0;
+    extra   += parseFloat(tr.dataset.extra)   || 0;
+    feriado += parseFloat(tr.dataset.feriado) || 0;
+    sabs    += parseInt(tr.dataset.sab)       || 0;
+    certs   += parseInt(tr.dataset.cert)      || 0;
   });
 
   const elDias  = document.getElementById('detalleStatDias');
   const elHs    = document.getElementById('detalleStatHs');
   const elExtra = document.getElementById('detalleStatExtra');
+  const elFer   = document.getElementById('detalleStatFeriado');
   const elSabs  = document.getElementById('detalleStatSabs');
   const elCerts = document.getElementById('detalleStatCerts');
   if (elDias)  elDias.textContent  = dias;
   if (elHs)    elHs.textContent    = hs.toFixed(1);
   if (elExtra) elExtra.textContent = extra.toFixed(1);
+  if (elFer)   elFer.textContent   = feriado.toFixed(1);
   if (elSabs)  elSabs.textContent  = sabs;
   if (elCerts) elCerts.textContent = certs;
 
@@ -2570,6 +2611,7 @@ function actualizarTablaDetalle() {
       <td>${dias}</td><td colspan="2"></td>
       <td><strong>${hs.toFixed(1)}</strong></td>
       <td>${extra > 0 ? `<span class="hs-extra">${extra.toFixed(1)}</span>` : '—'}</td>
+      <td>${feriado > 0 ? `<span class="hs-feriado">${feriado.toFixed(1)}</span>` : '—'}</td>
       <td>${sabs}</td><td colspan="2"></td>
     </tr>`;
   }
@@ -3400,11 +3442,12 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       const turno2 = rrs[1]?.H_ENTRADA ? `${normalizarLibreTxt(rrs[1].H_ENTRADA)} – ${normalizarLibreTxt(rrs[1].H_SALIDA)}` : '';
       const hsTotal = rrs.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
       const hsExtra = calcularHsExtra(nombreEmp, hsTotal, fecha);
+      const hsFeriado = calcularHsFeriado(hsTotal, fecha);
       const nota    = rrs.map(r=>r.NOTA).filter(Boolean).join(' / ');
       let horaReg = '', horaReg2 = '';
       try { if (r0.MARCA_TEMPORAL) horaReg = new Date(r0.MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
       try { if (rrs[1]?.MARCA_TEMPORAL) horaReg2 = new Date(rrs[1].MARCA_TEMPORAL).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); } catch(e){}
-      return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, esSab, esDom, esFer, nota, horaReg, horaReg2 };
+      return { fechaStr, diaSem, turno1, turno2, hsTotal, hsExtra, hsFeriado, esSab, esDom, esFer, nota, horaReg, horaReg2 };
     }).sort((a,b) => {
       // ordenar más viejo primero
       const da = a.fechaStr.split('/').reverse().join('-');
@@ -3413,13 +3456,14 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     });
 
     // Vista empleado: no se muestran certificados en este portal.
-    const totalHoras   = filas.reduce((a,f)=>a+f.hsTotal,0);
-    const totalHsExtra = filas.reduce((a,f)=>a+f.hsExtra,0);
-    const totalSabs    = filas.filter(f=>f.esSab).length;
-    return { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos: filas.length };
+    const totalHoras     = filas.reduce((a,f)=>a+f.hsTotal,0);
+    const totalHsExtra   = filas.reduce((a,f)=>a+f.hsExtra,0);
+    const totalHsFeriado = filas.reduce((a,f)=>a+(f.hsFeriado||0),0);
+    const totalSabs      = filas.filter(f=>f.esSab).length;
+    return { filas, totalHoras, totalHsExtra, totalHsFeriado, totalSabs, diasUnicos: filas.length };
   }
 
-  let { filas, totalHoras, totalHsExtra, totalSabs, diasUnicos } = calcTotales(periodoActual);
+  let { filas, totalHoras, totalHsExtra, totalHsFeriado, totalSabs, diasUnicos } = calcTotales(periodoActual);
 
   const opcionesMes = ['<option value="TODOS">Todos los registros</option>']
     .concat(periodos.map(p => `<option value="${p}" ${p===periodoActual?'selected':''}>${p}</option>`))
@@ -3535,6 +3579,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
         <td>—</td>
+        <td>—</td>
         <td></td>
         <td></td>
       </tr>`;
@@ -3547,6 +3592,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td class="turno-cell">${f.turno2||'—'}</td>
         <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
         <td>${f.hsExtra>0?`<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>`:'—'}</td>
+        <td>${f.hsFeriado>0?`<span class="hs-feriado">${f.hsFeriado.toFixed(1)}</span>`:'—'}</td>
         <td>${f.esSab?'<span class="check-sab">✓</span>':''}</td>
         <td class="nota-cell">${f.nota||''}</td>
       </tr>`;
@@ -3574,6 +3620,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       const clases = [f.esSab?'ev-card-sabado':'', f.esDom?'ev-card-domingo':'', f.esFer?'ev-card-feriado':''].filter(Boolean).join(' ');
       const turno2html = f.turno2 && f.turno2 !== '—' ? `<span class="ev-card-turno">${f.turno2}</span>` : '';
       const extraHtml  = f.hsExtra > 0 ? `<span class="ev-card-extra">+${f.hsExtra.toFixed(1)} extra</span>` : '';
+      const feriadoHtml = f.hsFeriado > 0 ? `<span class="ev-card-feriado-hs">+${f.hsFeriado.toFixed(1)} feriado</span>` : '';
       const sabHtml    = f.esSab ? `<span class="ev-card-sab">Sáb ✓</span>` : '';
       const notaHtml   = f.nota  ? `<div class="ev-card-nota">${f.nota}</div>` : '';
       return `
@@ -3585,7 +3632,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
             </div>
             <div class="ev-card-hs">
               <span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span>
-              ${extraHtml}${sabHtml}
+              ${extraHtml}${feriadoHtml}${sabHtml}
             </div>
           </div>
           <div class="ev-card-turnos">
@@ -3648,6 +3695,10 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <div class="portal-summary-card">
           <span>Hs extra</span>
           <strong id="evExtra">${totalHsExtra.toFixed(1)}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Hs feriado</span>
+          <strong id="evFeriado">${totalHsFeriado.toFixed(1)}</strong>
         </div>
         <div class="portal-summary-card">
           <span>Sábados</span>
@@ -3716,7 +3767,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
             <tr>
               <th>Fecha</th><th>Día</th><th>Hora reg.</th>
               <th>Turno 1</th><th>Turno 2</th>
-              <th>Hs total</th><th>Hs extra</th><th>Sáb.</th><th>Nota</th>
+              <th>Hs total</th><th>Hs extra</th><th>Hs feriado</th><th>Sáb.</th><th>Nota</th>
             </tr>
           </thead>
           <tbody id="evTbody">${buildFilas(filas)}</tbody>
@@ -3727,6 +3778,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
               <td colspan="2"></td>
               <td><strong>${totalHoras.toFixed(1)}</strong></td>
               <td>${totalHsExtra>0?`<span class="hs-extra">${totalHsExtra.toFixed(1)}</span>`:'—'}</td>
+              <td>${totalHsFeriado>0?`<span class="hs-feriado">${totalHsFeriado.toFixed(1)}</span>`:'—'}</td>
               <td><strong>${totalSabs}</strong></td>
               <td></td>
             </tr>
@@ -3739,6 +3791,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <span>${diasUnicos} días</span>
           <span>${totalHoras.toFixed(1)} hs totales</span>
           ${totalHsExtra>0?`<span class="ev-card-extra">+${totalHsExtra.toFixed(1)} extra</span>`:''}
+          ${totalHsFeriado>0?`<span class="ev-card-feriado-hs">+${totalHsFeriado.toFixed(1)} feriado</span>`:''}
           <span>${totalSabs} sábados</span>
         </div>
       </div>
@@ -3759,6 +3812,8 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     document.getElementById('evDias').textContent  = t.diasUnicos;
     document.getElementById('evHoras').textContent = t.totalHoras.toFixed(1);
     document.getElementById('evExtra').textContent = t.totalHsExtra.toFixed(1);
+    const evFerEl = document.getElementById('evFeriado');
+    if (evFerEl) evFerEl.textContent = t.totalHsFeriado.toFixed(1);
     document.getElementById('evSabs').textContent  = t.totalSabs;
     document.getElementById('evTbody').innerHTML   = buildFilas(t.filas);
     // Actualizar cards mobile
@@ -3768,6 +3823,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <span>${t.diasUnicos} días</span>
         <span>${t.totalHoras.toFixed(1)} hs totales</span>
         ${t.totalHsExtra>0?`<span class="ev-card-extra">+${t.totalHsExtra.toFixed(1)} extra</span>`:''}
+        ${t.totalHsFeriado>0?`<span class="ev-card-feriado-hs">+${t.totalHsFeriado.toFixed(1)} feriado</span>`:''}
         <span>${t.totalSabs} sábados</span>
       </div>`;
     document.getElementById('evTfoot').innerHTML   = `
@@ -3777,6 +3833,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td colspan="2"></td>
         <td><strong>${t.totalHoras.toFixed(1)}</strong></td>
         <td>${t.totalHsExtra>0?`<span class="hs-extra">${t.totalHsExtra.toFixed(1)}</span>`:'—'}</td>
+        <td>${t.totalHsFeriado>0?`<span class="hs-feriado">${t.totalHsFeriado.toFixed(1)}</span>`:'—'}</td>
         <td><strong>${t.totalSabs}</strong></td>
         <td></td>
       </tr>`;
@@ -3801,10 +3858,11 @@ function imprimirVistaEmpleado() {
   const nombreTxt  = nombreEl ? nombreEl.textContent.replace('👋','').replace('Hola','').trim() : '';
   const sucursalTxt = sucursal ? sucursal.textContent.trim() : '';
 
-  const dias  = document.getElementById('evDias')?.textContent  || '—';
-  const horas = document.getElementById('evHoras')?.textContent || '—';
-  const extra = document.getElementById('evExtra')?.textContent || '—';
-  const sabs  = document.getElementById('evSabs')?.textContent  || '—';
+  const dias    = document.getElementById('evDias')?.textContent    || '—';
+  const horas   = document.getElementById('evHoras')?.textContent   || '—';
+  const extra   = document.getElementById('evExtra')?.textContent   || '—';
+  const feriado = document.getElementById('evFeriado')?.textContent || '—';
+  const sabs    = document.getElementById('evSabs')?.textContent    || '—';
 
   const win = window.open('', '_blank', 'width=900,height=700');
   win.document.write(`<!DOCTYPE html>
@@ -3837,6 +3895,7 @@ function imprimirVistaEmpleado() {
     .fila-domingo td { color: #aaa; }
     .fila-feriado td { background: #fff8f0; }
     .hs-extra { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 10px; font-weight: 600; font-size: 11px; }
+    .hs-feriado { background: #cffafe; color: #0e7490; padding: 2px 6px; border-radius: 10px; font-weight: 600; font-size: 11px; }
     .check-sab { color: #059669; font-weight: 700; }
     .tag-feriado { background: #fed7aa; color: #c2410c; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; }
     .turno-cell { font-variant-numeric: tabular-nums; }
@@ -3860,6 +3919,7 @@ function imprimirVistaEmpleado() {
     <div class="print-stat"><span>Días</span><strong>${dias}</strong></div>
     <div class="print-stat"><span>Hs totales</span><strong>${horas}</strong></div>
     <div class="print-stat"><span>Hs extra</span><strong>${extra}</strong></div>
+    <div class="print-stat"><span>Hs feriado</span><strong>${feriado}</strong></div>
     <div class="print-stat"><span>Sábados</span><strong>${sabs}</strong></div>
   </div>
   ${tablaHTML}
