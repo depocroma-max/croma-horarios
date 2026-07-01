@@ -112,6 +112,43 @@
     .btn-primary:hover { background: #222; }
     .btn-primary:disabled { background: var(--gray-400); cursor: not-allowed; }
 
+    /* ── SELECTOR DE SUCURSAL ── */
+    #screenSucursal {
+      padding: 24px 16px; width: 100%; max-width: 480px;
+    }
+    .suc-sel-title {
+      font-family: var(--font-display); font-size: 26px; letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .suc-sel-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 20px; }
+    .suc-list { display: flex; flex-direction: column; gap: 10px; }
+    .suc-item {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--white); border: 1.5px solid var(--gray-200);
+      border-radius: var(--radius-md); padding: 14px 16px;
+      cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .1s;
+      text-align: left;
+    }
+    .suc-item:hover { border-color: var(--black); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .suc-item:active { transform: scale(.99); }
+    .suc-item.bloqueada { opacity: .55; cursor: not-allowed; }
+    .suc-item.bloqueada:hover { border-color: var(--gray-200); box-shadow: none; }
+    .suc-item.bloqueada:active { transform: none; }
+    .suc-color-bar { width: 4px; border-radius: 2px; align-self: stretch; flex-shrink: 0; }
+    .suc-info { flex: 1; }
+    .suc-nombre { font-size: 14px; font-weight: 600; }
+    .suc-dist   { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+    .suc-dist.cerca { color: var(--green); font-weight: 500; }
+    .suc-dist.lejos { color: var(--accent); }
+    .suc-dist.sin-geo { color: var(--gray-400); font-style: italic; }
+    .suc-badge {
+      font-size: 10px; font-weight: 700; letter-spacing: .5px;
+      padding: 3px 8px; border-radius: 10px; flex-shrink: 0;
+    }
+    .suc-badge.ok  { background: #dcfce7; color: var(--green); }
+    .suc-badge.no  { background: #fee2e2; color: var(--accent); }
+    .suc-badge.na  { background: var(--gray-100); color: var(--gray-600); }
+
     /* ── GEO STATUS ── */
     #screenGeo {
       justify-content: center; padding: 32px 20px;
@@ -348,6 +385,13 @@
   </div>
 </section>
 
+<!-- SELECTOR DE SUCURSAL -->
+<section class="screen" id="screenSucursal">
+  <div class="suc-sel-title">¿En qué sucursal estás?</div>
+  <div class="suc-sel-sub" id="sucSelSub">Seleccioná el local donde vas a cargar el turno.</div>
+  <div class="suc-list" id="sucList"></div>
+</section>
+
 <!-- GEO CHECKING -->
 <section class="screen" id="screenGeo">
   <div class="geo-card">
@@ -475,8 +519,9 @@ const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agos
 
 // ── ESTADO ──
 let sesion = null;         // { nombre, rol, empleadoNombre }
-let sucursalGeo = null;    // { local, lat, lon, radio_m }
-let geoPos = null;         // { lat, lon, distancia_m }
+let sucursalGeo = null;    // sucursal elegida { local, lat, lon, radio_m }
+let sucursalesGeo = [];    // todas las sucursales con coords
+let geoPos = null;         // { lat, lon }
 let _usuarios = [];
 
 // ── INIT ──
@@ -572,8 +617,7 @@ async function arrancarConSesion() {
 }
 
 async function cargarSucursalYGeo() {
-  // 1. Buscar perfil del empleado para saber su sucursal
-  let sucursalId = null;
+  // 1. Perfil del empleado para saber su sucursal asignada
   try {
     const resp = await fetch(`${APPS_SCRIPT_URL}?accion=perfiles`);
     const json = await resp.json();
@@ -581,101 +625,125 @@ async function cargarSucursalYGeo() {
     const perfil = (json.empleados || []).find(e =>
       e.nombre.toLowerCase() === empNombre.toLowerCase()
     );
-    if (perfil) sucursalId = perfil.sucursal_id;
+    if (perfil) sesion.sucursalId = perfil.sucursal_id;
   } catch(e) {}
 
-  const suc = SUCURSALES.find(s => s.id === sucursalId);
+  // 2. Cargar todas las coordenadas geo
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=get_sucursales_geo`);
+    const json = await resp.json();
+    sucursalesGeo = json.sucursales || [];
+  } catch(e) {}
 
-  // 2. Cargar coordenadas geo de esa sucursal
-  if (suc) {
-    try {
-      const resp = await fetch(`${APPS_SCRIPT_URL}?accion=get_sucursales_geo`);
-      const json = await resp.json();
-      sucursalGeo = (json.sucursales || []).find(s =>
-        s.local.toUpperCase() === suc.nombre.toUpperCase()
-      ) || null;
-    } catch(e) {}
-  }
-
-  // 3. Pedir geolocalización
+  // 3. Obtener geolocalización
   if (!navigator.geolocation) {
-    mostrarGeoError('Tu navegador no soporta geolocalización. Podés continuar sin verificación.');
+    geoPos = null;
+    mostrarSelectorSucursal();
     return;
   }
 
   navigator.geolocation.getCurrentPosition(
-    pos => onGeoOk(pos, suc),
-    err => onGeoErr(err),
+    pos => {
+      geoPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      mostrarSelectorSucursal();
+    },
+    () => {
+      geoPos = null;
+      mostrarSelectorSucursal();
+    },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
-function onGeoOk(pos, suc) {
-  const lat = pos.coords.latitude;
-  const lon = pos.coords.longitude;
+// ── SELECTOR DE SUCURSAL ──
+function mostrarSelectorSucursal() {
+  const list = document.getElementById('sucList');
+  list.innerHTML = '';
 
-  if (sucursalGeo && sucursalGeo.lat && sucursalGeo.lon) {
-    const dist = haversine(lat, lon, sucursalGeo.lat, sucursalGeo.lon);
-    geoPos = { lat, lon, distancia_m: Math.round(dist) };
-
-    if (dist <= sucursalGeo.radio_m) {
-      mostrarFormulario();
-    } else {
-      mostrarGeoBloqueado(dist, sucursalGeo.radio_m);
-    }
+  if (!geoPos) {
+    document.getElementById('sucSelSub').textContent = 'GPS no disponible — elegí igual y podrás continuar.';
   } else {
-    // No hay coordenadas cargadas — permitir con advertencia
-    geoPos = { lat, lon, distancia_m: null };
-    mostrarFormulario();
+    document.getElementById('sucSelSub').textContent = 'Seleccioná el local donde vas a cargar el turno.';
   }
+
+  SUCURSALES.forEach(suc => {
+    const geo = sucursalesGeo.find(g => g.local.toUpperCase() === suc.nombre.toUpperCase());
+    let dist = null;
+    let dentro = false;
+
+    if (geoPos && geo && geo.lat && geo.lon) {
+      dist   = Math.round(haversine(geoPos.lat, geoPos.lon, geo.lat, geo.lon));
+      dentro = dist <= (geo.radio_m || 150);
+    }
+
+    const item = document.createElement('button');
+    item.className = 'suc-item';
+    item.dataset.sucId = suc.id;
+
+    let distHTML = '';
+    let badgeHTML = '';
+    if (dist === null) {
+      distHTML  = `<div class="suc-dist sin-geo">Sin GPS</div>`;
+      badgeHTML = `<span class="suc-badge na">?</span>`;
+    } else if (dentro) {
+      distHTML  = `<div class="suc-dist cerca">${dist} m — estás acá</div>`;
+      badgeHTML = `<span class="suc-badge ok">OK</span>`;
+    } else {
+      distHTML  = `<div class="suc-dist lejos">${dist} m</div>`;
+      badgeHTML = `<span class="suc-badge no">Lejos</span>`;
+    }
+
+    item.innerHTML =
+      `<div class="suc-color-bar" style="background:${suc.color}"></div>` +
+      `<div class="suc-info">` +
+        `<div class="suc-nombre">${suc.nombre}</div>` +
+        distHTML +
+      `</div>` +
+      badgeHTML;
+
+    item.addEventListener('click', () => elegirSucursal(suc, geo, dist, dentro));
+    list.appendChild(item);
+  });
+
+  mostrarScreen('screenSucursal');
 }
 
-function onGeoErr(err) {
-  geoPos = null;
-  const msgs = {
-    1: 'Permiso de ubicación denegado. Habilitá el GPS en la configuración del navegador.',
-    2: 'No se pudo obtener la ubicación. Verificá que el GPS esté activo.',
-    3: 'Tiempo agotado al obtener la ubicación.',
-  };
-  mostrarGeoError(msgs[err.code] || 'Error al obtener ubicación.');
-}
+function elegirSucursal(suc, geo, dist, dentro) {
+  const esPropia = suc.id === sesion.sucursalId;
 
-function mostrarGeoError(msg) {
-  document.getElementById('geoSpinner').style.display = 'none';
-  const icon = document.getElementById('geoIcon');
-  icon.style.display = 'flex'; icon.className = 'geo-icon warn';
-  document.getElementById('geoTitle').textContent = 'Sin ubicación';
-  document.getElementById('geoMsg').textContent   = msg;
-  document.getElementById('geoBtn').style.display = '';
-  document.getElementById('geoBtnContinuar').style.display = '';
-}
+  // Si es sucursal distinta a la asignada → confirmar
+  if (!esPropia) {
+    const confirmado = confirm(`¿Estás seguro que vas a ${suc.nombre} hoy?`);
+    if (!confirmado) return;
+  }
 
-function mostrarGeoBloqueado(dist, radio) {
-  document.getElementById('geoSpinner').style.display = 'none';
-  const icon = document.getElementById('geoIcon');
-  icon.style.display = 'flex'; icon.className = 'geo-icon err';
-  document.getElementById('geoTitle').textContent = 'Fuera de rango';
-  const distEl = document.getElementById('geoDist');
-  distEl.style.display = ''; distEl.className = 'geo-dist lejos';
-  distEl.textContent = `${Math.round(dist)} m del local (máx. ${radio} m)`;
-  document.getElementById('geoMsg').textContent = 'Tenés que estar dentro del rango del local para registrar el turno.';
-  document.getElementById('geoBtn').style.display = '';
+  // Verificar geo contra la sucursal elegida
+  if (geoPos && geo && geo.lat && geo.lon && !dentro) {
+    mostrarScreen('screenGeo');
+    document.getElementById('geoSpinner').style.display = 'none';
+    const icon = document.getElementById('geoIcon');
+    icon.style.display = 'flex'; icon.className = 'geo-icon err';
+    document.getElementById('geoTitle').textContent = 'Fuera de rango';
+    const distEl = document.getElementById('geoDist');
+    distEl.style.display = ''; distEl.className = 'geo-dist lejos';
+    distEl.textContent = `${dist} m de ${suc.nombre} (máx. ${geo.radio_m || 150} m)`;
+    document.getElementById('geoMsg').textContent = 'No estás cerca de esa sucursal. Volvé a elegir o reintentar la ubicación.';
+    document.getElementById('geoBtn').style.display = '';
+    document.getElementById('geoBtnContinuar').style.display = 'none';
+    document.getElementById('geoBtn').textContent = 'Volver a elegir';
+    document.getElementById('geoBtn').onclick = mostrarSelectorSucursal;
+    return;
+  }
+
+  // OK — guardar sucursal elegida y mostrar formulario
+  sucursalGeo = geo || { local: suc.nombre, lat: null, lon: null, radio_m: 150 };
+  sucursalGeo.local = suc.nombre;
+  if (dist !== null) geoPos.distancia_m = dist;
+  mostrarFormulario();
 }
 
 function reintentarGeo() {
-  document.getElementById('geoSpinner').style.display = '';
-  document.getElementById('geoIcon').style.display    = 'none';
-  document.getElementById('geoDist').style.display    = 'none';
-  document.getElementById('geoBtn').style.display     = 'none';
-  document.getElementById('geoBtnContinuar').style.display = 'none';
-  document.getElementById('geoTitle').textContent = 'Verificando ubicación';
-  document.getElementById('geoMsg').textContent   = 'Asegurate de tener el GPS activado.';
-  const suc = SUCURSALES.find(s => sucursalGeo && s.nombre === sucursalGeo.local) || null;
-  navigator.geolocation.getCurrentPosition(
-    pos => onGeoOk(pos, suc),
-    err => onGeoErr(err),
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
+  mostrarSelectorSucursal();
 }
 
 // ── FORMULARIO ──
