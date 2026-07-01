@@ -865,23 +865,43 @@ body {
   flex-wrap: wrap;
 }
 .detalle-stat {
-  display: flex; flex-direction: column; gap: 3px;
+  flex: 1 1 0;
+  display: flex; align-items: center; gap: 12px;
   background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
-  padding: 8px 16px;
-  min-width: 70px;
-  text-align: center;
+  border: 1px solid #eef1f5;
+  border-radius: 16px;
+  padding: 13px 16px;
+  min-width: 120px;
 }
+.detalle-stat-icon {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  background: #eef2f7; color: #64748b;
+}
+.detalle-stat-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .detalle-stat-val {
   font-family: var(--font-display);
-  font-size: 26px; letter-spacing: 1px;
+  font-size: 30px; letter-spacing: 1px;
   color: #0d0d0d; line-height: 1;
 }
 .detalle-stat-lbl {
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 700;
   color: #94a3b8; text-transform: uppercase; letter-spacing: .07em;
 }
+/* Variantes de color por métrica */
+.detalle-stat.stat-dias  { background: #f4f8ff; border-color: #e6effe; }
+.detalle-stat.stat-dias  .detalle-stat-icon { background: #dbeafe; color: #2563eb; }
+.detalle-stat.stat-hs    { background: #f8f6ff; border-color: #ece7fe; }
+.detalle-stat.stat-hs    .detalle-stat-icon { background: #ede9fe; color: #7c3aed; }
+.detalle-stat.stat-extra { background: #fff5f5; border-color: #ffe3e3; }
+.detalle-stat.stat-extra .detalle-stat-icon { background: #fee2e2; color: #dc2626; }
+.detalle-stat.stat-extra .detalle-stat-val  { color: #e8251a; }
+.detalle-stat.stat-sabs  { background: #fffdf4; border-color: #fbedcd; }
+.detalle-stat.stat-sabs  .detalle-stat-icon { background: #fef3c7; color: #d97706; }
+.detalle-stat.stat-certs { background: #f4f8ff; border-color: #e6effe; }
+.detalle-stat.stat-certs .detalle-stat-icon { background: #dbeafe; color: #2563eb; }
 
 /* ── Tabs pills ──────────────────────────────── */
 .detalle-tabs {
