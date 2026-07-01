@@ -965,6 +965,11 @@ body {
 }
 .btn-excel { color: #0F6E56; border-color: #bbf7d0; background: #f0fdf4; }
 .btn-excel:hover { background: #0F6E56; color: #fff; border-color: #0F6E56; }
+/* Baja/alta de empleado desde el detalle */
+.btn-detalle-baja { color: #dc2626; border-color: #fecaca; background: #fef2f2; }
+.btn-detalle-baja:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+.btn-detalle-alta { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+.btn-detalle-alta:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
 
 @media print {
   .detalle-overlay {
@@ -2611,24 +2616,6 @@ body {
 .wa-btn:hover { background: #16a34a; color: #fff; border-color: #16a34a; }
 
 /* ══ EX-EMPLEADOS (activo === false) ══════════════════ */
-/* Botón rápido "✕" sobre la card para marcar que ya no trabaja */
-.emp-card { position: relative; }
-.emp-hide-btn {
-  position: absolute;
-  top: 8px; right: 8px;
-  width: 24px; height: 24px;
-  display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%;
-  background: rgba(255,255,255,.85);
-  color: #94a3b8; font-size: 13px; line-height: 1;
-  cursor: pointer; opacity: 0;
-  box-shadow: 0 1px 4px rgba(0,0,0,.12);
-  transition: opacity .15s, background .15s, color .15s;
-  z-index: 2;
-}
-.emp-card:hover .emp-hide-btn { opacity: 1; }
-.emp-hide-btn:hover { background: #fee2e2; color: #e8251a; }
-
 /* Card de un ex-empleado: atenuada */
 .emp-card-inactivo { opacity: .72; background: #fbfbfc; }
 .emp-card-inactivo:hover { opacity: 1; }
@@ -2641,19 +2628,6 @@ body {
   border-radius: 20px;
   padding: 2px 8px;
 }
-
-/* Botón reactivar en el footer de la card inactiva */
-.emp-reactivar-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background: #dbeafe; color: #2563eb;
-  border: 1px solid #bfdbfe;
-  font-size: 11px; font-weight: 600;
-  cursor: pointer; white-space: nowrap;
-  transition: all .15s;
-}
-.emp-reactivar-btn:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
 
 /* Sección colapsable de ex-empleados */
 .emp-inactivos-section { margin-top: 2rem; }

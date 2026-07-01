@@ -742,19 +742,10 @@ function renderEmpleados(datos) {
       : '';
 
     const nombreEsc = e.nombre.replace(/'/g,"\\'");
-
-    // Acción rápida: ocultar (marcar que ya no trabaja) o reactivar — solo admin
-    const hideBtn = (puedeGestionar && !inactivo)
-      ? `<button class="emp-hide-btn" title="Marcar que ya no trabaja" onclick="event.stopPropagation();marcarEmpleadoInactivo('${nombreEsc}')">✕</button>`
-      : '';
-    const footerBtn = (inactivo && puedeGestionar)
-      ? `<button class="emp-reactivar-btn" onclick="event.stopPropagation();reactivarEmpleado('${nombreEsc}')">↩ Reactivar</button>`
-      : waBtn;
     const inactivoBadge = inactivo ? `<span class="emp-inactivo-badge">Ya no trabaja</span>` : '';
 
     return `<div class="emp-card ${inactivo ? 'emp-card-inactivo' : ''}" onclick="abrirDetalleEmpleadoDesdePanel('${nombreEsc}', '${e.suc}')" style="cursor:pointer">
       <span class="emp-card-stripe" style="background:${s.color}"></span>
-      ${hideBtn}
       <div class="emp-card-body">
         <div class="emp-card-head">
           <div class="emp-avatar ${e.foto_url ? 'emp-avatar-foto' : ''}" style="${e.foto_url ? '' : `background:${s.colorLight};color:${s.color}`}">
@@ -786,7 +777,7 @@ function renderEmpleados(datos) {
         </div>
       </div>
       <div class="emp-card-footer">
-        ${footerBtn}
+        ${waBtn}
         <span class="emp-card-footer-link">Ver jornada →</span>
       </div>
     </div>`;
@@ -920,6 +911,7 @@ async function _setEmpleadoActivo(nombre, activo) {
     sessionStorage.setItem('croma_perfiles_locales', JSON.stringify(saved));
   } catch (e) {}
   await guardarPerfil(perfil);
+  if (typeof cerrarDetalle === 'function') cerrarDetalle(); // cerrar overlay de detalle si está abierto
   renderEmpleados(state.datos);
 }
 
@@ -1191,6 +1183,17 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                 Certificado
               </button>
+              ${sesionActual?.rol === 'admin' ? (
+                (EMPLEADOS_PERFILES[nombreEmp]?.activo !== false)
+                  ? `<button class="btn-detalle-accion btn-detalle-baja" onclick="marcarEmpleadoInactivo('${nombreEmp.replace(/'/g,"\\'")}')">
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="23" y2="14"/><line x1="23" y1="8" x2="17" y2="14"/></svg>
+                       Marcar como ya no trabaja
+                     </button>`
+                  : `<button class="btn-detalle-accion btn-detalle-alta" onclick="reactivarEmpleado('${nombreEmp.replace(/'/g,"\\'")}')">
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                       Reactivar empleado
+                     </button>`
+              ) : ''}
               <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
             </div>
           </div>
