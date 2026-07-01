@@ -1277,6 +1277,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <button class="detalle-tab active" onclick="switchDetalleTab('jornada', this)">Historial</button>
         <button class="detalle-tab" onclick="switchDetalleTab('evolucion', this)">Evolución mensual</button>
         <button class="detalle-tab" onclick="switchDetalleTab('vacaciones', this)" id="tabVacBtn_${nombreEmp.replace(/[^a-zA-Z0-9]/g,'_')}">🏖 Vacaciones</button>
+        <button class="detalle-tab" onclick="switchDetalleTab('bancoHoras', this)">⏱ Banco de horas</button>
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabJornada">
         <div class="detalle-filtros-bar">
@@ -1342,6 +1343,11 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       <div class="detalle-tabla-wrap" id="detalleTabVacaciones" style="display:none;padding:1.5rem">
         <div id="vacAdminContent_inner">
           <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+        </div>
+      </div>
+      <div class="detalle-tabla-wrap" id="detalleTabBancoHoras" style="display:none;padding:1.5rem">
+        <div id="bancoHorasAdminContent_inner">
+          <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
         </div>
       </div>
       <div class="detalle-footer">
@@ -1663,20 +1669,18 @@ function switchDetalleTab(tab, btn) {
   document.getElementById('detalleTabEvolucion').style.display = tab === 'evolucion'  ? 'block' : 'none';
   const vacEl = document.getElementById('detalleTabVacaciones');
   if (vacEl) vacEl.style.display = tab === 'vacaciones' ? 'block' : 'none';
-  if (tab === 'vacaciones') {
-    // Obtener nombre del empleado desde el título del detalle
+  const bhEl = document.getElementById('detalleTabBancoHoras');
+  if (bhEl) bhEl.style.display = tab === 'bancoHoras' ? 'block' : 'none';
+  if (tab === 'vacaciones' || tab === 'bancoHoras') {
     const tituloEl = document.querySelector('.detalle-titulo');
     if (tituloEl) {
-      const numSpan = tituloEl.querySelector('.detalle-num');
-      const numVend = numSpan ? numSpan.textContent.replace('#','').trim() : '';
-      // Reconstruir nombre completo para buscar en datos
       const nomDiv = tituloEl.textContent.trim().replace(/^#\d+\s*/,'').trim();
-      // Buscar en state.datos el nombre completo que contenga ese nomDiv
       const empNombre = state.datos.find(r => {
         const n = r.EMPLEADO.replace(/^\d+\s+/,'').trim();
         return n.toLowerCase() === nomDiv.toLowerCase();
       })?.EMPLEADO || nomDiv;
-      cargarVacacionesAdmin(empNombre);
+      if (tab === 'vacaciones') cargarVacacionesAdmin(empNombre);
+      if (tab === 'bancoHoras') cargarBancoHorasDetalleAdmin(empNombre);
     }
   }
 }
@@ -3740,6 +3744,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <div class="detalle-tabs" style="margin:0 0 0 0;border-bottom:1px solid var(--gray-100)">
         <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Historial</button>
         <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">🏖 Vacaciones</button>
+        <button class="detalle-tab" onclick="switchEvTab('bancoHoras',this)">⏱ Banco de horas</button>
       </div>
 
       <!-- CONTENIDO JORNADA -->
@@ -3802,6 +3807,11 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
       </div>
 
+      <!-- CONTENIDO BANCO DE HORAS EMPLEADO -->
+      <div id="evTabBancoHoras" style="display:none;padding:1.5rem">
+        <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+      </div>
+
     </div>
   `;
 
@@ -3839,8 +3849,9 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       </tr>`;
   });
 
-  // Cargar vacaciones del empleado en background
+  // Cargar vacaciones y banco de horas del empleado en background
   cargarVacacionesEmpleado(nombreEmp);
+  cargarBancoHorasEmpleado(nombreEmp);
 }
 
 function imprimirVistaEmpleado() {
@@ -5649,8 +5660,10 @@ function switchEvTab(tab, btn) {
   btn.classList.add('active');
   const jornada    = document.getElementById('evTabJornada');
   const vacaciones = document.getElementById('evTabVacaciones');
+  const bancoHoras = document.getElementById('evTabBancoHoras');
   if (jornada)    jornada.style.display    = tab === 'jornada'    ? 'block' : 'none';
   if (vacaciones) vacaciones.style.display = tab === 'vacaciones' ? 'block' : 'none';
+  if (bancoHoras) bancoHoras.style.display = tab === 'bancoHoras' ? 'block' : 'none';
 }
 
 
@@ -6487,6 +6500,7 @@ function renderCalendarioView() {
       '<button class="admin-tab" onclick="switchVacTab(\'anuncios\',this)">Anuncios</button>' +
       '<button class="admin-tab" id="vacTabSolicitudesBtn" onclick="switchVacTab(\'solicitudes\',this)">Solicitudes pendientes</button>' +
       '<button class="admin-tab" onclick="switchVacTab(\'banco\',this)">Banco de días</button>' +
+      '<button class="admin-tab" onclick="switchVacTab(\'bancoHoras\',this)">Banco de horas</button>' +
     '</div>' +
     '<div id="vacCalendarioContainer" class="admin-tab-content">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
@@ -6504,6 +6518,9 @@ function renderCalendarioView() {
     '<div id="vacBancoContainer" class="admin-tab-content" style="display:none">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
     '</div>' +
+    '<div id="vacBancoHorasContainer" class="admin-tab-content" style="display:none">' +
+      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
+    '</div>' +
     '</div>';
 
   // Cargar calendario con cache
@@ -6513,13 +6530,15 @@ function renderCalendarioView() {
 function switchVacTab(tab, btn) {
   document.querySelectorAll('#vacTabs .admin-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('vacCalendarioContainer').style.display  = tab === 'calendario'  ? 'block' : 'none';
-  document.getElementById('vacAnunciosContainer').style.display    = tab === 'anuncios'    ? 'block' : 'none';
-  document.getElementById('vacSolicitudesContainer').style.display = tab === 'solicitudes' ? 'block' : 'none';
-  document.getElementById('vacBancoContainer').style.display       = tab === 'banco'       ? 'block' : 'none';
+  document.getElementById('vacCalendarioContainer').style.display   = tab === 'calendario'  ? 'block' : 'none';
+  document.getElementById('vacAnunciosContainer').style.display     = tab === 'anuncios'    ? 'block' : 'none';
+  document.getElementById('vacSolicitudesContainer').style.display  = tab === 'solicitudes' ? 'block' : 'none';
+  document.getElementById('vacBancoContainer').style.display        = tab === 'banco'       ? 'block' : 'none';
+  document.getElementById('vacBancoHorasContainer').style.display   = tab === 'bancoHoras' ? 'block' : 'none';
   if (tab === 'solicitudes') cargarSolicitudesAdmin();
   if (tab === 'banco')       cargarBancoDias();
   if (tab === 'anuncios')    cargarListaAnuncios();
+  if (tab === 'bancoHoras')  cargarBancoHorasAdmin();
 }
 
 // ── BANCO DE DÍAS (tab vacaciones) ───────────────────
@@ -6651,6 +6670,109 @@ async function cargarBancoDiasAnio(anio) {
   } catch(e) {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
   }
+}
+
+// ── BANCO DE HORAS ────────────────────────────────────
+
+async function cargarBancoHorasAdmin() {
+  const container = document.getElementById('vacBancoHorasContainer');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  try {
+    const resp = await fetch(vacApiUrl('get_banco_horas_todos'));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    const empleados = json.empleados || [];
+
+    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
+      const na = parseInt(a)||999, nb = parseInt(b)||999;
+      return na !== nb ? na - nb : a.localeCompare(b);
+    });
+
+    const filas = empNombres.map(function(nombre) {
+      const nom = nombre.replace(/^\d+\s+/, '');
+      const entrada = empleados.find(function(e) { return e.empleado === nombre; }) || {};
+      const saldo = typeof entrada.saldo_hs === 'number' ? entrada.saldo_hs.toFixed(1) : '—';
+      const saldoColor = entrada.saldo_hs > 0 ? '#059669' : entrada.saldo_hs < 0 ? '#dc2626' : '#374151';
+      const perfil = EMPLEADOS_PERFILES[nombre] || {};
+      const local  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
+      const suc    = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      return '<tr>' +
+        '<td><strong>' + nom + '</strong></td>' +
+        '<td><span class="suc-badge-mini" style="background:' + suc.colorLight + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
+        '<td style="text-align:center;font-weight:700;color:' + saldoColor + '">' + saldo + ' hs</td>' +
+      '</tr>';
+    }).join('');
+
+    container.innerHTML =
+      '<div style="padding:1.5rem">' +
+      '<div class="admin-table-wrap">' +
+        '<table class="admin-tabla">' +
+          '<thead><tr><th>Empleado</th><th>Local</th><th style="text-align:center">Saldo banco</th></tr></thead>' +
+          '<tbody>' + filas + '</tbody>' +
+        '</table>' +
+      '</div>' +
+      '</div>';
+  } catch(e) {
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
+  }
+}
+
+async function cargarBancoHorasEmpleado(nombreEmp) {
+  const container = document.getElementById('evTabBancoHoras');
+  if (!container) return;
+  try {
+    const resp = await fetch(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    container.innerHTML = renderBancoHorasHTML(json);
+  } catch(e) {
+    container.innerHTML = '<p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p>';
+  }
+}
+
+async function cargarBancoHorasDetalleAdmin(nombreEmp) {
+  const container = document.getElementById('bancoHorasAdminContent_inner');
+  if (!container) return;
+  container.innerHTML = '<p style="color:#94a3b8;font-size:13px">Cargando...</p>';
+  try {
+    const resp = await fetch(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    container.innerHTML = renderBancoHorasHTML(json);
+  } catch(e) {
+    container.innerHTML = '<p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p>';
+  }
+}
+
+function renderBancoHorasHTML(data) {
+  const saldo = typeof data.saldo_hs === 'number' ? data.saldo_hs.toFixed(1) : '—';
+  const saldoColor = data.saldo_hs > 0 ? '#059669' : data.saldo_hs < 0 ? '#dc2626' : '#374151';
+  const movs = data.movimientos || [];
+
+  const rows = movs.length
+    ? movs.map(function(m) {
+        const tipoColor = m.tipo === 'ACREDITO' ? '#059669' : '#dc2626';
+        const tipoLabel = m.tipo === 'ACREDITO' ? '+' + parseFloat(m.hs).toFixed(1) : '-' + parseFloat(m.hs).toFixed(1);
+        return '<tr>' +
+          '<td>' + (m.fecha_movimiento || '—') + '</td>' +
+          '<td style="color:' + tipoColor + ';font-weight:600">' + tipoLabel + ' hs</td>' +
+          '<td style="font-size:12px;color:#64748b">' + (m.concepto || '—') + '</td>' +
+          '<td style="font-size:12px;color:#94a3b8">' + (m.fecha_referencia || '—') + '</td>' +
+        '</tr>';
+      }).join('')
+    : '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin movimientos</td></tr>';
+
+  return '<div style="display:grid;grid-template-columns:1fr;gap:1rem;margin-bottom:1.5rem">' +
+    '<div class="detalle-stat"><span class="detalle-stat-val" style="color:' + saldoColor + '">' + saldo + ' hs</span><span class="detalle-stat-lbl">Saldo banco</span></div>' +
+  '</div>' +
+  '<h4 style="font-size:13px;font-weight:600;color:#374151;margin-bottom:0.75rem">Movimientos</h4>' +
+  '<div class="admin-table-wrap">' +
+    '<table class="admin-tabla">' +
+      '<thead><tr><th>Fecha</th><th>Monto</th><th>Concepto</th><th>Fecha ref.</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>' +
+  '</div>';
 }
 
 // ══════════════════════════════════════════════════════
