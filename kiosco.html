@@ -547,7 +547,10 @@ function renderEmpleados() {
       `<div class="emp-avatar">${avatarHTML}</div>` +
       `<div class="emp-nombre">${emp.nombre}</div>`;
 
-    btn.addEventListener('click', () => seleccionarEmpleado(emp));
+    btn.addEventListener('click', () => {
+      usuariosSel = emp;
+      mostrarFormulario();
+    });
     grid.appendChild(btn);
   });
 }
