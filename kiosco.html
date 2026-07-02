@@ -56,11 +56,11 @@
     .status-label { font-size: 12px; color: rgba(255,255,255,.55); white-space: nowrap; }
 
     /* ── SPLASH ── */
-    #splash { position:fixed; inset:0; background:#0d0d0d; display:flex; align-items:center; justify-content:center; z-index:99999; transition:opacity .6s ease; }
+    #splash { position:fixed; inset:0; background:#0d0d0d; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; z-index:99999; transition:opacity .6s ease; }
     #splash.hide { opacity:0; pointer-events:none; }
-    #splash .splash-inner { animation:splashIn .65s cubic-bezier(.39,.575,.565,1) both; }
-    @keyframes splashIn { 0%{opacity:0;transform:scale(.85)} 100%{opacity:1;transform:scale(1)} }
-    #splash img { width:280px; height:auto; display:block; }
+    #splash img { width:80px; height:80px; object-fit:contain; animation:splashLogoIn .7s cubic-bezier(.39,.575,.565,1) both; }
+    #splash span { font-family:var(--font-display); font-size:36px; letter-spacing:6px; color:#fff; animation:splashLogoIn .7s .15s cubic-bezier(.39,.575,.565,1) both; }
+    @keyframes splashLogoIn { 0%{opacity:0;transform:scale(.85)} 100%{opacity:1;transform:scale(1)} }
 
     /* ── SCREENS ── */
     .screen { display: none; }
@@ -318,9 +318,8 @@
 
 <!-- SPLASH -->
 <div id="splash">
-  <div class="splash-inner">
-    <img src="logocromapp.png" alt="Croma">
-  </div>
+  <img src="tridente_solo.png" alt="Croma">
+  <span>CROMA</span>
 </div>
 
 <!-- TOPBAR -->
