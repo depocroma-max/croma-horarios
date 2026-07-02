@@ -65,6 +65,14 @@
       cursor: pointer; transition: border-color .15s, background .15s; white-space: nowrap;
     }
     .tb-btn:hover { border-color: #666; background: #1a1a1a; }
+    .tb-date {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: rgba(255,255,255,.55); white-space: nowrap;
+    }
+    .tb-date::before {
+      content: ''; display: inline-block; width: 7px; height: 7px;
+      border-radius: 50%; background: #22c55e; flex-shrink: 0;
+    }
     .tb-badge {
       padding: 4px 12px; border: 1px solid #3a3a3a; border-radius: 8px;
       font-size: 10px; font-weight: 700; letter-spacing: 2px;
@@ -337,8 +345,12 @@
   </div>
   <div class="tb-clock" id="tbClock"></div>
   <div class="tb-actions">
-
+    <span class="tb-date" id="tbDate"></span>
     <span class="tb-badge">Kiosco</span>
+    <button class="tb-btn" onclick="window.location.href='https://depocroma-max.github.io/Croma-app/'" title="Volver al hub">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Hub</span>
+    </button>
   </div>
 </header>
 
@@ -526,6 +538,15 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 15000);
+
+// ── FECHA ──
+(function() {
+  const n = new Date();
+  const dias  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  document.getElementById('tbDate').textContent =
+    dias[n.getDay()] + ' ' + n.getDate() + ' ' + meses[n.getMonth()] + ' ' + n.getFullYear();
+})();
 
 // ── INIT ──
 (async function init() {
