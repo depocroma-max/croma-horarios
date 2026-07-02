@@ -55,6 +55,15 @@
     .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
     .status-label { font-size: 12px; color: rgba(255,255,255,.55); white-space: nowrap; }
 
+    /* ── SPLASH ── */
+    #splash { position:fixed; inset:0; background:#0d0d0d; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; z-index:99999; transition:opacity .6s ease; }
+    #splash.hide { opacity:0; pointer-events:none; }
+    #splash .splash-inner { animation:splashIn .65s cubic-bezier(.39,.575,.565,1) both; display:flex; flex-direction:column; align-items:center; gap:16px; }
+    @keyframes splashIn { 0%{opacity:0;transform:scale(.85)} 100%{opacity:1;transform:scale(1)} }
+    #splash img { height:72px; width:auto; filter:drop-shadow(0 0 16px rgba(232,37,26,.4)); }
+    #splash .splash-txt { font-family:var(--font-display); font-size:32px; letter-spacing:6px; color:#fff; }
+    #splash .splash-badge { font-family:var(--font-display); font-size:12px; letter-spacing:4px; color:#e8251a; margin-top:-8px; }
+
     /* ── SCREENS ── */
     .screen { display: none; }
     .screen.active { display: block; }
@@ -309,6 +318,15 @@
 </head>
 <body>
 
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-inner">
+    <img src="tridente_solo.png" alt="Croma">
+    <div class="splash-txt">CROMA</div>
+    <div class="splash-badge">KIOSCO</div>
+  </div>
+</div>
+
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="brand">
@@ -517,6 +535,15 @@ let countdownTimer = null;
     dias[n.getDay()] + ' ' + n.getDate() + ' ' + meses[n.getMonth()] + ' ' + n.getFullYear();
 })();
 
+function hideSplash() {
+  const s = document.getElementById('splash');
+  if (!s) return;
+  setTimeout(function() {
+    s.classList.add('hide');
+    setTimeout(function() { s.style.display = 'none'; }, 600);
+  }, 1000);
+}
+
 // ── INIT ──
 (async function init() {
   const params  = new URLSearchParams(window.location.search);
@@ -524,6 +551,7 @@ let countdownTimer = null;
   sucursal = SUCURSALES.find(s => s.id === localId) || null;
 
   if (!sucursal) {
+    hideSplash();
     renderSucGrid();
     mostrarScreen('screenSucursal');
     return;
@@ -533,6 +561,7 @@ let countdownTimer = null;
   document.getElementById('topbarSuc').textContent = sucursal.nombre;
 
   await cargarTodo();
+  hideSplash();
 })();
 
 function irASelectorSucursal() {
