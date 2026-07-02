@@ -157,23 +157,17 @@
       margin-top: 36px; display: flex; flex-direction: column;
       align-items: center; gap: 12px;
     }
-    .no-encontre {
-      display: flex; align-items: center; gap: 12px;
-      background: var(--white); border: 1px solid var(--gray-200);
-      border-radius: 14px; padding: 14px 18px;
-      font-size: 13px; max-width: 420px; width: 100%;
-    }
-    .no-encontre strong { font-size: 13px; font-weight: 600; display: block; margin-bottom: 2px; }
-    .no-encontre p { color: var(--gray-600); font-size: 12px; }
     .btn-externo {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 24px; border: 1.5px solid var(--gray-200);
-      border-radius: 12px; background: var(--white);
-      font-family: var(--font-body); font-size: 14px; font-weight: 500;
-      color: var(--gray-600); cursor: pointer;
-      transition: border-color .15s, color .15s, box-shadow .15s;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 22px; border: none;
+      border-radius: 999px; background: var(--black);
+      font-family: var(--font-body); font-size: 13px; font-weight: 600;
+      color: var(--white); cursor: pointer; letter-spacing: .2px;
+      transition: background .15s, transform .1s, box-shadow .15s;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
     }
-    .btn-externo:hover { border-color: var(--black); color: var(--black); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .btn-externo:hover { background: #222; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,.22); }
+    .btn-externo:active { transform: scale(.98); }
 
     /* ── FORMULARIO ── */
     .form-wrap { width: 100%; max-width: 480px; margin: 0 auto; padding: 32px 20px 80px; }
@@ -375,25 +369,18 @@
     <div class="emp-header">
       <div class="page-title">SELECCIONÁ TU NOMBRE</div>
       <p class="page-sub" style="margin-bottom:16px">Tocá tu foto para registrar la jornada</p>
-      <div class="emp-count-pill">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span id="empCountTxt">—</span>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+        <div class="emp-count-pill">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span id="empCountTxt">—</span>
+        </div>
+        <button class="btn-externo" onclick="mostrarScreen('screenExterno')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Vendedor Externo
+        </button>
       </div>
     </div>
     <div class="emp-grid" id="empGrid"></div>
-    <div class="emp-footer">
-      <div class="no-encontre">
-        <span style="font-size:22px">👆</span>
-        <div>
-          <strong>¿No encontrás tu nombre?</strong>
-          <p>Avisá a tu encargado para que te agregue al sistema.</p>
-        </div>
-      </div>
-      <button class="btn-externo" onclick="mostrarScreen('screenExterno')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Soy Vendedor Externo
-      </button>
-    </div>
   </div>
 </div>
 
