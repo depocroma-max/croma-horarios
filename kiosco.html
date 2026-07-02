@@ -555,8 +555,8 @@ function hideSplash() {
   document.title = 'Croma · Kiosco ' + sucursal.nombre;
   document.getElementById('topbarSuc').textContent = sucursal.nombre;
 
-  await cargarTodo();
   hideSplash();
+  await cargarTodo();
 })();
 
 function irASelectorSucursal() {
