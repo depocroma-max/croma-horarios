@@ -3343,6 +3343,20 @@ async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
   }
 }
 
+// Lleva al empleado logueado a fichar.html (check-in con GPS) sin re-loguear:
+// escribe la sesión en el formato que espera fichar.html y navega.
+function irAFicharEmpleado() {
+  try {
+    const ses = {
+      nombre:         sesionActual.nombre,
+      rol:            sesionActual.rol || 'empleado',
+      empleadoNombre: sesionActual.empleadoNombre || sesionActual.nombre,
+    };
+    localStorage.setItem('croma_session', JSON.stringify(ses));
+  } catch(e) {}
+  window.location.href = 'fichar.html';
+}
+
 function mostrarVistaEmpleado() {
   const nombreEmp = sesionActual.empleadoNombre;
   if (!nombreEmp) {
@@ -3692,6 +3706,11 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           ${getProximoTurno()}
         </div>
       </section>
+
+      <button onclick="irAFicharEmpleado()" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin:0 0 1rem;padding:16px;border:none;border-radius:16px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(5,150,105,.28);letter-spacing:.2px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        Registrar mi jornada
+      </button>
 
       <section class="portal-summary-grid">
         <div class="portal-summary-card">
