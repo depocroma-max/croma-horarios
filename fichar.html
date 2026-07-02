@@ -461,27 +461,10 @@
       </label>
     </div>
     <div class="recup-fecha" id="recupWrap">
-      <div class="field">
-        <label for="campoHsRecup">Horas a recuperar</label>
-        <input type="number" id="campoHsRecup" min="0.5" max="24" step="0.5"
-          placeholder="Ej: 2" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-family:var(--font-body);font-size:15px;background:var(--gray-50);outline:none" />
-      </div>
-      <div class="field">
-        <label>Destino de las horas</label>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-            <input type="radio" name="destinoRecup" id="destinoBanco" value="BANCO" checked
-              onchange="onDestinoChange()" style="accent-color:var(--black);width:16px;height:16px" />
-            Banco de horas
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px">
-            <input type="radio" name="destinoRecup" id="destinoFecha" value="FECHA"
-              onchange="onDestinoChange()" style="accent-color:var(--black);width:16px;height:16px" />
-            Cubrir un día específico
-          </label>
-        </div>
-      </div>
-      <div class="field" id="recupFechaWrap" style="display:none;margin-bottom:0">
+      <input type="hidden" id="destinoFecha" value="FECHA" />
+      <input type="hidden" id="destinoBanco" value="BANCO" />
+      <input type="hidden" id="campoHsRecup" value="0" />
+      <div class="field" id="recupFechaWrap" style="margin-bottom:0">
         <label for="campoFechaRecup">Fecha que recuperás</label>
         <input type="date" id="campoFechaRecup" />
       </div>
@@ -833,18 +816,11 @@ function onToggleRecup() {
   const on = document.getElementById('toggleRecup').checked;
   document.getElementById('recupWrap').classList.toggle('visible', on);
   if (!on) {
-    document.getElementById('campoHsRecup').value = '';
     document.getElementById('campoFechaRecup').value = '';
-    document.getElementById('destinoBanco').checked = true;
-    document.getElementById('recupFechaWrap').style.display = 'none';
   }
 }
 
-function onDestinoChange() {
-  const esFecha = document.getElementById('destinoFecha').checked;
-  document.getElementById('recupFechaWrap').style.display = esFecha ? '' : 'none';
-  if (!esFecha) document.getElementById('campoFechaRecup').value = '';
-}
+function onDestinoChange() {}
 
 async function enviarFichada() {
   const fecha    = document.getElementById('campoFecha').value;
@@ -852,14 +828,12 @@ async function enviarFichada() {
   const salida   = document.getElementById('campoSalida').value;
   const nota     = document.getElementById('campoNota').value.trim();
   const esRecup  = document.getElementById('toggleRecup').checked;
-  const hsRecup  = parseFloat(document.getElementById('campoHsRecup').value) || 0;
-  const destino  = document.querySelector('input[name="destinoRecup"]:checked')?.value || 'BANCO';
+  const destino  = 'FECHA';
   const fechaRec = document.getElementById('campoFechaRecup').value;
 
   if (!entrada) { alert('Completá la hora de entrada.'); return; }
   if (!salida)  { alert('Completá la hora de salida.'); return; }
-  if (esRecup && !hsRecup) { alert('Indicá cuántas horas recuperás.'); return; }
-  if (esRecup && destino === 'FECHA' && !fechaRec) { alert('Indicá qué fecha recuperás.'); return; }
+  if (esRecup && !fechaRec) { alert('Indicá qué fecha recuperás.'); return; }
 
   const btn = document.getElementById('btnSubmit');
   btn.disabled = true; btn.textContent = 'Guardando...';
@@ -874,10 +848,10 @@ async function enviarFichada() {
     hora_entrada:       entrada,
     hora_salida:        salida,
     nota,
-    tipo_registro:      esRecup ? 'RECUPERACION' : 'NORMAL',
-    hs_a_recuperar:     esRecup ? hsRecup : 0,
-    destino_recuperacion: esRecup ? destino : '',
-    fecha_a_recuperar:  (esRecup && destino === 'FECHA') ? fechaRec : '',
+    tipo_registro:        esRecup ? 'RECUPERACION' : 'NORMAL',
+    hs_a_recuperar:       0,
+    destino_recuperacion: esRecup ? 'FECHA' : '',
+    fecha_a_recuperar:    esRecup ? fechaRec : '',
     modo_carga:         'INDIVIDUAL',
     lat:                geoPos ? geoPos.lat         : '',
     lon:                geoPos ? geoPos.lon         : '',
@@ -893,27 +867,13 @@ async function enviarFichada() {
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
 
-    // 2. Si es recuperación al banco, acreditar
-    if (esRecup && destino === 'BANCO' && hsRecup > 0) {
-      await fetch(`${APPS_SCRIPT_URL}?accion=acreditarBanco`, {
-        method: 'POST', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          empleado:         empNombre,
-          hs:               hsRecup,
-          fecha_referencia: fecha,
-          concepto:         `Recuperación del turno del ${fecha}`,
-        }),
-      });
-    }
 
     // Pantalla de éxito
     const [anio, mes, dia] = fecha.split('-').map(Number);
     const fechaObj = new Date(anio, mes - 1, dia);
     let detalle = `<strong>${empNombre}</strong><br>` +
       `${DIAS_ES[fechaObj.getDay()]} ${dia} de ${MESES_ES[mes-1]} — ${entrada} a ${salida}`;
-    if (esRecup && destino === 'BANCO') {
-      detalle += `<br><small>${hsRecup}h acreditadas al banco de horas</small>`;
-    } else if (esRecup && destino === 'FECHA') {
+    if (esRecup) {
       detalle += `<br><small>Recuperación para el ${fechaRec}</small>`;
     }
     document.getElementById('okDetalle').innerHTML = detalle;
@@ -951,6 +911,16 @@ async function cargarHistorial(empNombre) {
     const resp = await fetch(url);
     const json = await resp.json();
     if (!json.ok || !json.fichadas.length) return;
+
+    // Bloquear si ya hay fichada completa de hoy
+    const fechaHoy = hoy();
+    const fichadaHoy = json.fichadas.find(f => f.fecha === fechaHoy && f.hora_salida);
+    if (fichadaHoy) {
+      document.getElementById('btnSubmit').disabled = true;
+      document.getElementById('submitHint').textContent =
+        `Ya registraste tu turno de hoy (${fichadaHoy.hora_entrada} – ${fichadaHoy.hora_salida}).`;
+      document.getElementById('submitHint').style.color = '#dc2626';
+    }
 
     const wrap = document.getElementById('historialWrap');
     const list = document.getElementById('historialList');
