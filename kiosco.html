@@ -159,14 +159,13 @@
     }
     .btn-externo {
       display: inline-flex; align-items: center; gap: 8px;
-      padding: 10px 22px; border: none;
-      border-radius: 999px; background: var(--black);
-      font-family: var(--font-body); font-size: 13px; font-weight: 600;
-      color: var(--white); cursor: pointer; letter-spacing: .2px;
-      transition: background .15s, transform .1s, box-shadow .15s;
-      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+      padding: 8px 18px; border: 1.5px solid var(--gray-200);
+      border-radius: 999px; background: var(--white);
+      font-family: var(--font-body); font-size: 13px; font-weight: 500;
+      color: var(--black); cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
     }
-    .btn-externo:hover { background: #222; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,.22); }
+    .btn-externo:hover { border-color: var(--black); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
     .btn-externo:active { transform: scale(.98); }
 
     /* ── FORMULARIO ── */
