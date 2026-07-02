@@ -3268,10 +3268,16 @@ async function cargarDatosEmpleado() {
 
 async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
   try {
+    // Filtrar por empleado del lado del servidor: baja el payload de "toda
+    // la hoja" a solo las filas de este empleado (mucho más rápido).
+    const nombreEmp = sesionActual?.empleadoNombre || sesionActual?.nombre || '';
+    const urlHorarios = `${url}?accion=horarios` +
+      (nombreEmp ? '&empleado=' + encodeURIComponent(nombreEmp) : '');
+
     const [, , horariosResp] = await Promise.allSettled([
       cargarPerfiles(),
       cargarCertificados(),
-      fetch(`${url}?accion=horarios`).then(r => {
+      fetch(urlHorarios).then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }),

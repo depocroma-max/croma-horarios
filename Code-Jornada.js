@@ -703,7 +703,7 @@ function buildEmailEvento({ titulo, rangoFechas, descripcion, destinatarioLabel,
 function doGet(e) {
   const accion = e.parameter.accion || '';
 
-  if (accion === 'horarios')            return getHorarios();
+  if (accion === 'horarios')            return getHorarios(e);
   if (accion === 'perfiles')            return getPerfiles();
   if (accion === 'guardar_perfil')      return guardarPerfil(e);
   if (accion === 'guardar_categoria')   return guardarCategoria(e);
@@ -738,11 +738,17 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function getHorarios() {
+function getHorarios(e) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   const hoja  = ss.getSheetByName('DATOS GENERALES');
   const datos = hoja.getDataRange().getValues();
   const filas = datos.slice(1);
+
+  // Filtro opcional por empleado (para la vista de un solo empleado).
+  // Reduce muchísimo el payload y el tiempo de respuesta.
+  const filtroEmp = (e && e.parameter && e.parameter.empleado)
+    ? String(e.parameter.empleado).trim().toLowerCase()
+    : '';
 
   // Columnas (0-indexed):
   // A=0 LOCAL  B=1 AÑO  C=2 MES  D=3 DIA(texto)  E=4 MARCA_TEMPORAL
@@ -750,6 +756,7 @@ function getHorarios() {
 
   const registros = filas
     .filter(f => f[0] && f[5])
+    .filter(f => !filtroEmp || String(f[5]).trim().toLowerCase() === filtroEmp)
     .map(f => {
       // Día del mes desde MARCA_TEMPORAL (columna E)
       let diaMes = 0;
