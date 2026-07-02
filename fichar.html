@@ -114,40 +114,55 @@
 
     /* ── SELECTOR DE SUCURSAL ── */
     #screenSucursal {
-      padding: 24px 16px; width: 100%; max-width: 480px;
+      padding: 24px 16px 40px; width: 100%; max-width: 480px;
+    }
+    .suc-head { text-align: center; margin-bottom: 24px; }
+    .suc-head-icon {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: #fef2f2; color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      margin: 8px auto 16px;
     }
     .suc-sel-title {
-      font-family: var(--font-display); font-size: 26px; letter-spacing: 1px;
-      margin-bottom: 4px;
+      font-family: var(--font-display); font-size: 34px; letter-spacing: 1px;
+      margin-bottom: 6px; text-transform: uppercase; line-height: 1;
     }
-    .suc-sel-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 20px; }
-    .suc-list { display: flex; flex-direction: column; gap: 10px; }
+    .suc-sel-sub { font-size: 14px; color: var(--gray-600); }
+    .suc-list { display: flex; flex-direction: column; gap: 12px; }
     .suc-item {
       display: flex; align-items: center; gap: 14px;
-      background: var(--white); border: 1.5px solid var(--gray-200);
-      border-radius: var(--radius-md); padding: 14px 16px;
-      cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .1s;
-      text-align: left;
+      background: var(--white); border: none;
+      border-radius: 16px; padding: 14px 16px 14px 14px;
+      cursor: pointer; transition: box-shadow .15s, transform .1s;
+      text-align: left; box-shadow: 0 2px 10px rgba(0,0,0,.06);
     }
-    .suc-item:hover { border-color: var(--black); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .suc-item:hover { box-shadow: 0 6px 18px rgba(0,0,0,.10); }
     .suc-item:active { transform: scale(.99); }
     .suc-item.bloqueada { opacity: .55; cursor: not-allowed; }
-    .suc-item.bloqueada:hover { border-color: var(--gray-200); box-shadow: none; }
+    .suc-item.bloqueada:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); }
     .suc-item.bloqueada:active { transform: none; }
-    .suc-color-bar { width: 4px; border-radius: 2px; align-self: stretch; flex-shrink: 0; }
-    .suc-info { flex: 1; }
-    .suc-nombre { font-size: 14px; font-weight: 600; }
-    .suc-dist   { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+    .suc-color-bar { width: 4px; border-radius: 4px; align-self: stretch; flex-shrink: 0; }
+    .suc-icon {
+      width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .suc-info { flex: 1; min-width: 0; }
+    .suc-nombre { font-family: var(--font-display); font-size: 21px; letter-spacing: .5px; }
+    .suc-dist   { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--gray-400); margin-top: 2px; }
     .suc-dist.cerca { color: var(--green); font-weight: 500; }
     .suc-dist.lejos { color: var(--accent); }
-    .suc-dist.sin-geo { color: var(--gray-400); font-style: italic; }
-    .suc-badge {
-      font-size: 10px; font-weight: 700; letter-spacing: .5px;
-      padding: 3px 8px; border-radius: 10px; flex-shrink: 0;
+    .suc-dist.sin-geo { color: var(--gray-400); }
+    .suc-chevron {
+      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+      background: var(--gray-100); color: var(--gray-600);
+      display: flex; align-items: center; justify-content: center;
     }
-    .suc-badge.ok  { background: #dcfce7; color: var(--green); }
-    .suc-badge.no  { background: #fee2e2; color: var(--accent); }
-    .suc-badge.na  { background: var(--gray-100); color: var(--gray-600); }
+    .suc-foot {
+      display: flex; align-items: center; gap: 8px; justify-content: center;
+      margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--gray-200);
+      font-size: 13px; color: var(--gray-600); text-align: left;
+    }
+    .suc-foot svg { color: var(--gray-400); flex-shrink: 0; }
 
     /* ── GEO STATUS ── */
     #screenGeo {
@@ -184,12 +199,19 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ── FORMULARIO ── */
-    #screenForm { padding: 24px 16px; width: 100%; max-width: 480px; }
+    #screenForm { padding: 24px 16px 40px; width: 100%; max-width: 480px; }
     .form-header {
-      display: flex; flex-direction: column; gap: 2px;
-      margin-bottom: 20px;
+      display: flex; flex-direction: column; gap: 10px;
+      margin-bottom: 24px;
     }
-    .form-emp  { font-family: var(--font-display); font-size: 24px; letter-spacing: 1px; }
+    .fh-top { display: flex; align-items: center; gap: 12px; }
+    .fh-num {
+      font-family: var(--font-display); font-size: 40px; line-height: .9;
+      color: var(--accent); letter-spacing: 1px; flex-shrink: 0;
+    }
+    .fh-name { font-family: var(--font-display); font-size: 30px; letter-spacing: 1px; line-height: 1; }
+    .fh-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .fh-meta .geo-badge { margin-top: 0; }
     .form-suc  {
       display: inline-flex; align-items: center; gap: 6px;
       font-size: 12px; font-weight: 500; letter-spacing: 1px;
@@ -213,9 +235,56 @@
       box-shadow: 0 1px 4px rgba(0,0,0,.06);
     }
     .form-card-title {
-      font-size: 11px; font-weight: 600; letter-spacing: 2px;
-      color: var(--gray-400); text-transform: uppercase;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+      color: var(--black); text-transform: uppercase;
       margin-bottom: 16px;
+    }
+    .card-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 9px;
+      background: #fef2f2; color: var(--accent); flex-shrink: 0;
+    }
+    .opcional-tag { color: var(--gray-400); font-weight: 500; letter-spacing: 1px; }
+
+    /* fecha */
+    .fecha-box {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; background: var(--gray-50);
+      border: 1px solid var(--gray-200); border-radius: var(--radius-md);
+    }
+    .fecha-txt { display: flex; flex-direction: column; gap: 2px; }
+    .fecha-hoy { font-size: 12px; color: var(--gray-400); }
+    .fecha-full { font-family: var(--font-display); font-size: 19px; letter-spacing: .5px; text-transform: uppercase; }
+    .fecha-cal { color: var(--gray-400); flex-shrink: 0; }
+
+    /* time inputs */
+    .time-wrap { position: relative; }
+    .time-wrap input[type="time"] {
+      width: 100%; padding: 13px 34px 13px 14px;
+      border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
+      font-family: var(--font-display); font-size: 22px; letter-spacing: 1px;
+      color: var(--black); background: var(--white); outline: none;
+      transition: border-color .15s; -webkit-appearance: none; appearance: none;
+    }
+    .time-wrap input[type="time"]:focus { border-color: var(--black); }
+    .time-wrap input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0; position: absolute; right: 0; width: 100%; height: 100%; cursor: pointer; }
+    .time-wrap input[type="time"]::-webkit-inner-spin-button,
+    .time-wrap input[type="time"]::-webkit-clear-button { display: none; -webkit-appearance: none; }
+    .time-chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--accent); pointer-events: none; }
+
+    /* total */
+    .total-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--gray-100);
+    }
+    .total-right { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .total-unit { font-size: 13px; color: var(--gray-400); font-weight: 500; }
+    .valido-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; font-weight: 600; color: var(--green);
+      background: #dcfce7; padding: 3px 10px; border-radius: 20px;
+      align-self: center; margin-left: 4px;
     }
     .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
     .field:last-child { margin-bottom: 0; }
@@ -241,8 +310,8 @@
       border: 1.5px solid var(--gray-200);
       margin-top: 12px;
     }
-    .total-label { font-size: 12px; color: var(--gray-600); font-weight: 500; }
-    .total-val   { font-size: 20px; font-weight: 700; font-family: var(--font-display); letter-spacing: 1px; }
+    .total-label { font-size: 14px; color: var(--gray-600); font-weight: 500; }
+    .total-val   { font-size: 30px; font-weight: 700; font-family: var(--font-display); letter-spacing: 1px; line-height: 1; }
 
     /* toggle recuperación */
     .toggle-row {
@@ -274,17 +343,18 @@
 
     /* submit */
     .btn-submit {
-      width: 100%; padding: 14px;
-      background: var(--black); color: var(--white);
-      border: none; border-radius: var(--radius-md);
-      font-family: var(--font-body); font-size: 15px; font-weight: 600;
+      width: 100%; margin-top: 20px; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 17px; background: var(--black); color: var(--white);
+      border: none; border-radius: 16px;
+      font-family: var(--font-body); font-size: 16px; font-weight: 600;
       cursor: pointer; letter-spacing: .3px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
       transition: background .15s, transform .1s;
-      margin-bottom: 8px;
     }
     .btn-submit:hover:not(:disabled) { background: #222; }
     .btn-submit:active:not(:disabled) { transform: scale(.99); }
-    .btn-submit:disabled { background: var(--gray-400); cursor: not-allowed; }
+    .btn-submit:disabled { background: var(--gray-400); cursor: not-allowed; box-shadow: none; }
     .submit-hint { font-size: 11px; color: var(--gray-400); text-align: center; }
 
     /* ── ÉXITO ── */
@@ -387,9 +457,18 @@
 
 <!-- SELECTOR DE SUCURSAL -->
 <section class="screen" id="screenSucursal">
-  <div class="suc-sel-title">¿En qué sucursal estás?</div>
-  <div class="suc-sel-sub" id="sucSelSub">Seleccioná el local donde vas a cargar el turno.</div>
+  <div class="suc-head">
+    <div class="suc-head-icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    </div>
+    <div class="suc-sel-title">¿En qué sucursal estás?</div>
+    <div class="suc-sel-sub" id="sucSelSub">Seleccioná el local donde vas a cargar el turno.</div>
+  </div>
   <div class="suc-list" id="sucList"></div>
+  <div class="suc-foot">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    <span>El GPS se activará automáticamente al llegar al local.</span>
+  </div>
 </section>
 
 <!-- GEO CHECKING -->
@@ -410,46 +489,76 @@
 <!-- FORMULARIO -->
 <section class="screen" id="screenForm">
   <div class="form-header">
-    <span class="form-emp" id="formEmpNombre"></span>
-    <span class="form-suc" id="formSucursal"><span class="suc-dot" id="formSucDot"></span><span id="formSucNombre"></span></span>
-    <div class="geo-badge ok" id="formGeoBadge">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-      <span id="formGeoDist"></span>
+    <div class="fh-top">
+      <span class="fh-num" id="formEmpNum"></span>
+      <span class="fh-name" id="formEmpNombre"></span>
+    </div>
+    <div class="fh-meta">
+      <span class="form-suc" id="formSucursal"><span class="suc-dot" id="formSucDot"></span><span id="formSucNombre"></span></span>
+      <div class="geo-badge ok" id="formGeoBadge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span id="formGeoDist"></span>
+      </div>
     </div>
   </div>
 
   <!-- FECHA -->
   <div class="form-card">
-    <div class="form-card-title">Fecha del turno</div>
-    <div class="total-display">
-      <span class="total-label">Hoy</span>
-      <span class="total-val" id="fechaHoyDisplay" style="font-size:16px;letter-spacing:.5px"></span>
+    <div class="form-card-title">
+      <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+      Fecha del turno
+    </div>
+    <div class="fecha-box">
+      <div class="fecha-txt">
+        <span class="fecha-hoy">Hoy</span>
+        <span class="fecha-full" id="fechaHoyDisplay"></span>
+      </div>
+      <svg class="fecha-cal" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     </div>
     <input type="hidden" id="campoFecha" />
   </div>
 
   <!-- HORAS -->
   <div class="form-card">
-    <div class="form-card-title">Horario</div>
+    <div class="form-card-title">
+      <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+      Horario
+    </div>
     <div class="horas-row">
       <div class="field">
         <label for="campoEntrada">Entrada</label>
-        <input type="time" id="campoEntrada" />
+        <div class="time-wrap">
+          <input type="time" id="campoEntrada" />
+          <svg class="time-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
       <div class="field">
         <label for="campoSalida">Salida</label>
-        <input type="time" id="campoSalida" />
+        <div class="time-wrap">
+          <input type="time" id="campoSalida" />
+          <svg class="time-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
     </div>
-    <div class="total-display">
+    <div class="total-row">
       <span class="total-label">Total</span>
-      <span class="total-val" id="totalHs">—</span>
+      <div class="total-right">
+        <span class="total-val" id="totalHs">—</span>
+        <span class="total-unit">hs</span>
+        <span class="valido-badge" id="validoBadge" style="display:none">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="8 12 11 15 16 9"/></svg>
+          Válido
+        </span>
+      </div>
     </div>
   </div>
 
   <!-- TIPO / RECUPERACIÓN -->
   <div class="form-card">
-    <div class="form-card-title">Tipo de registro</div>
+    <div class="form-card-title">
+      <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></span>
+      Tipo de registro
+    </div>
     <div class="toggle-row">
       <div>
         <div class="toggle-label">Estoy recuperando horas</div>
@@ -473,14 +582,20 @@
 
   <!-- NOTA -->
   <div class="form-card">
-    <div class="form-card-title">Nota adicional</div>
+    <div class="form-card-title">
+      <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+      Nota adicional <span class="opcional-tag">(opcional)</span>
+    </div>
     <div class="field" style="margin-bottom:0">
-      <label for="campoNota">Observaciones (opcional)</label>
+      <label for="campoNota">Observaciones</label>
       <textarea id="campoNota" placeholder="Ej: corte de luz, carga tarde, etc."></textarea>
     </div>
   </div>
 
-  <button class="btn-submit" id="btnSubmit" onclick="enviarFichada()">Guardar turno</button>
+  <button class="btn-submit" id="btnSubmit" onclick="enviarFichada()">
+    <span>Guardar turno</span>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e8251a" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+  </button>
   <p class="submit-hint" id="submitHint"></p>
 
   <!-- HISTORIAL -->
@@ -662,6 +777,17 @@ async function cargarSucursalYGeo() {
 }
 
 // ── SELECTOR DE SUCURSAL ──
+const SUC_ICONOS = {
+  '01':      '<path d="M3 21h18"/><path d="M4 21v-11l8-5l8 5v11"/><path d="M9 21v-6h6v6"/>',
+  '05':      '<path d="M3 12c2 0 3-2 4.5-2s2.5 2 4.5 2 3-2 4.5-2 2.5 2 4.5 2"/><path d="M3 17c2 0 3-2 4.5-2s2.5 2 4.5 2 3-2 4.5-2 2.5 2 4.5 2"/>',
+  '09':      '<path d="M6 2l-2 5v13a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-13l-2-5z"/><path d="M4 7h16"/><path d="M15 11a3 3 0 0 1-6 0"/>',
+  '10':      '<path d="M4 21v-13l8-4l8 4v13"/><path d="M4 21h16"/><path d="M9 21v-8h6v8"/>',
+  '12':      '<circle cx="7" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2l2.4 12h11l2-8h-14.5"/>',
+  '14':      '<path d="M3 20h18l-9-15z"/><path d="M9.5 13.5l2.5-4l2.5 4"/>',
+  'DEPO':    '<path d="M12 3l8 4.5v9l-8 4.5l-8-4.5v-9z"/><path d="M12 12l8-4.5"/><path d="M12 12v9.5"/><path d="M12 12l-8-4.5"/>',
+  'OFICINA': '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7v-2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+};
+
 function mostrarSelectorSucursal() {
   const list = document.getElementById('sucList');
   list.innerHTML = '';
@@ -686,26 +812,26 @@ function mostrarSelectorSucursal() {
     item.className = 'suc-item';
     item.dataset.sucId = suc.id;
 
+    const pin = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
     let distHTML = '';
-    let badgeHTML = '';
     if (dist === null) {
-      distHTML  = `<div class="suc-dist sin-geo">Sin GPS</div>`;
-      badgeHTML = `<span class="suc-badge na">?</span>`;
+      distHTML = `<div class="suc-dist sin-geo">${pin}Sin GPS</div>`;
     } else if (dentro) {
-      distHTML  = `<div class="suc-dist cerca">${dist} m — estás acá</div>`;
-      badgeHTML = `<span class="suc-badge ok">OK</span>`;
+      distHTML = `<div class="suc-dist cerca">${pin}${dist} m — estás acá</div>`;
     } else {
-      distHTML  = `<div class="suc-dist lejos">${dist} m</div>`;
-      badgeHTML = `<span class="suc-badge no">Lejos</span>`;
+      distHTML = `<div class="suc-dist lejos">${pin}${dist} m</div>`;
     }
+
+    const iconSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SUC_ICONOS[suc.id] || ''}</svg>`;
 
     item.innerHTML =
       `<div class="suc-color-bar" style="background:${suc.color}"></div>` +
+      `<div class="suc-icon" style="background:${suc.color}1a;color:${suc.color}">${iconSvg}</div>` +
       `<div class="suc-info">` +
         `<div class="suc-nombre">${suc.nombre}</div>` +
         distHTML +
       `</div>` +
-      badgeHTML;
+      `<span class="suc-chevron"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg></span>`;
 
     item.addEventListener('click', () => elegirSucursal(suc, geo, dist, dentro));
     list.appendChild(item);
@@ -794,8 +920,10 @@ function cromaConfirm(titulo, mensaje) {
 async function mostrarFormulario() {
   const empNombre = sesion.empleadoNombre || sesion.nombre;
 
-  // Completar cabecera
-  document.getElementById('formEmpNombre').textContent = empNombre;
+  // Completar cabecera — separar número de vendedor del nombre
+  const mNum = String(empNombre).match(/^(\d+)\s+(.+)$/);
+  document.getElementById('formEmpNum').textContent    = mNum ? mNum[1] : '';
+  document.getElementById('formEmpNombre').textContent = mNum ? mNum[2] : empNombre;
 
   let sucNombre = '—'; let sucColor = '#888';
   if (sucursalGeo) {
@@ -840,14 +968,24 @@ function hoy() {
 function calcularTotal() {
   const entrada = document.getElementById('campoEntrada').value;
   const salida  = document.getElementById('campoSalida').value;
-  if (!entrada || !salida) { document.getElementById('totalHs').textContent = '—'; return; }
+  const totalEl  = document.getElementById('totalHs');
+  const unitEl   = document.querySelector('.total-unit');
+  const badgeEl  = document.getElementById('validoBadge');
+  if (!entrada || !salida) {
+    totalEl.textContent = '—';
+    if (unitEl)  unitEl.style.display = 'none';
+    if (badgeEl) badgeEl.style.display = 'none';
+    return;
+  }
   const [he, me] = entrada.split(':').map(Number);
   const [hs, ms] = salida.split(':').map(Number);
   let mins = (hs * 60 + ms) - (he * 60 + me);
   if (mins < 0) mins += 1440;
   const hrs = Math.floor(mins / 60);
   const rem = mins % 60;
-  document.getElementById('totalHs').textContent = rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+  totalEl.textContent = `${hrs}:${String(rem).padStart(2,'0')}`;
+  if (unitEl)  unitEl.style.display = '';
+  if (badgeEl) badgeEl.style.display = mins > 0 ? '' : 'none';
 }
 
 function onToggleRecup() {
