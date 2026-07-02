@@ -159,13 +159,14 @@
     }
     .btn-externo {
       display: inline-flex; align-items: center; gap: 8px;
-      padding: 8px 18px; border: 1.5px solid var(--gray-200);
-      border-radius: 999px; background: var(--white);
-      font-family: var(--font-body); font-size: 13px; font-weight: 500;
-      color: var(--black); cursor: pointer;
-      transition: border-color .15s, box-shadow .15s;
+      padding: 8px 20px; border: none;
+      border-radius: 999px; background: var(--black);
+      font-family: var(--font-body); font-size: 13px; font-weight: 600;
+      color: var(--white); cursor: pointer; letter-spacing: .2px;
+      transition: background .15s, transform .1s, box-shadow .15s;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
     }
-    .btn-externo:hover { border-color: var(--black); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .btn-externo:hover { background: #222; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,.22); }
     .btn-externo:active { transform: scale(.98); }
 
     /* ── FORMULARIO ── */
@@ -372,6 +373,10 @@
         <div class="emp-count-pill">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span id="empCountTxt">—</span>
+        </div>
+        <div class="emp-count-pill">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="empSucTxt">—</span>
         </div>
         <button class="btn-externo" onclick="mostrarScreen('screenExterno')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -630,7 +635,8 @@ function renderEmpleados() {
     .sort(function(a,b) { return a.nombre.localeCompare(b.nombre); });
 
   document.getElementById('empCountTxt').textContent =
-    locales.length + ' empleado' + (locales.length !== 1 ? 's' : '') + ' · ' + sucursal.nombre;
+    locales.length + ' empleado' + (locales.length !== 1 ? 's' : '');
+  document.getElementById('empSucTxt').textContent = sucursal.nombre;
 
   document.getElementById('empGrid').innerHTML    = locales.map(function(e)  { return buildCard(e, false); }).join('');
   document.getElementById('empGridExt').innerHTML = externos.map(function(e) { return buildCard(e, true);  }).join('');
