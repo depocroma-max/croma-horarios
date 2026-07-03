@@ -590,7 +590,7 @@ function estadoEmpleado(nombre) {
 
 function statusBadge(nombre, externo) {
   const est = estadoEmpleado(nombre);
-  if (est === 'completa')  return '<span class="badge badge-success">' + icon('circleCheck') + 'Completa</span>';
+  if (est === 'completa')  return '<span class="badge badge-success">' + icon('circleCheck') + 'Jornada iniciada</span>';
   if (est === 'pendiente') return '<span class="badge badge-warning">' + icon('clock') + 'Pendiente salida</span>';
   if (externo) {
     const emp    = todosEmpleados.find(function(e) { return e.nombre === nombre; });
