@@ -346,6 +346,9 @@
     .recup-fecha { margin-top: 12px; display: none; }
     .recup-fecha.visible { display: block; }
 
+    .nota-wrap { display: none; }
+    .nota-wrap.visible { display: block; }
+
     /* submit */
     .btn-submit {
       width: 100%; margin-top: 20px; margin-bottom: 8px;
@@ -585,15 +588,25 @@
     </div>
   </div>
 
-  <!-- NOTA -->
+  <!-- NOTA (colapsada por defecto) -->
   <div class="form-card">
-    <div class="form-card-title">
-      <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-      Nota adicional <span class="opcional-tag">(opcional)</span>
+    <div class="toggle-row" style="padding:0;border:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+        <div>
+          <div class="toggle-label">Nota adicional</div>
+          <div class="toggle-sub">Agregar observación al turno</div>
+        </div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggleNota" onchange="onToggleNota()" />
+        <span class="toggle-slider"></span>
+      </label>
     </div>
-    <div class="field" style="margin-bottom:0">
-      <label for="campoNota">Observaciones</label>
-      <textarea id="campoNota" placeholder="Ej: corte de luz, carga tarde, etc."></textarea>
+    <div class="nota-wrap" id="notaWrap">
+      <div class="field" style="margin-top:14px;margin-bottom:0">
+        <textarea id="campoNota" placeholder="Ej: corte de luz, carga tarde, etc."></textarea>
+      </div>
     </div>
   </div>
 
@@ -1003,13 +1016,20 @@ function onToggleRecup() {
   }
 }
 
+function onToggleNota() {
+  const on = document.getElementById('toggleNota').checked;
+  document.getElementById('notaWrap').classList.toggle('visible', on);
+  if (on) setTimeout(function() { document.getElementById('campoNota').focus(); }, 50);
+}
+
 function onDestinoChange() {}
 
 async function enviarFichada() {
   const fecha    = document.getElementById('campoFecha').value;
   const entrada  = document.getElementById('campoEntrada').value;
   const salida   = document.getElementById('campoSalida').value;
-  const nota     = document.getElementById('campoNota').value.trim();
+  const notaActiva = document.getElementById('toggleNota').checked;
+  const nota     = notaActiva ? document.getElementById('campoNota').value.trim() : '';
   const esRecup  = document.getElementById('toggleRecup').checked;
   const destino  = 'FECHA';
   const fechaRec = document.getElementById('campoFechaRecup').value;
@@ -1077,6 +1097,8 @@ function nuevoTurno() {
     `${DIAS_ES[_fObj.getDay()]} ${_d} de ${MESES_ES[_m - 1]}`;
   document.getElementById('campoEntrada').value  = '';
   document.getElementById('campoSalida').value   = '';
+  document.getElementById('toggleNota').checked  = false;
+  document.getElementById('notaWrap').classList.remove('visible');
   document.getElementById('campoNota').value     = '';
   document.getElementById('toggleRecup').checked = false;
   document.getElementById('recupFechaWrap').classList.remove('visible');
