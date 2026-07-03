@@ -117,34 +117,26 @@
     }
     .emp-card:hover  { box-shadow: 0 8px 24px rgba(0,0,0,.10); transform: translateY(-3px); border-color: var(--gray-200); }
     .emp-card:active { transform: scale(.97); }
+    .emp-card-photo-wrap { padding: 10px 10px 0; }
     .emp-card-photo {
       width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block;
-      background: var(--gray-100);
+      background: var(--gray-100); border-radius: 10px;
     }
     .emp-card-placeholder {
-      width: 100%; aspect-ratio: 1/1;
+      width: 100%; aspect-ratio: 1/1; border-radius: 10px;
       background: var(--gray-100);
       display: flex; align-items: center; justify-content: center;
       font-family: var(--font-display); font-size: 38px; color: var(--gray-400);
     }
-    .emp-card-body { padding: 12px 14px 14px; }
+    .emp-card-body { padding: 10px 12px 14px; }
     .emp-card-num {
-      display: inline-block;
-      background: var(--accent); color: var(--white);
-      font-size: 11px; font-weight: 700; letter-spacing: .5px;
-      padding: 2px 8px; border-radius: 6px; margin-bottom: 6px;
+      display: inline-flex; align-items: center;
+      background: var(--gray-100); color: var(--gray-600);
+      font-size: 10px; font-weight: 700; letter-spacing: .5px;
+      padding: 2px 8px; border-radius: 20px; margin-bottom: 6px;
     }
-    .emp-card-name { font-family: var(--font-display); font-size: 20px; letter-spacing: .5px; line-height: 1.15; margin-bottom: 3px; }
-    .emp-card-cat  { font-size: 12px; color: var(--gray-600); margin-bottom: 8px; }
-    .emp-card-status {
-      display: inline-flex; align-items: center; gap: 5px;
-      font-size: 11px; font-weight: 600;
-      padding: 3px 9px; border-radius: 20px;
-    }
-    .st-ok   { background: #dcfce7; color: #15803d; }
-    .st-pend { background: #fef3c7; color: #b45309; }
-    .st-ext  { background: #ede9fe; color: #6d28d9; }
-    .st-dot  { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .emp-card-name { font-family: var(--font-display); font-size: 20px; letter-spacing: .5px; line-height: 1.15; margin-bottom: 4px; }
+    .emp-card-cat  { font-size: 12px; color: var(--gray-600); margin-bottom: 7px; }
     .emp-card::after {
       content: ''; position: absolute; bottom: 0; left: 0; right: 0;
       height: 3px; background: transparent; border-radius: 0 0 18px 18px;
@@ -300,10 +292,14 @@
       .topbar { padding: 0 14px; }
       .tb-clock { display: none; }
       .tb-btn span { display: none; }
-      .emp-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-      .emp-wrap { padding: 24px 14px 60px; }
+      .emp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .emp-wrap { padding: 20px 12px 60px; }
       .form-wrap { padding: 20px 14px 60px; }
       .page-title { font-size: 30px; }
+      .emp-card-photo-wrap { padding: 8px 8px 0; }
+      .emp-card-num { font-size: 9px; padding: 2px 6px; }
+      .emp-card-name { font-size: 18px; }
+      .emp-card-body { padding: 8px 10px 12px; }
     }
   </style>
 </head>
@@ -594,12 +590,12 @@ function estadoEmpleado(nombre) {
 
 function statusBadge(nombre, externo) {
   const est = estadoEmpleado(nombre);
-  if (est === 'completa')  return '<span class="emp-card-status st-ok"><span class="st-dot"></span>Jornada registrada</span>';
-  if (est === 'pendiente') return '<span class="emp-card-status st-pend"><span class="st-dot"></span>Pendiente de salida</span>';
+  if (est === 'completa')  return '<span class="badge badge-success">' + icon('circleCheck') + 'Completa</span>';
+  if (est === 'pendiente') return '<span class="badge badge-warning">' + icon('clock') + 'Pendiente salida</span>';
   if (externo) {
-    const emp   = todosEmpleados.find(function(e) { return e.nombre === nombre; });
+    const emp    = todosEmpleados.find(function(e) { return e.nombre === nombre; });
     const sucExt = emp ? SUCURSALES.find(function(s) { return s.id === emp.sucursal_id; }) : null;
-    return '<span class="emp-card-status st-ext"><span class="st-dot"></span>' + (sucExt ? sucExt.nombre : 'Externo') + '</span>';
+    return '<span class="badge badge-neutral">' + (sucExt ? sucExt.nombre : 'Externo') + '</span>';
   }
   return '';
 }
@@ -617,7 +613,7 @@ function buildCard(emp, externo) {
   const nombreEsc = emp.nombre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
   return '<div class="emp-card" data-nombre="' + emp.nombre.replace(/"/g,'&quot;') + '">' +
-    fotoHTML +
+    '<div class="emp-card-photo-wrap">' + fotoHTML + '</div>' +
     '<div class="emp-card-body">' +
       (num ? '<div class="emp-card-num">#' + num + '</div>' : '') +
       '<div class="emp-card-name">' + nombre + '</div>' +
