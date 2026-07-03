@@ -1,7 +1,9 @@
-const CACHE = 'croma-v4';
+const CACHE = 'croma-v5';
 const ASSETS = [
   '/',
   '/index.html',
+  '/croma-ds.css',
+  '/croma-icons.js',
   '/style.css',
   '/app.js',
   '/tridente_solo.png',
