@@ -651,8 +651,8 @@ document.addEventListener('click', function(ev) {
 function seleccionarEmpleado(emp) {
   if (estadoEmpleado(emp.nombre) === 'completa') {
     const nombre = emp.nombre.replace(/^\d+\s*/, '');
-    alert(nombre + ' ya tiene el turno de hoy registrado completo.');
-    return;
+    const ok = confirm(nombre + ' ya tiene un turno activo registrado hoy.\n¿Querés cargar otro turno?');
+    if (!ok) return;
   }
   usuariosSel = emp;
   mostrarFormulario();
