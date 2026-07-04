@@ -607,6 +607,7 @@ async function cargarTodo() {
 
     renderEmpleados();
     mostrarScreen('screenEmpleados');
+    iniciarAutoRefresh();
   } catch(err) {
     // Si ya mostramos la grilla desde caché, no la tapamos con el error.
     if (!tieneCache) {
@@ -615,6 +616,48 @@ async function cargarTodo() {
     }
   }
 }
+
+// ── AUTO-REFRESH ──
+// Mantiene el kiosko actualizado sin recargar la página. Refresca en silencio
+// y solo repinta la grilla si el usuario la está viendo (no interrumpe si
+// alguien está cargando un turno o en la pantalla de OK).
+let autoRefreshTimer = null;
+function iniciarAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(refrescarDatos, 3 * 60 * 1000);
+}
+
+async function refrescarDatos() {
+  if (!sucursal) return;
+  try {
+    const [respPerf, respFich] = await Promise.all([
+      fetch(APPS_SCRIPT_URL + '?accion=perfiles'),
+      fetch(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
+    ]);
+    const [jsonPerf, jsonFich] = await Promise.all([respPerf.json(), respFich.json()]);
+
+    const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
+    if (emps.length) {
+      todosEmpleados = emps;
+      try { localStorage.setItem(CACHE_PERFILES, JSON.stringify(emps)); } catch(e) {}
+    }
+    fichadasHoy = jsonFich.ok ? (jsonFich.fichadas || []) : fichadasHoy;
+    try { localStorage.setItem(cacheFichadasKey(), JSON.stringify(fichadasHoy)); } catch(e) {}
+
+    // Solo repintar si está a la vista la grilla, para no cortar una carga.
+    if (document.getElementById('screenEmpleados').classList.contains('active')) {
+      renderEmpleados();
+    }
+  } catch(e) {}
+}
+
+// Al volver a primer plano (pestaña activa de nuevo), refrescar enseguida.
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden && sucursal &&
+      document.getElementById('screenEmpleados').classList.contains('active')) {
+    refrescarDatos();
+  }
+});
 
 // ── ESTADO ──
 function estadoEmpleado(nombre) {
