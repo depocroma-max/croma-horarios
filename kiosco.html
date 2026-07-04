@@ -561,8 +561,28 @@ function renderSucGrid() {
 }
 
 // ── CARGA ──
+const CACHE_PERFILES = 'croma_kiosco_perfiles';
+
 async function cargarTodo() {
-  mostrarScreen('screenLoading');
+  // 1. Pintar la grilla YA desde caché (los perfiles casi no cambian).
+  //    Los badges de "jornada iniciada" se completan cuando llegan las
+  //    fichadas de hoy, un ratito después.
+  let tieneCache = false;
+  try {
+    const cache = localStorage.getItem(CACHE_PERFILES);
+    if (cache) {
+      todosEmpleados = JSON.parse(cache) || [];
+      if (todosEmpleados.length) {
+        renderEmpleados();
+        mostrarScreen('screenEmpleados');
+        tieneCache = true;
+      }
+    }
+  } catch(e) {}
+
+  if (!tieneCache) mostrarScreen('screenLoading');
+
+  // 2. Refrescar en paralelo (perfiles frescos + fichadas de hoy).
   try {
     const [respPerf, respFich] = await Promise.all([
       fetch(APPS_SCRIPT_URL + '?accion=perfiles'),
@@ -570,14 +590,21 @@ async function cargarTodo() {
     ]);
     const [jsonPerf, jsonFich] = await Promise.all([respPerf.json(), respFich.json()]);
 
-    todosEmpleados = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
-    fichadasHoy    = jsonFich.ok ? (jsonFich.fichadas || []) : [];
+    const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
+    if (emps.length) {
+      todosEmpleados = emps;
+      try { localStorage.setItem(CACHE_PERFILES, JSON.stringify(emps)); } catch(e) {}
+    }
+    fichadasHoy = jsonFich.ok ? (jsonFich.fichadas || []) : [];
 
     renderEmpleados();
     mostrarScreen('screenEmpleados');
   } catch(err) {
-    document.getElementById('errMsg').textContent = 'Error al cargar datos: ' + err.message;
-    mostrarScreen('screenError');
+    // Si ya mostramos la grilla desde caché, no la tapamos con el error.
+    if (!tieneCache) {
+      document.getElementById('errMsg').textContent = 'Error al cargar datos: ' + err.message;
+      mostrarScreen('screenError');
+    }
   }
 }
 
