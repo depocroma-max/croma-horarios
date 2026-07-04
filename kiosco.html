@@ -562,16 +562,23 @@ function renderSucGrid() {
 
 // ── CARGA ──
 const CACHE_PERFILES = 'croma_kiosco_perfiles';
+// Las fichadas se cachean por sucursal + fecha, así se descartan solas cada día.
+function cacheFichadasKey() {
+  const now = new Date();
+  const fecha = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  return 'croma_kiosco_fichadas_' + (sucursal ? sucursal.id : '') + '_' + fecha;
+}
 
 async function cargarTodo() {
-  // 1. Pintar la grilla YA desde caché (los perfiles casi no cambian).
-  //    Los badges de "jornada iniciada" se completan cuando llegan las
-  //    fichadas de hoy, un ratito después.
+  // 1. Pintar la grilla YA desde caché (perfiles + fichadas de hoy si son
+  //    de esta sucursal y de hoy). Se refresca todo por atrás igual.
   let tieneCache = false;
   try {
-    const cache = localStorage.getItem(CACHE_PERFILES);
-    if (cache) {
-      todosEmpleados = JSON.parse(cache) || [];
+    const cachePerf = localStorage.getItem(CACHE_PERFILES);
+    const cacheFich = localStorage.getItem(cacheFichadasKey());
+    if (cachePerf) {
+      todosEmpleados = JSON.parse(cachePerf) || [];
+      fichadasHoy    = cacheFich ? (JSON.parse(cacheFich) || []) : [];
       if (todosEmpleados.length) {
         renderEmpleados();
         mostrarScreen('screenEmpleados');
@@ -596,6 +603,7 @@ async function cargarTodo() {
       try { localStorage.setItem(CACHE_PERFILES, JSON.stringify(emps)); } catch(e) {}
     }
     fichadasHoy = jsonFich.ok ? (jsonFich.fichadas || []) : [];
+    try { localStorage.setItem(cacheFichadasKey(), JSON.stringify(fichadasHoy)); } catch(e) {}
 
     renderEmpleados();
     mostrarScreen('screenEmpleados');
@@ -839,6 +847,7 @@ async function enviarFichada() {
       (esRecup ? '<br><small>Recuperación del ' + fechaRec + '</small>' : '');
 
     fichadasHoy.push({ empleado: usuariosSel.nombre, hora_entrada: entrada, hora_salida: salida });
+    try { localStorage.setItem(cacheFichadasKey(), JSON.stringify(fichadasHoy)); } catch(e) {}
 
     mostrarScreen('screenOk');
     iniciarCountdown(8);
