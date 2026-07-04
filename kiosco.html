@@ -647,11 +647,49 @@ document.addEventListener('click', function(ev) {
   if (emp) seleccionarEmpleado(emp);
 });
 
+// ── MODAL CROMA (confirmación con estilo) ──
+function cromaConfirm(titulo, mensaje) {
+  return new Promise(resolve => {
+    if (!document.getElementById('cromaConfirmStyles')) {
+      const st = document.createElement('style');
+      st.id = 'cromaConfirmStyles';
+      st.textContent =
+        '@keyframes cfadein{from{opacity:0}to{opacity:1}}' +
+        '@keyframes cpop{from{opacity:0;transform:scale(.92) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}';
+      document.head.appendChild(st);
+    }
+
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(13,13,13,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:24px;animation:cfadein .2s ease;';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:22px;max-width:360px;width:100%;padding:26px 24px 20px;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:cpop .22s cubic-bezier(.22,1,.36,1);">' +
+        '<div style="width:52px;height:52px;border-radius:14px;background:#fef2f2;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">' +
+          '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e8251a" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>' +
+        '</div>' +
+        '<h3 style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:#0d0d0d;margin:0 0 6px;">' + titulo + '</h3>' +
+        '<p style="font-family:\'DM Sans\',sans-serif;font-size:14px;color:#64748b;line-height:1.5;margin:0 0 22px;">' + mensaje + '</p>' +
+        '<div style="display:flex;gap:10px;">' +
+          '<button id="cfNo" style="flex:1;padding:13px;border:1.5px solid #e8e8e4;border-radius:12px;background:#fff;font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:500;color:#64748b;cursor:pointer;">Cancelar</button>' +
+          '<button id="cfYes" style="flex:1;padding:13px;border:none;border-radius:12px;background:#0d0d0d;font-family:\'DM Sans\',sans-serif;font-size:14px;font-weight:600;color:#fff;cursor:pointer;">Sí, cargar otro</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+
+    const close = (val) => { ov.remove(); resolve(val); };
+    ov.querySelector('#cfNo').onclick  = () => close(false);
+    ov.querySelector('#cfYes').onclick = () => close(true);
+    ov.onclick = (e) => { if (e.target === ov) close(false); };
+  });
+}
+
 // ── SELECCIÓN ──
-function seleccionarEmpleado(emp) {
+async function seleccionarEmpleado(emp) {
   if (estadoEmpleado(emp.nombre) === 'completa') {
     const nombre = emp.nombre.replace(/^\d+\s*/, '');
-    const ok = confirm(nombre + ' ya tiene un turno activo registrado hoy.\n¿Querés cargar otro turno?');
+    const ok = await cromaConfirm(
+      'Turno activo',
+      '<strong>' + nombre + '</strong> ya tiene un turno registrado hoy. ¿Querés cargar otro turno?'
+    );
     if (!ok) return;
   }
   usuariosSel = emp;
