@@ -343,9 +343,9 @@
 <div class="screen-flex" id="screenError">
   <div class="err-card">
     <div class="err-icon">⚠️</div>
-    <div class="err-title">Sin configuración</div>
+    <div class="err-title" id="errTitle">Sin configuración</div>
     <div class="err-msg" id="errMsg">Usá la URL con el parámetro del local, por ejemplo:<br><br><code>kiosco.html?local=05</code></div>
-    <button class="btn-submit" style="margin-top:28px" onclick="irASelectorSucursal()">Seleccionar sucursal</button>
+    <button class="btn-submit" id="errBtn" style="margin-top:28px" onclick="irASelectorSucursal()">Seleccionar sucursal</button>
   </div>
 </div>
 
@@ -560,6 +560,27 @@ function renderSucGrid() {
   }).join('');
 }
 
+// Fetch resistente a los hipos de Apps Script: valida la respuesta y reintenta
+// un par de veces. A veces GAS devuelve una página HTML de error en vez de JSON
+// (típico "Unexpected token '<'"), y un reintento suele resolverlo.
+async function fetchJSON(url, intentos) {
+  intentos = intentos || 3;
+  let ultimoError;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const resp = await fetch(url);
+      const txt  = (await resp.text()).trim();
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      if (txt[0] !== '{' && txt[0] !== '[') throw new Error('El servidor no respondió datos válidos');
+      return JSON.parse(txt);
+    } catch(e) {
+      ultimoError = e;
+      if (i < intentos - 1) await new Promise(function(r) { setTimeout(r, 800 * (i + 1)); });
+    }
+  }
+  throw ultimoError;
+}
+
 // ── CARGA ──
 const CACHE_PERFILES = 'croma_kiosco_perfiles';
 // Las fichadas se cachean por sucursal + fecha, así se descartan solas cada día.
@@ -591,11 +612,10 @@ async function cargarTodo() {
 
   // 2. Refrescar en paralelo (perfiles frescos + fichadas de hoy).
   try {
-    const [respPerf, respFich] = await Promise.all([
-      fetch(APPS_SCRIPT_URL + '?accion=perfiles'),
-      fetch(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
+    const [jsonPerf, jsonFich] = await Promise.all([
+      fetchJSON(APPS_SCRIPT_URL + '?accion=perfiles'),
+      fetchJSON(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
     ]);
-    const [jsonPerf, jsonFich] = await Promise.all([respPerf.json(), respFich.json()]);
 
     const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
     if (emps.length) {
@@ -611,7 +631,12 @@ async function cargarTodo() {
   } catch(err) {
     // Si ya mostramos la grilla desde caché, no la tapamos con el error.
     if (!tieneCache) {
-      document.getElementById('errMsg').textContent = 'Error al cargar datos: ' + err.message;
+      document.getElementById('errTitle').textContent = 'No se pudo cargar';
+      document.getElementById('errMsg').textContent =
+        'El servidor no respondió bien (' + err.message + '). Suele ser momentáneo — tocá reintentar.';
+      const btn = document.getElementById('errBtn');
+      btn.textContent = 'Reintentar';
+      btn.onclick = cargarTodo;
       mostrarScreen('screenError');
     }
   }
@@ -630,11 +655,10 @@ function iniciarAutoRefresh() {
 async function refrescarDatos() {
   if (!sucursal) return;
   try {
-    const [respPerf, respFich] = await Promise.all([
-      fetch(APPS_SCRIPT_URL + '?accion=perfiles'),
-      fetch(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
+    const [jsonPerf, jsonFich] = await Promise.all([
+      fetchJSON(APPS_SCRIPT_URL + '?accion=perfiles'),
+      fetchJSON(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
     ]);
-    const [jsonPerf, jsonFich] = await Promise.all([respPerf.json(), respFich.json()]);
 
     const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
     if (emps.length) {
