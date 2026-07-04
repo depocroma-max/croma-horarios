@@ -388,6 +388,7 @@
     .ok-title { font-family: var(--font-display); font-size: 30px; letter-spacing: 1px; margin-bottom: 8px; }
     .ok-detail { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 28px; }
     .ok-actions { display: flex; flex-direction: column; gap: 10px; }
+    .ok-redirect { font-size: 13px; color: var(--gray-400); font-weight: 500; }
     .btn-outline {
       padding: 11px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
       background: none; font-family: var(--font-body); font-size: 14px;
@@ -634,8 +635,8 @@
     <div class="ok-title">Turno guardado</div>
     <div class="ok-detail" id="okDetalle"></div>
     <div class="ok-actions">
-      <button class="btn-primary" onclick="nuevoTurno()">Cargar otro turno</button>
-      <button class="btn-outline" onclick="window.location.href='index.html'">Ir a Horarios</button>
+      <div class="ok-redirect" id="okRedirect">Volviendo a Horarios…</div>
+      <button class="btn-outline" onclick="irAHorarios()">Ir ahora</button>
     </div>
   </div>
 </section>
@@ -1122,11 +1123,37 @@ async function enviarFichada() {
     }
     document.getElementById('okDetalle').innerHTML = detalle;
     mostrarScreen('screenOk');
+    iniciarRedireccion();
 
   } catch(err) {
     alert('No se pudo guardar el turno. Verificá tu conexión e intentá de nuevo.\n(' + err.message + ')');
     btn.disabled = false; btn.textContent = 'Guardar turno';
   }
+}
+
+// Tras guardar: muestra el mensaje 3s y vuelve solo a Horarios.
+// La recarga completa de index.html trae los datos frescos, así la jornada
+// del empleado queda actualizada con lo que acaba de cargar.
+let redireccionTimer = null;
+function iniciarRedireccion() {
+  if (redireccionTimer) clearInterval(redireccionTimer);
+  let restante = 3;
+  const el = document.getElementById('okRedirect');
+  if (el) el.textContent = `Volviendo a Horarios en ${restante}s…`;
+  redireccionTimer = setInterval(function() {
+    restante--;
+    if (restante <= 0) {
+      clearInterval(redireccionTimer);
+      irAHorarios();
+      return;
+    }
+    if (el) el.textContent = `Volviendo a Horarios en ${restante}s…`;
+  }, 1000);
+}
+
+function irAHorarios() {
+  if (redireccionTimer) clearInterval(redireccionTimer);
+  window.location.href = 'index.html';
 }
 
 function nuevoTurno() {
@@ -1156,15 +1183,24 @@ async function cargarHistorial(empNombre) {
     const url  = `${APPS_SCRIPT_URL}?accion=get_fichadas_empleado&empleado=${encodeURIComponent(empNombre)}`;
     const resp = await fetch(url);
     const json = await resp.json();
-    if (!json.ok || !json.fichadas.length) return;
+    if (!json.ok || !json.fichadas || !json.fichadas.length) return;
+
+    // El backend manda 'fecha' como "Sat Jul 04" (sin año). Usamos 'marca'
+    // (timestamp ISO) para obtener la fecha real YYYY-MM-DD.
+    const fechaISO = f => {
+      if (!f.marca) return '';
+      const dt = new Date(f.marca);
+      if (isNaN(dt)) return '';
+      return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    };
 
     // Bloquear si ya hay fichada completa de hoy
     const fechaHoy = hoy();
-    const fichadaHoy = json.fichadas.find(f => f.fecha === fechaHoy && f.hora_salida);
+    const fichadaHoy = json.fichadas.find(f => fechaISO(f) === fechaHoy && f.salida);
     if (fichadaHoy) {
       document.getElementById('btnSubmit').disabled = true;
       document.getElementById('submitHint').textContent =
-        `Ya registraste tu turno de hoy (${fichadaHoy.hora_entrada} – ${fichadaHoy.hora_salida}).`;
+        `Ya registraste tu turno de hoy (${fichadaHoy.entrada} – ${fichadaHoy.salida}).`;
       document.getElementById('submitHint').style.color = '#dc2626';
     }
 
@@ -1172,11 +1208,14 @@ async function cargarHistorial(empNombre) {
     const list = document.getElementById('historialList');
     list.innerHTML = '';
     json.fichadas.slice(0, 10).forEach(f => {
-      const [a, m, d] = f.fecha.split('-');
+      const iso = fechaISO(f);
+      const fechaTxt = iso
+        ? (() => { const [a, m, d] = iso.split('-'); return `${d}/${m}/${a}`; })()
+        : (f.fecha || '');
       const li = document.createElement('div');
       li.className = 'hist-item';
       li.innerHTML =
-        `<span class="hist-fecha">${d}/${m}/${a}</span>` +
+        `<span class="hist-fecha">${fechaTxt}</span>` +
         `<span class="hist-horas">${f.entrada} – ${f.salida}</span>` +
         `<span class="hist-badge ${f.tipo === 'NORMAL' ? 'normal' : ''}">${f.tipo === 'RECUPERACION' ? 'RECUP' : f.tipo}</span>` +
         `<span class="hist-total">${f.total}h</span>`;
