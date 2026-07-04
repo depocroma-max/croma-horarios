@@ -757,42 +757,39 @@ async function arrancarConSesion() {
 }
 
 async function cargarSucursalYGeo() {
+  // Todo en paralelo: los dos fetch y el GPS son independientes entre sí,
+  // así no esperamos uno atrás del otro.
+
   // 1. Perfil del empleado para saber su sucursal asignada
-  try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=perfiles`);
-    const json = await resp.json();
-    const empNombre = sesion.empleadoNombre || sesion.nombre;
-    const perfil = (json.empleados || []).find(e =>
-      e.nombre.toLowerCase() === empNombre.toLowerCase()
-    );
-    if (perfil) sesion.sucursalId = perfil.sucursal_id;
-  } catch(e) {}
+  const pPerfil = fetch(`${APPS_SCRIPT_URL}?accion=perfiles`)
+    .then(r => r.json())
+    .then(json => {
+      const empNombre = sesion.empleadoNombre || sesion.nombre;
+      const perfil = (json.empleados || []).find(e =>
+        e.nombre.toLowerCase() === empNombre.toLowerCase()
+      );
+      if (perfil) sesion.sucursalId = perfil.sucursal_id;
+    })
+    .catch(() => {});
 
   // 2. Cargar todas las coordenadas geo
-  try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=get_sucursales_geo`);
-    const json = await resp.json();
-    sucursalesGeo = json.sucursales || [];
-  } catch(e) {}
+  const pGeo = fetch(`${APPS_SCRIPT_URL}?accion=get_sucursales_geo`)
+    .then(r => r.json())
+    .then(json => { sucursalesGeo = json.sucursales || []; })
+    .catch(() => {});
 
-  // 3. Obtener geolocalización
-  if (!navigator.geolocation) {
-    geoPos = null;
-    mostrarSelectorSucursal();
-    return;
-  }
+  // 3. Obtener geolocalización (reutiliza un fix reciente si lo hay)
+  const pGps = new Promise(resolve => {
+    if (!navigator.geolocation) { geoPos = null; return resolve(); }
+    navigator.geolocation.getCurrentPosition(
+      pos => { geoPos = { lat: pos.coords.latitude, lon: pos.coords.longitude }; resolve(); },
+      () => { geoPos = null; resolve(); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
 
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      geoPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-      mostrarSelectorSucursal();
-    },
-    () => {
-      geoPos = null;
-      mostrarSelectorSucursal();
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
+  await Promise.all([pPerfil, pGeo, pGps]);
+  mostrarSelectorSucursal();
 }
 
 // ── SELECTOR DE SUCURSAL ──
