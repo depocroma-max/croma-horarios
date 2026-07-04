@@ -208,6 +208,7 @@
     .form-header {
       display: flex; flex-direction: column; gap: 10px;
       margin-bottom: 24px;
+      width: 100%;
     }
     .fh-top { display: flex; align-items: center; gap: 12px; }
     .fh-num {
@@ -232,6 +233,7 @@
     .geo-badge.err { background: #fee2e2; color: var(--accent); }
 
     .form-card {
+      width: 100%;
       background: var(--white);
       border: 1px solid var(--gray-200);
       border-radius: var(--radius-lg);
@@ -536,14 +538,14 @@
       <div class="field">
         <label for="campoEntrada">Entrada</label>
         <div class="time-wrap">
-          <input type="time" id="campoEntrada" />
+          <input type="time" id="campoEntrada" step="1800" />
           <svg class="time-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
       <div class="field">
         <label for="campoSalida">Salida</label>
         <div class="time-wrap">
-          <input type="time" id="campoSalida" />
+          <input type="time" id="campoSalida" step="1800" />
           <svg class="time-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
@@ -996,9 +998,12 @@ async function mostrarFormulario() {
   document.getElementById('fechaHoyDisplay').textContent =
     `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
 
-  // Calcular total en tiempo real
+  // Calcular total en tiempo real (redondeando a :00 o :30)
   ['campoEntrada','campoSalida'].forEach(id =>
-    document.getElementById(id).addEventListener('change', calcularTotal)
+    document.getElementById(id).addEventListener('change', function() {
+      snapMedia(this);
+      calcularTotal();
+    })
   );
 
   mostrarScreen('screenForm');
@@ -1008,6 +1013,17 @@ async function mostrarFormulario() {
 function hoy() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Redondea el valor de un <input type="time"> al :00 o :30 más cercano.
+function snapMedia(el) {
+  if (!el.value) return;
+  const [h, m] = el.value.split(':').map(Number);
+  let total = h * 60 + Math.round(m / 30) * 30;   // redondea a la media hora
+  total = ((total % 1440) + 1440) % 1440;         // wrap 24hs
+  const hh = String(Math.floor(total / 60)).padStart(2, '0');
+  const mm = String(total % 60).padStart(2, '0');
+  el.value = `${hh}:${mm}`;
 }
 
 function calcularTotal() {

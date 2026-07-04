@@ -424,11 +424,11 @@
       <div class="horas-row">
         <div class="field">
           <label for="campoEntrada">Entrada</label>
-          <input type="time" id="campoEntrada" />
+          <input type="time" id="campoEntrada" step="1800" />
         </div>
         <div class="field">
           <label for="campoSalida">Salida</label>
-          <input type="time" id="campoSalida" />
+          <input type="time" id="campoSalida" step="1800" />
         </div>
       </div>
       <div class="total-display">
@@ -725,11 +725,27 @@ function mostrarFormulario() {
 
   ['campoEntrada','campoSalida'].forEach(function(id) {
     const el = document.getElementById(id);
-    el.removeEventListener('change', calcularTotal);
-    el.addEventListener('change', calcularTotal);
+    el.removeEventListener('change', onCambioHora);
+    el.addEventListener('change', onCambioHora);
   });
 
   mostrarScreen('screenForm');
+}
+
+// Redondea el valor de un <input type="time"> al :00 o :30 más cercano.
+function snapMedia(el) {
+  if (!el.value) return;
+  const parts = el.value.split(':').map(Number);
+  let total = parts[0] * 60 + Math.round(parts[1] / 30) * 30;
+  total = ((total % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(total / 60)).padStart(2, '0');
+  const mm = String(total % 60).padStart(2, '0');
+  el.value = hh + ':' + mm;
+}
+
+function onCambioHora() {
+  snapMedia(this);
+  calcularTotal();
 }
 
 function calcularTotal() {
