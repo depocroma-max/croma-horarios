@@ -142,6 +142,27 @@ let filtrosDia = {
 // URL fija del Apps Script (no requiere configuración manual)
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
 
+// Fetch resistente a los hipos de Apps Script: valida la respuesta y reintenta
+// un par de veces. Google a veces devuelve una página HTML (404/echo) en vez de
+// JSON — típico "Unexpected token '<'" — y un reintento suele resolverlo.
+async function fetchJSONretry(url, intentos) {
+  intentos = intentos || 3;
+  let ultimoError;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const resp = await fetch(url);
+      const txt  = (await resp.text()).trim();
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      if (txt[0] !== '{' && txt[0] !== '[') throw new Error('El servidor no respondió datos válidos');
+      return JSON.parse(txt);
+    } catch (e) {
+      ultimoError = e;
+      if (i < intentos - 1) await new Promise(function(r) { setTimeout(r, 800 * (i + 1)); });
+    }
+  }
+  throw ultimoError;
+}
+
 // Claves de localStorage para URLs de Apps Script
 const LS_URLS_KEY = 'croma_horarios_urls';
 
@@ -2189,9 +2210,7 @@ async function cargarPerfiles() {
   if (!url) return;
 
   try {
-    const resp = await fetch(`${url}?accion=perfiles`);
-    if (!resp.ok) return;
-    const json = await resp.json();
+    const json = await fetchJSONretry(`${url}?accion=perfiles`);
     if (!json.ok) return;
 
     if (json.categorias?.length) CATEGORIAS_CONFIG = json.categorias;
@@ -2289,9 +2308,7 @@ async function cargarDatos(urls) {
   }
 
   try {
-    const resp = await fetch(`${urlUnica}?accion=horarios`);
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const json = await resp.json();
+    const json = await fetchJSONretry(`${urlUnica}?accion=horarios`);
     // Compatible con formato nuevo (ok:true) y viejo (sin ok)
     if (json.ok === false) throw new Error(json.error || 'Error en servidor');
 
@@ -2686,9 +2703,7 @@ async function cargarUsuarios() {
       } catch(e) {}
     }
     // Sin cache — fetch bloqueante (primera vez)
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
-    if (!resp.ok) return [];
-    const json = await resp.json();
+    const json = await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
     if (!json.ok) return [];
     _usuariosCache = json.usuarios || [];
     localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuariosCache));
@@ -2719,8 +2734,7 @@ async function saveUsuarios(lista) {
 // ── CERTIFICADOS ──────────────────────────────────────
 async function cargarCertificados() {
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
-    const json = await resp.json();
+    const json = await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
     if (json.ok) {
       CERTIFICADOS_CACHE = (json.certificados || []).map(c => {
         // La fecha puede venir como Date object o string — normalizar a "YYYY-MM-DD"
