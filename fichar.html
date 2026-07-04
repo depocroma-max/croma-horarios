@@ -999,13 +999,13 @@ async function mostrarFormulario() {
   document.getElementById('fechaHoyDisplay').textContent =
     `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
 
-  // Calcular total en tiempo real (redondeando a :00 o :30)
-  ['campoEntrada','campoSalida'].forEach(id =>
-    document.getElementById(id).addEventListener('change', function() {
-      snapMedia(this);
-      calcularTotal();
-    })
-  );
+  // El total se recalcula al tipear; el redondeo a :00/:30 se hace recién al
+  // salir del campo (blur), así no interrumpe mientras escribís los minutos.
+  ['campoEntrada','campoSalida'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('change', calcularTotal);
+    el.addEventListener('blur', function() { snapMedia(this); calcularTotal(); });
+  });
 
   mostrarScreen('screenForm');
   cargarHistorial(empNombre);

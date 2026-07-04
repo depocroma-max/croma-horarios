@@ -827,8 +827,12 @@ function mostrarFormulario() {
 
   ['campoEntrada','campoSalida'].forEach(function(id) {
     const el = document.getElementById(id);
-    el.removeEventListener('change', onCambioHora);
-    el.addEventListener('change', onCambioHora);
+    // El total se recalcula al tipear; el redondeo a :00/:30 se hace recién
+    // al salir del campo (blur), así no interrumpe mientras escribís los minutos.
+    el.removeEventListener('change', calcularTotal);
+    el.addEventListener('change', calcularTotal);
+    el.removeEventListener('blur', onCambioHora);
+    el.addEventListener('blur', onCambioHora);
   });
 
   mostrarScreen('screenForm');
