@@ -1194,14 +1194,29 @@ async function cargarHistorial(empNombre) {
       return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     };
 
-    // Bloquear si ya hay fichada completa de hoy
-    const fechaHoy = hoy();
-    const fichadaHoy = json.fichadas.find(f => fechaISO(f) === fechaHoy && f.salida);
-    if (fichadaHoy) {
-      document.getElementById('btnSubmit').disabled = true;
-      document.getElementById('submitHint').textContent =
-        `Ya registraste tu turno de hoy (${fichadaHoy.entrada} – ${fichadaHoy.salida}).`;
-      document.getElementById('submitHint').style.color = '#dc2626';
+    // Si ya hay fichada(s) de hoy: bloquear SOLO mientras el turno registrado
+    // sigue en curso. Una vez que pasó la hora de salida, se puede cargar otro
+    // (ej. turno partido 9-13 y después 15-19).
+    const fechaHoy   = hoy();
+    const toMin      = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + (m || 0); };
+    const fichHoy    = json.fichadas.filter(f => fechaISO(f) === fechaHoy && f.salida);
+    if (fichHoy.length) {
+      // la fichada con la salida más tardía
+      const ultima = fichHoy.reduce((a, b) => (toMin(b.salida) > toMin(a.salida) ? b : a));
+      const ahora  = new Date();
+      const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
+      const hint = document.getElementById('submitHint');
+
+      if (minAhora < toMin(ultima.salida)) {
+        // Turno todavía en curso → bloquear
+        document.getElementById('btnSubmit').disabled = true;
+        hint.textContent = `Ya registraste tu turno de hoy (${ultima.entrada} – ${ultima.salida}).`;
+        hint.style.color = '#dc2626';
+      } else {
+        // El turno ya terminó → permitir cargar otro
+        hint.textContent = `Ya cargaste un turno hoy (${ultima.entrada} – ${ultima.salida}). Podés cargar otro.`;
+        hint.style.color = 'var(--gray-400)';
+      }
     }
 
     const wrap = document.getElementById('historialWrap');
