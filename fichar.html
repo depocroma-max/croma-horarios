@@ -756,27 +756,55 @@ async function arrancarConSesion() {
   await cargarSucursalYGeo();
 }
 
-async function cargarSucursalYGeo() {
-  // Todo en paralelo: los dos fetch y el GPS son independientes entre sí,
-  // así no esperamos uno atrás del otro.
+// Trae datos con "stale-while-revalidate": si hay copia en caché la devuelve
+// al instante y refresca en segundo plano; si no, espera el fetch.
+async function fetchConCache(cacheKey, accion, extraer, onFresh) {
+  let usadoCache = false;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      onFresh(JSON.parse(cached));
+      usadoCache = true;
+    }
+  } catch(e) {}
 
-  // 1. Perfil del empleado para saber su sucursal asignada
-  const pPerfil = fetch(`${APPS_SCRIPT_URL}?accion=perfiles`)
+  const refrescar = fetch(`${APPS_SCRIPT_URL}?accion=${accion}`)
     .then(r => r.json())
     .then(json => {
-      const empNombre = sesion.empleadoNombre || sesion.nombre;
-      const perfil = (json.empleados || []).find(e =>
-        e.nombre.toLowerCase() === empNombre.toLowerCase()
-      );
-      if (perfil) sesion.sucursalId = perfil.sucursal_id;
+      const datos = extraer(json);
+      if (datos != null) {
+        onFresh(datos);
+        try { localStorage.setItem(cacheKey, JSON.stringify(datos)); } catch(e) {}
+      }
     })
     .catch(() => {});
 
-  // 2. Cargar todas las coordenadas geo
-  const pGeo = fetch(`${APPS_SCRIPT_URL}?accion=get_sucursales_geo`)
-    .then(r => r.json())
-    .then(json => { sucursalesGeo = json.sucursales || []; })
-    .catch(() => {});
+  // Si teníamos caché, no bloqueamos el flujo esperando el refresco.
+  if (!usadoCache) await refrescar;
+}
+
+async function cargarSucursalYGeo() {
+  // Todo en paralelo: perfil, geo y GPS son independientes entre sí.
+
+  // 1. Perfil del empleado para saber su sucursal asignada (con caché)
+  const pPerfil = fetchConCache(
+    'croma_perfiles_cache', 'perfiles',
+    json => json.empleados || null,
+    empleados => {
+      const empNombre = sesion.empleadoNombre || sesion.nombre;
+      const perfil = empleados.find(e =>
+        e.nombre.toLowerCase() === empNombre.toLowerCase()
+      );
+      if (perfil) sesion.sucursalId = perfil.sucursal_id;
+    }
+  );
+
+  // 2. Coordenadas geo de las sucursales (con caché)
+  const pGeo = fetchConCache(
+    'croma_geo_cache', 'get_sucursales_geo',
+    json => json.sucursales || null,
+    sucursales => { sucursalesGeo = sucursales; }
+  );
 
   // 3. Obtener geolocalización (reutiliza un fix reciente si lo hay)
   const pGps = new Promise(resolve => {
