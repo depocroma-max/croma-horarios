@@ -574,7 +574,7 @@ function renderEnVivo() {
     if (pausados.length || proximos.length || terminados.length) {
       cards += '<div class="envivo-card-foot">';
       pausados.forEach(o => {
-        cards += `<div class="envivo-foot-line">⏸️ <b>${nombreCortoEnVivo(o.emp)}</b> en pausa · vuelve ${o.est.vuelve}</div>`;
+        cards += `<div class="envivo-foot-line">${icon('pause','icon-14')} <b>${nombreCortoEnVivo(o.emp)}</b> en pausa · vuelve ${o.est.vuelve}</div>`;
       });
       proximos.forEach(o => {
         cards += `<div class="envivo-foot-line">🕒 <b>${nombreCortoEnVivo(o.emp)}</b> entra ${o.est.entra}</div>`;
@@ -1158,7 +1158,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td>—</td>
         <td></td>
         <td>—</td>
-        <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar certificado">✕</button></td>
+        <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar certificado">${icon('x','icon-12')}</button></td>
       </tr>`;
       return `
       <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
@@ -1219,7 +1219,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
           <div class="detalle-header-top">
             <div style="display:flex;align-items:center;gap:14px">
               <button class="detalle-close-btn" onclick="cerrarDetalle()" title="Cerrar" aria-label="Cerrar">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                ${icon('x','icon-18')}
               </button>
               ${(() => {
                 const perfil = EMPLEADOS_PERFILES[nombreEmp];
@@ -1245,25 +1245,25 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 ${opcionesMes}
               </select>
               <button class="btn-detalle-accion" onclick="imprimirDetalleEmpleado()" title="Imprimir / PDF">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                ${icon('printer','icon-13')}
                 PDF
               </button>
               <button class="btn-detalle-accion btn-excel" onclick="descargarExcelEmpleado('${nombreEmp.replace(/'/g,"\\''")}', '${nomMostrar}', '${suc.nombre}')" title="Descargar Excel">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                ${icon('fileText','icon-13')}
                 Excel
               </button>
               <button class="btn-detalle-accion" style="color:#2563eb;border-color:#93c5fd;background:#eff6ff" onclick="abrirFormCertificado(this.dataset.emp)" data-emp="${nombreEmp}">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                ${icon('circlePlus','icon-13')}
                 Certificado
               </button>
               ${sesionActual?.rol === 'admin' ? (
                 (EMPLEADOS_PERFILES[nombreEmp]?.activo !== false)
                   ? `<button class="btn-detalle-accion btn-detalle-baja" onclick="marcarEmpleadoInactivo('${nombreEmp.replace(/'/g,"\\'")}')">
-                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="23" y2="14"/><line x1="23" y1="8" x2="17" y2="14"/></svg>
+                       ${icon('userX','icon-13')}
                        Marcar como ya no trabaja
                      </button>`
                   : `<button class="btn-detalle-accion btn-detalle-alta" onclick="reactivarEmpleado('${nombreEmp.replace(/'/g,"\\'")}')">
-                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                       ${icon('userPlus','icon-13')}
                        Reactivar empleado
                      </button>`
               ) : ''}
@@ -1272,27 +1272,27 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         </div>
         <div class="detalle-stats-row">
           <div class="detalle-stat stat-dias">
-            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <div class="detalle-stat-icon">${icon('calendar','icon-20')}</div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatDias">${duIni}</span><span class="detalle-stat-lbl">Días</span></div>
           </div>
           <div class="detalle-stat stat-hs">
-            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="detalle-stat-icon">${icon('clock','icon-20')}</div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatHs">${thIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs totales</span></div>
           </div>
           <div class="detalle-stat stat-extra">
-            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+            <div class="detalle-stat-icon">${icon('circlePlus','icon-20')}</div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatExtra">${theIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs extra</span></div>
           </div>
           <div class="detalle-stat stat-feriado">
-            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg></div>
+            <div class="detalle-stat-icon">${icon('calendarCheck','icon-20')}</div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatFeriado">${thFerIni.toFixed(1)}</span><span class="detalle-stat-lbl">Hs feriado</span></div>
           </div>
           <div class="detalle-stat stat-sabs">
-            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <div class="detalle-stat-icon">${icon('calendar','icon-20')}</div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatSabs">${tsIni}</span><span class="detalle-stat-lbl">Sábados</span></div>
           </div>
           <div class="detalle-stat stat-certs">
-            <div class="detalle-stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
+            <div class="detalle-stat-icon">${icon('shieldCheck','icon-20')}</div>
             <div class="detalle-stat-body"><span class="detalle-stat-val" id="detalleStatCerts">${filasIni.filter(f=>f.esCert).length}</span><span class="detalle-stat-lbl">Certs</span></div>
           </div>
         </div>
@@ -1331,7 +1331,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
                 <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td>—</td><td></td><td>—</td>
-                <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px" title="Borrar">✕</button></td>
+                <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar">${icon('x','icon-12')}</button></td>
               </tr>`;
               return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
@@ -1376,13 +1376,13 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       </div>
       <div class="detalle-footer">
         <span class="detalle-footer-nota">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          ${icon('info','icon-14')}
           Los horarios corresponden a registros del sistema
         </span>
         <span class="detalle-footer-update">
           Última actualización: ${ultActStr}
           <button class="detalle-footer-refresh" onclick="document.getElementById('btnRefresh')?.click()" title="Actualizar datos" aria-label="Actualizar datos">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            ${icon('refresh','icon-14')}
           </button>
         </span>
       </div>
@@ -1456,7 +1456,7 @@ function abrirDetalleDia(dia, mesIdx, anio) {
             <div class="detalle-titulo">${fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1)}</div>
             <div class="detalle-sub">${totalEmps} empleados · ${totalHoras.toFixed(1)} hs totales</div>
           </div>
-          <button class="detalle-close" onclick="cerrarDetalle()">✕</button>
+          <button class="detalle-close" onclick="cerrarDetalle()">${icon('x','icon-16')}</button>
         </div>
       </div>
       <div class="detalle-tabla-wrap">
@@ -2815,7 +2815,7 @@ function abrirFormCertificado(nombreEmp) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Agregar certificado — ${nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -3073,10 +3073,7 @@ function _mostrarLoginAppLegado() {
               placeholder="••••" maxlength="8" autocomplete="off"
               onkeydown="if(event.key==='Enter')intentarLogin()" />
             <button class="login-pin-toggle" type="button" onclick="togglePinVisibility()" title="Mostrar PIN">
-              <svg id="iconEye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
+              <span id="iconEye">${icon('eye','icon-16')}</span>
             </button>
           </div>
         </div>
@@ -3110,15 +3107,15 @@ function _mostrarLoginAppLegado() {
 }
 
 function togglePinVisibility() {
-  const input = document.getElementById('loginPin');
-  const icon  = document.getElementById('iconEye');
+  const input    = document.getElementById('loginPin');
+  const iconWrap = document.getElementById('iconEye');
   if (!input) return;
   if (input.type === 'password') {
     input.type = 'text';
-    icon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+    iconWrap.innerHTML = icon('eyeOff','icon-16');
   } else {
     input.type = 'password';
-    icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    iconWrap.innerHTML = icon('eye','icon-16');
   }
 }
 
@@ -3234,20 +3231,13 @@ function actualizarIndicadorSesion() {
   }
   const esAdmin = sesionActual.rol === 'admin';
   chip.innerHTML = `
-    <span class="sesion-nombre">${esAdmin ? '👤 Admin' : sesionActual.nombre}</span>
+    <span class="sesion-nombre">${esAdmin ? `${icon('user','icon-14')} Admin` : sesionActual.nombre}</span>
     ${!esAdmin ? `<button class="sesion-perfil" onclick="abrirMiPerfil()" title="Mi perfil">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-        <circle cx="12" cy="7" r="4"/>
-      </svg>
+      ${icon('user','icon-12')}
       Mi perfil
     </button>` : ''}
     <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-        <polyline points="16 17 21 12 16 7"/>
-        <line x1="21" y1="12" x2="9" y2="12"/>
-      </svg>
+      ${icon('logOut','icon-13')}
     </button>
   `;
 }
@@ -3418,7 +3408,7 @@ function mostrarVistaEmpleadoSinDatos(nombreEmp) {
   const mainApp = document.getElementById('mainApp');
   mainApp.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem">
-      <div style="font-size:48px">📋</div>
+      <div>${icon('fileText','icon-48')}</div>
       <h2 style="font-family:'Bebas Neue';font-size:24px;letter-spacing:2px">Sin registros</h2>
       <p style="color:#64748b;font-size:14px">No se encontraron registros para <strong>${nombreEmp}</strong>.</p>
       <p style="color:#94a3b8;font-size:12px">Verificá que el nombre de usuario coincida exactamente con el registro en el sistema.</p>
@@ -3430,7 +3420,7 @@ function mostrarVistaEmpleadoError() {
   const mainApp = document.getElementById('mainApp');
   mainApp.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem">
-      <div style="font-size:48px">⚠️</div>
+      <div>${icon('alertTriangle','icon-48')}</div>
       <h2 style="font-family:'Bebas Neue';font-size:24px;letter-spacing:2px">Error de conexión</h2>
       <p style="color:#64748b;font-size:14px">No se pudo conectar con el servidor.</p>
       <button class="btn-connect" style="width:auto;padding:10px 24px" onclick="cargarDatosEmpleado()">Reintentar</button>
@@ -3717,7 +3707,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           </div>
           <div class="portal-profile-info">
             <span class="portal-kicker">Portal empleado</span>
-            <h1 class="portal-greeting">Hola ${primerNombre} <span class="portal-greeting-emoji">👋</span></h1>
+            <h1 class="portal-greeting">Hola ${primerNombre}</h1>
             <p>${suc.nombre}</p>
             <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
           </div>
@@ -3730,7 +3720,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       </section>
 
       <button onclick="irAFicharEmpleado()" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin:0 0 1rem;padding:16px;border:none;border-radius:16px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(5,150,105,.28);letter-spacing:.2px;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        ${icon('clock','icon-18')}
         Registrar mi jornada
       </button>
 
@@ -3806,7 +3796,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn-detalle-accion" onclick="imprimirVistaEmpleado()" title="Imprimir">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            ${icon('printer','icon-14')}
             Imprimir
           </button>
         </div>
@@ -4006,7 +3996,7 @@ async function abrirMiPerfil() {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Mi perfil</div>
-        <button class="detalle-close" onclick="cerrarMiPerfil()">✕</button>
+        <button class="detalle-close" onclick="cerrarMiPerfil()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -4176,7 +4166,7 @@ function abrirEditarUsuario(idx) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">${u ? 'Editar usuario' : 'Nuevo usuario'}</div>
-        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <input type="hidden" id="editUsuarioIdx" value="${idx !== null ? idx : ''}" />
@@ -4496,7 +4486,7 @@ function abrirEditarEmpleado(nombre) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Editar — ${nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <input type="hidden" id="editNombre" value="${nombre}" />
@@ -4656,7 +4646,7 @@ function abrirEditarCategoria(catId) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">${cat ? 'Editar categoría' : 'Nueva categoría'}</div>
-        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -4735,8 +4725,8 @@ function mostrarConfirm({ titulo, mensaje, textoOk = 'Confirmar', textoCancel = 
   const existing = document.getElementById('confirmOverlay');
   if (existing) existing.remove();
 
-  const iconoPeligro = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
-  const iconoInfo = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+  const iconoPeligro = icon('alertTriangle','icon-26');
+  const iconoInfo   = icon('info','icon-26');
 
   const div = document.createElement('div');
   div.id = 'confirmOverlay';
@@ -5273,7 +5263,7 @@ function renderEmailsLista() {
         '<div style="font-size:13px;font-weight:500;color:#1e293b">' + c.nombre + '</div>' +
         '<div style="font-size:12px;color:#64748b">' + c.email + '</div>' +
       '</div>' +
-      '<button onclick="eliminarEmailContacto(' + i + ')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:16px;padding:4px;line-height:1" title="Eliminar">✕</button>' +
+      '<button onclick="eliminarEmailContacto(' + i + ')" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px;line-height:1" title="Eliminar">' + icon('x','icon-14') + '</button>' +
     '</div>';
   }).join('');
 }
@@ -5477,7 +5467,7 @@ async function cargarSolicitudesAdmin() {
             <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5"
               onclick="abrirModalRespuesta('${s.id}','rechazada','${encodeURIComponent(s.empleado)}')">✗ Rechazar</button>
             <button class="btn-admin-edit" style="font-size:11px"
-              onclick="_calVacMes=${mesIdx};_calVacAnio=${anioSol};switchVacTab('calendario',document.querySelector('#vacTabs .admin-tab'));setTimeout(cargarCalendarioVacaciones,50)">📅 Ver</button>
+              onclick="_calVacMes=${mesIdx};_calVacAnio=${anioSol};switchVacTab('calendario',document.querySelector('#vacTabs .admin-tab'));setTimeout(cargarCalendarioVacaciones,50)">${icon('calendar','icon-14')} Ver</button>
           </div>
         </td>
       </tr>`;
@@ -5504,7 +5494,7 @@ function abrirModalAjusteAdmin(empEnc, anio) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Ajustar días — ${nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -5566,7 +5556,7 @@ function abrirModalRespuesta(solicitudId, estado, empEnc) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">${estado === 'rechazada' ? 'Rechazar solicitud' : 'Responder solicitud'}</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -5622,7 +5612,7 @@ function abrirModalSolicitudVac(empEnc) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Solicitar vacaciones</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -5764,7 +5754,7 @@ function toggleBellDropdown() {
           '<div style="flex:1">' +
             '<strong>' + nom + '</strong>' +
             '<div style="font-size:11px;color:#64748b">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' · ' + s.dias + ' días</div>' +
-            '<button class="bell-dd-cal-btn" onclick="_calVacMes=' + mesIdx + ';_calVacAnio=' + anioSol + ';setView(\'calendario\');document.getElementById(\'bellDropdown\')?.remove()">📅 Ver en calendario</button>' +
+            '<button class="bell-dd-cal-btn" onclick="_calVacMes=' + mesIdx + ';_calVacAnio=' + anioSol + ';setView(\'calendario\');document.getElementById(\'bellDropdown\')?.remove()">' + icon('calendar','icon-14') + ' Ver en calendario</button>' +
           '</div>' +
           '<div style="display:flex;flex-direction:column;gap:3px">' +
             '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7;font-size:11px" ' +
@@ -5981,7 +5971,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     const mesSol  = partesSol.length >= 2 ? parseInt(partesSol[1]) - 1 : 0;
     const anioSol = partesSol.length >= 1 ? parseInt(partesSol[0]) : new Date().getFullYear();
     const calBtn  = '<button class="btn-admin-edit" style="font-size:11px" ' +
-      'onclick="_calVacMes=' + mesSol + ';_calVacAnio=' + anioSol + ';cargarCalendarioVacaciones()">📅 Ver</button>';
+      'onclick="_calVacMes=' + mesSol + ';_calVacAnio=' + anioSol + ';cargarCalendarioVacaciones()">' + icon('calendar','icon-14') + ' Ver</button>';
     const acciones = s.estado === 'pendiente'
       ? '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
           '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7" ' +
@@ -5997,7 +5987,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       '<td>' + formatFechaISO(s.fecha_desde) + ' — ' + formatFechaISO(s.fecha_hasta) + '</td>' +
       '<td style="text-align:center">' + s.dias + '</td>' +
       '<td>' + estadoBadge(s.estado) + '</td>' +
-      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">⚠️ Conflicto</span>' : '—') + '</td>' +
+      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">' + icon('alertTriangle','icon-14') + ' Conflicto</span>' : '—') + '</td>' +
       '<td>' + acciones + '</td></tr>';
   }).join('') : '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
 
@@ -6102,7 +6092,7 @@ async function abrirNuevoEvento(fechaPreset) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Nuevo evento</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form" style="gap:14px">
 
@@ -6168,7 +6158,7 @@ async function abrirNuevoEvento(fechaPreset) {
         <div class="admin-form-grupo" style="background:#f8fafc;border-radius:10px;padding:12px;border:1px solid #e2e8f0">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="eventoConAnuncio" style="width:16px;height:16px;accent-color:#7c3aed" onchange="toggleEventoAnuncio(this.checked)" />
-            <span style="font-size:13px;font-weight:500;color:#374151">📣 Enviar también como anuncio</span>
+            <span style="font-size:13px;font-weight:500;color:#374151">${icon('bell','icon-14')} Enviar también como anuncio</span>
           </label>
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">El evento aparecerá en el calendario Y como notificación al empleado</span>
           <div id="eventoAnuncioWrap" style="display:none;margin-top:10px">
@@ -6432,7 +6422,7 @@ function renderEventosEnSemana(nombreEmp) {
         const evHtml = eventosDelDia.map(function(ev) {
           if (ev.tipo === 'local_cerrado') return ''; // ya se muestra en el header
           const vencido = isoFecha < hoy.toISOString().substring(0,10);
-          const icsBtn = '<button class="evento-ics-btn" onclick="descargarICS(' + JSON.stringify(ev).replace(/'/g,"&#39;") + ')" title="Agregar a mi calendario">📅</button>';
+          const icsBtn = '<button class="evento-ics-btn" onclick="descargarICS(' + JSON.stringify(ev).replace(/'/g,"&#39;") + ')" title="Agregar a mi calendario">' + icon('calendar','icon-14') + '</button>';
           return '<div class="evento-semana-chip' + (vencido ? ' evento-semana-chip-vencido' : '') + '">' +
             '<span class="evento-semana-icono">' + (vencido ? '📋' : '📌') + '</span>' +
             '<div style="flex:1">' +
@@ -6921,7 +6911,7 @@ function renderListaAnuncios(anuncios) {
     } catch(e) {}
     return `<div class="anuncio-admin-item">
       <div class="anuncio-admin-meta">
-        <span class="anuncio-admin-fecha">📅 ${a.fecha}</span>
+        <span class="anuncio-admin-fecha">${icon('calendar','icon-14')} ${a.fecha}</span>
         <span class="anuncio-admin-dest">👥 ${destLabel}</span>
         <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-size:11px;margin-left:auto"
           onclick="eliminarAnuncioAdmin('${a.id}')">🗑 Eliminar</button>
@@ -6961,7 +6951,7 @@ function abrirNuevoAnuncio() {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Nuevo anuncio</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">✕</button>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -6995,7 +6985,7 @@ function abrirNuevoAnuncio() {
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0" onclick="publicarAnuncio()">📣 Publicar anuncio</button>
+          <button class="btn-connect" style="margin:0" onclick="publicarAnuncio()">${icon('bell','icon-16')} Publicar anuncio</button>
           <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
@@ -7141,7 +7131,7 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
     const leido   = _anunciosLeidosEmp.has(a.id);
     const vencido = anuncioVencido(a);
     const claseItem = (leido || vencido) ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo';
-    const icono     = (leido || vencido) ? '📋' : '📣';
+    const icono     = (leido || vencido) ? icon('fileText','icon-14') : icon('bell','icon-14');
     let badge = '';
     if (vencido)      badge = '<span class="anuncio-hist-badge" style="background:#e2e8f0;color:#94a3b8">Vencido</span>';
     else if (!leido)  badge = '<span class="anuncio-hist-badge">Nuevo</span>';
@@ -7182,9 +7172,9 @@ function mostrarBannerAnuncios(anuncios, nombreEmp) {
   const items = anuncios.map((a, i) => `
     <div class="anuncio-banner-card" id="anuncioBanner${i}">
       <div class="anuncio-banner-top">
-        <span class="anuncio-banner-icono">📣</span>
+        <span class="anuncio-banner-icono">${icon('bell','icon-16')}</span>
         <div class="anuncio-banner-titulo">${a.titulo}</div>
-        <button class="anuncio-banner-close" onclick="marcarAnuncioLeido('${a.id}',${i},'${encodeURIComponent(nombreEmp)}')">✕</button>
+        <button class="anuncio-banner-close" onclick="marcarAnuncioLeido('${a.id}',${i},'${encodeURIComponent(nombreEmp)}')">${icon('x','icon-16')}</button>
       </div>
       <div class="anuncio-banner-msg">${a.mensaje}</div>
       <div class="anuncio-banner-fecha">${a.fecha}</div>
