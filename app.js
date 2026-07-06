@@ -2326,7 +2326,12 @@ async function cargarDatos(urls) {
     // El resto del app espera mayúsculas, así que normalizamos a mayúsculas
     state.datos = rawData.map(r => {
       const localRaw = String(r.LOCAL || r.local || r.HOJA || '').trim().toUpperCase();
-      const localId  = NOMBRE_A_ID[localRaw] || localRaw;
+      // El fichaje nuevo guarda el nombre completo con prefijo ("09 CIPO SAN
+      // MARTIN"); ese prefijo de 2 dígitos ES el id de sucursal. Lo usamos
+      // directo para que esos registros (p.ej. vendedores externos) se agrupen
+      // bien. Si no hay prefijo, caemos al mapa de nombres.
+      const prefijo  = (localRaw.match(/^(\d{2})\b/) || [])[1];
+      const localId  = NOMBRE_A_ID[localRaw] || prefijo || localRaw;
       return {
         LOCAL:    localId,
         AÑO:      String(r.AÑO     || r.anio     || ''),
