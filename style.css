@@ -13,19 +13,19 @@
   --gray-800:#333330;
   --accent:  #e8251a;
 
-  --suc-01: #185FA5;
-  --suc-05: #0F6E56;
-  --suc-09: #B45309;
-  --suc-10: #9B2563;
-  --suc-12: #534AB7;
-  --suc-14: #3B6D11;
+  --suc-01: #2563EB;
+  --suc-05: #10B981;
+  --suc-09: #F97316;
+  --suc-10: #DB2777;
+  --suc-12: #7C3AED;
+  --suc-14: #92400E;
 
-  --suc-01-light: #E6F1FB;
-  --suc-05-light: #E1F5EE;
-  --suc-09-light: #FEF3C7;
-  --suc-10-light: #FCE7F3;
-  --suc-12-light: #EEEDFE;
-  --suc-14-light: #EAF3DE;
+  --suc-01-light: #EFF6FF;
+  --suc-05-light: #ECFDF5;
+  --suc-09-light: #FFF7ED;
+  --suc-10-light: #FDF2F8;
+  --suc-12-light: #F5F3FF;
+  --suc-14-light: #FEF3C7;
 
   --font-display: 'Bebas Neue', sans-serif;
   --font-body:    'DM Sans', sans-serif;
@@ -4001,7 +4001,7 @@ body {
 .envivo-card.activa { border-top-color: var(--card-suc, var(--gray-400)); }
 .envivo-card.vacia  { opacity: .72; }
 .envivo-card-head   { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px; }
-.envivo-card-pin    { font-size: 14px; }
+.envivo-card-pin    { display: inline-flex; align-items: center; }
 .envivo-card-suc    { font-weight: 600; font-size: 14px; letter-spacing: .2px; color: var(--black); }
 .envivo-card-count  { margin-left: auto; display: inline-flex; align-items: baseline; gap: 4px; }
 .envivo-card-count b { font-family: var(--font-display); font-size: 30px; line-height: 1; color: #15803d; }

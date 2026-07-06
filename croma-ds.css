@@ -36,14 +36,14 @@
   --green:      #16a34a;  /* alias legacy usado por fichar/kiosco */
 
   /* ── Colores por sucursal ── */
-  --suc-01: #185FA5;  --suc-01-light: #E6F1FB;
-  --suc-05: #0F6E56;  --suc-05-light: #E1F5EE;
-  --suc-09: #B45309;  --suc-09-light: #FEF3C7;
-  --suc-10: #9B2563;  --suc-10-light: #FCE7F3;
-  --suc-12: #534AB7;  --suc-12-light: #EEEDFE;
-  --suc-14: #3B6D11;  --suc-14-light: #EAF3DE;
-  --suc-depo:    #475569;  --suc-depo-light:    #E2E8F0;
-  --suc-oficina: #7C3AED;  --suc-oficina-light: #EDE9FE;
+  --suc-01: #2563EB;  --suc-01-light: #EFF6FF;
+  --suc-05: #10B981;  --suc-05-light: #ECFDF5;
+  --suc-09: #F97316;  --suc-09-light: #FFF7ED;
+  --suc-10: #DB2777;  --suc-10-light: #FDF2F8;
+  --suc-12: #7C3AED;  --suc-12-light: #F5F3FF;
+  --suc-14: #92400E;  --suc-14-light: #FEF3C7;
+  --suc-depo:    #4B5563;  --suc-depo-light:    #F3F4F6;
+  --suc-oficina: #0891B2;  --suc-oficina-light: #ECFEFF;
 
   /* ── Tipografías ── */
   --font-display: 'Bebas Neue', sans-serif;
@@ -244,3 +244,31 @@
 .icon-16 { width: 16px; height: 16px; }
 .icon-20 { width: 20px; height: 20px; }
 .icon-24 { width: 24px; height: 24px; }
+
+/* ============================================================
+   IDENTIDAD DE SUCURSALES
+   Uso: set --sucursal-color y --sucursal-light en el elemento
+   o en un ancestro, y aplicá las clases de abajo.
+   ============================================================ */
+
+/* Borde superior de color (accent top rail) */
+.sucursal-accent-card { position: relative; overflow: hidden; }
+.sucursal-accent-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 4px; background: var(--sucursal-color, var(--gray-200));
+}
+
+/* Barra lateral de color */
+.sucursal-rail {
+  width: 4px; border-radius: 999px; align-self: stretch; flex-shrink: 0;
+  background: var(--sucursal-color, var(--gray-200));
+}
+
+/* Cápsula de icono */
+.sucursal-icon {
+  width: 42px; height: 42px; border-radius: 14px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--sucursal-color, var(--gray-600));
+  background: var(--sucursal-light, var(--gray-100));
+}
+.sucursal-icon svg { width: 21px; height: 21px; }

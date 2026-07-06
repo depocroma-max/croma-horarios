@@ -7,15 +7,18 @@
 
 // ── CONFIGURACIÓN ──────────────────────────────────────
 const SUCURSALES = [
-  { id: '01',     hoja: 'PASEO',   nombre: '01 PASEO',           color: '#185FA5', colorLight: '#DBEAFE' },
-  { id: '05',     hoja: 'WAVE',    nombre: '05 WAVE',            color: '#0F6E56', colorLight: '#D1FAE5' },
-  { id: '09',     hoja: 'CIPO',    nombre: '09 CIPO SAN MARTIN', color: '#B45309', colorLight: '#FEF3C7' },
-  { id: '10',     hoja: 'PERITO',  nombre: '10 PERITO MORENO',   color: '#9B2563', colorLight: '#FCE7F3' },
-  { id: '12',     hoja: 'CENTE',   nombre: '12 CENTENARIO',      color: '#534AB7', colorLight: '#EDE9FE' },
-  { id: '14',     hoja: 'ROCA180', nombre: '14 ROCA',            color: '#3B6D11', colorLight: '#D1FAE5' },
-  { id: 'DEPO',   hoja: 'DEPO',    nombre: 'DEPO',               color: '#475569', colorLight: '#F1F5F9' },
-  { id: 'OFICINA',hoja: 'OFICINA', nombre: 'OFICINA',            color: '#7C3AED', colorLight: '#EDE9FE' },
+  { id: '01',      hoja: 'PASEO',   nombre: '01 PASEO',           color: '#2563EB', colorLight: '#EFF6FF', icon: 'store'        },
+  { id: '05',      hoja: 'WAVE',    nombre: '05 WAVE',            color: '#10B981', colorLight: '#ECFDF5', icon: 'waves'        },
+  { id: '09',      hoja: 'CIPO',    nombre: '09 CIPO SAN MARTIN', color: '#F97316', colorLight: '#FFF7ED', icon: 'shoppingBag'  },
+  { id: '10',      hoja: 'PERITO',  nombre: '10 PERITO MORENO',   color: '#DB2777', colorLight: '#FDF2F8', icon: 'warehouse'    },
+  { id: '12',      hoja: 'CENTE',   nombre: '12 CENTENARIO',      color: '#7C3AED', colorLight: '#F5F3FF', icon: 'shoppingCart' },
+  { id: '14',      hoja: 'ROCA180', nombre: '14 ROCA',            color: '#92400E', colorLight: '#FEF3C7', icon: 'mountain'     },
+  { id: 'DEPO',    hoja: 'DEPO',    nombre: 'DEPO',               color: '#4B5563', colorLight: '#F3F4F6', icon: 'package'      },
+  { id: 'OFICINA', hoja: 'OFICINA', nombre: 'OFICINA',            color: '#0891B2', colorLight: '#ECFEFF', icon: 'briefcase'    },
 ];
+
+// Mapa indexado por id — lookup O(1) (derivado de SUCURSALES, sin duplicar datos)
+const SUCURSALES_UI = Object.fromEntries(SUCURSALES.map(s => [s.id, s]));
 
 const DIAS      = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const MESES_ES  = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
@@ -545,7 +548,7 @@ function renderEnVivo() {
 
     cards += `<div class="envivo-card ${presentes.length ? 'activa' : 'vacia'}" style="--card-suc:${suc.color}">`;
     cards += `<div class="envivo-card-head">
-        <span class="envivo-card-pin" style="color:${suc.color}">📍</span>
+        <span class="envivo-card-pin" style="color:${suc.color}">${icon('mapPin','icon-16')}</span>
         <span class="envivo-card-suc">${suc.nombre}</span>
         <span class="envivo-card-count ${presentes.length ? '' : 'cero'}"><b>${presentes.length}</b><span>en turno</span></span>
       </div>`;
