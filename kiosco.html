@@ -845,43 +845,51 @@ async function seleccionarEmpleado(emp) {
 }
 
 // ── VERIFICACIÓN TURNO EN CURSO ──
-function verificarTurnoActivo() {
+// Mismo endpoint y lógica que fichar.html para garantizar los mismos campos.
+function hoy() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+async function verificarTurnoActivo() {
   if (!usuariosSel) return;
-  var toMin = function(hhmm) {
-    var parts = String(hhmm || '').split(':').map(Number);
-    return (parts[0] || 0) * 60 + (parts[1] || 0);
-  };
-  var now = new Date();
-  var minAhora = now.getHours() * 60 + now.getMinutes();
-  var nombre = usuariosSel.nombre;
+  try {
+    var empNombre = usuariosSel.nombre;
+    var url  = APPS_SCRIPT_URL + '?accion=get_fichadas_empleado&empleado=' + encodeURIComponent(empNombre);
+    var resp = await fetch(url);
+    var json = await resp.json();
+    if (!json.ok || !json.fichadas || !json.fichadas.length) return;
 
-  // Compatibilidad con ambos formatos de campo (GAS puede devolver hora_salida o salida)
-  var mias = fichadasHoy.filter(function(f) {
-    var mismoEmp = (f.empleado || '').toLowerCase() === nombre.toLowerCase();
-    return mismoEmp && (f.hora_salida || f.salida);
-  });
+    var fechaISO = function(f) {
+      if (!f.marca) return '';
+      var dt = new Date(f.marca);
+      if (isNaN(dt)) return '';
+      return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+    };
+    var toMin = function(hhmm) {
+      var parts = String(hhmm || '').split(':').map(Number);
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
+    };
 
-  console.log('[kiosco] verificarTurnoActivo', { nombre: nombre, total: fichadasHoy.length, encontrados: mias.length, fichadasHoy: fichadasHoy });
+    var fechaHoy = hoy();
+    var fichHoy  = json.fichadas.filter(function(f) { return fechaISO(f) === fechaHoy && f.salida; });
+    if (!fichHoy.length) return;
 
-  if (!mias.length) return;
+    var ultima    = fichHoy.reduce(function(a, b) { return toMin(b.salida) > toMin(a.salida) ? b : a; });
+    var ahora     = new Date();
+    var minAhora  = ahora.getHours() * 60 + ahora.getMinutes();
+    var hint      = document.getElementById('submitHint');
+    var btn       = document.getElementById('btnSubmit');
 
-  var ultima = mias.reduce(function(a, b) {
-    return toMin(b.hora_salida || b.salida) > toMin(a.hora_salida || a.salida) ? b : a;
-  });
-
-  var salida  = ultima.hora_salida || ultima.salida  || '';
-  var entrada = ultima.hora_entrada || ultima.entrada || '';
-  var hint = document.getElementById('submitHint');
-  var btn  = document.getElementById('btnSubmit');
-
-  if (minAhora < toMin(salida)) {
-    btn.disabled = true;
-    hint.textContent = 'Turno en curso (' + entrada + '–' + salida + '). El botón se habilitará cuando finalice.';
-    hint.style.color = '#dc2626';
-  } else {
-    hint.textContent = 'Ya tiene un turno hoy (' + entrada + '–' + salida + '). Podés cargar otro.';
-    hint.style.color = 'var(--gray-400)';
-  }
+    if (minAhora < toMin(ultima.salida)) {
+      btn.disabled = true;
+      hint.textContent = 'Turno en curso (' + ultima.entrada + '–' + ultima.salida + '). El botón se habilitará cuando finalice.';
+      hint.style.color = '#dc2626';
+    } else {
+      hint.textContent = 'Ya tiene un turno hoy (' + ultima.entrada + '–' + ultima.salida + '). Podés cargar otro.';
+      hint.style.color = 'var(--gray-400)';
+    }
+  } catch(e) {}
 }
 
 // ── FORMULARIO ──
