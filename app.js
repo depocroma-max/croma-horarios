@@ -577,10 +577,10 @@ function renderEnVivo() {
         cards += `<div class="envivo-foot-line">${icon('pause','icon-14')} <b>${nombreCortoEnVivo(o.emp)}</b> en pausa · vuelve ${o.est.vuelve}</div>`;
       });
       proximos.forEach(o => {
-        cards += `<div class="envivo-foot-line">🕒 <b>${nombreCortoEnVivo(o.emp)}</b> entra ${o.est.entra}</div>`;
+        cards += `<div class="envivo-foot-line">${icon('clock','icon-12')}<b>${nombreCortoEnVivo(o.emp)}</b> entra ${o.est.entra}</div>`;
       });
       terminados.sort((a, b) => (a.emp).localeCompare(b.emp)).forEach(o => {
-        cards += `<div class="envivo-foot-line fin">✓ <b>${nombreCortoEnVivo(o.emp)}</b> terminó ${o.est.salida}</div>`;
+        cards += `<div class="envivo-foot-line fin">${icon('check','icon-12')}<b>${nombreCortoEnVivo(o.emp)}</b> terminó ${o.est.salida}</div>`;
       });
       cards += '</div>';
     }
@@ -1235,8 +1235,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 </div>
                 <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
                 ${(empresaEmp || jornadaEmp) ? `<div class="detalle-chips">
-                  ${empresaEmp ? `<span class="detalle-chip detalle-chip-empresa">🏢 ${empresaEmp}</span>` : ''}
-                  ${jornadaEmp ? `<span class="detalle-chip detalle-chip-jornada"${catEmp?.descripcion ? ` title="${catEmp.descripcion}"` : ''}>🕒 ${jornadaEmp}</span>` : ''}
+                  ${empresaEmp ? `<span class="detalle-chip detalle-chip-empresa">${icon('building','icon-12')}${empresaEmp}</span>` : ''}
+                  ${jornadaEmp ? `<span class="detalle-chip detalle-chip-jornada"${catEmp?.descripcion ? ` title="${catEmp.descripcion}"` : ''}>${icon('clock','icon-12')}${jornadaEmp}</span>` : ''}
                 </div>` : ''}
               </div>
             </div>
@@ -1300,8 +1300,8 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       <div class="detalle-tabs">
         <button class="detalle-tab active" onclick="switchDetalleTab('jornada', this)">Historial</button>
         <button class="detalle-tab" onclick="switchDetalleTab('evolucion', this)">Evolución mensual</button>
-        <button class="detalle-tab" onclick="switchDetalleTab('vacaciones', this)" id="tabVacBtn_${nombreEmp.replace(/[^a-zA-Z0-9]/g,'_')}">🏖 Vacaciones</button>
-        <button class="detalle-tab" onclick="switchDetalleTab('bancoHoras', this)">⏱ Banco de horas</button>
+        <button class="detalle-tab" onclick="switchDetalleTab('vacaciones', this)" id="tabVacBtn_${nombreEmp.replace(/[^a-zA-Z0-9]/g,'_')}">${icon('palmtree','icon-14')} Vacaciones</button>
+        <button class="detalle-tab" onclick="switchDetalleTab('bancoHoras', this)">${icon('timer','icon-14')} Banco de horas</button>
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabJornada">
         <div class="detalle-filtros-bar">
@@ -3701,7 +3701,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
                  style="${perfil.foto_url?'':'background:'+suc.colorLight}">
               ${avatarInner}
             </div>
-            <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto">📷</button>
+            <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto" aria-label="Cambiar foto">${icon('camera','icon-16')}</button>
             <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
                    onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
           </div>
@@ -3780,8 +3780,8 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- TABS EMPLEADO -->
       <div class="detalle-tabs" style="margin:0 0 0 0;border-bottom:1px solid var(--gray-100)">
         <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Historial</button>
-        <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">🏖 Vacaciones</button>
-        <button class="detalle-tab" onclick="switchEvTab('bancoHoras',this)">⏱ Banco de horas</button>
+        <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">${icon('palmtree','icon-14')} Vacaciones</button>
+        <button class="detalle-tab" onclick="switchEvTab('bancoHoras',this)">${icon('timer','icon-14')} Banco de horas</button>
       </div>
 
       <!-- CONTENIDO JORNADA -->
@@ -4315,7 +4315,7 @@ function renderAdminInline() {
     const catHTML = perfil.categoria_id
       ? "<span class='emp-cat-badge'>" + catNom + "</span>"
       : "<span style='color:#94a3b8;font-size:12px'>—</span>";
-    const fotoOk  = perfil.foto_url ? '📷 OK' : '—';
+    const fotoOk  = perfil.foto_url ? icon('camera','icon-12') + ' OK' : '—';
     return "<tr class='admin-emp-row' onclick=\"abrirEditarEmpleado('" + nomEnc + "')\">" +
       "<td><div style='display:flex;align-items:center;gap:10px'>" +
         "<div class='admin-avatar-mini' style='background:" + (avatarUrl ? 'transparent' : '#f1f5f9') + "'>" + avatarInner + "</div>" +

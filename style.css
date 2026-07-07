@@ -1235,6 +1235,8 @@ body {
   color: var(--black); font-weight: 500;
   border-bottom-color: var(--black);
 }
+/* Íconos inline en tabs (palmtree, timer) alineados con el texto */
+.detalle-tab svg { vertical-align: -2px; }
 
 /* ===== DRAWER MOBILE ===== */
 .hamburger-btn {
