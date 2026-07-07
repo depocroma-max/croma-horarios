@@ -31,9 +31,13 @@
   /* ── Estados ── */
   --success:    #16a34a;  --success-bg: #dcfce7;
   --warning:    #d97706;  --warning-bg: #fef3c7;
-  --danger:     #dc2626;  --danger-bg:  #fee2e2;
+  --danger:     #dc2626;  --danger-bg:  #fee2e2;  --danger-dark: #b91c1c;
   --info:       #2563eb;  --info-bg:    #dbeafe;
   --green:      #16a34a;  /* alias legacy usado por fichar/kiosco */
+
+  /* ── Texto ── */
+  --text-muted:     #94a3b8;  /* muted claro (placeholders, hints) */
+  --text-secondary: #64748b;  /* secundario (subtítulos, meta) */
 
   /* ── Colores por sucursal ── */
   --suc-01: #2563EB;  --suc-01-light: #EFF6FF;
@@ -244,6 +248,12 @@
 .icon-16 { width: 16px; height: 16px; }
 .icon-20 { width: 20px; height: 20px; }
 .icon-24 { width: 24px; height: 24px; }
+
+/* ============================================================
+   UTILIDADES DE TEXTO
+   ============================================================ */
+.text-muted     { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
 
 /* ============================================================
    IDENTIDAD DE SUCURSALES

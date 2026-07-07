@@ -112,19 +112,22 @@ body {
   padding: 6px 14px; border: none; background: transparent;
   color: var(--gray-400); font-family: var(--font-body);
   font-size: 13px; font-weight: 400; cursor: pointer;
-  border-radius: var(--radius-sm); transition: all 0.15s;
+  border-radius: var(--radius-sm); transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   letter-spacing: 0.3px;
 }
 .nav-btn:hover { color: var(--white); background: rgba(255,255,255,0.08); }
 .nav-btn.active { color: var(--white); background: rgba(255,255,255,0.12); font-weight: 500; }
 
 .top-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+/* Definición canónica (fusiona la capa "mejora visual" que antes redefinía
+   .btn-icon más abajo). Overrides contextuales: print (:589) y mobile (:2933). */
 .btn-icon {
-  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
-  border: 1px solid #333; border-radius: var(--radius-sm);
-  background: transparent; color: var(--gray-400); cursor: pointer; transition: all 0.15s;
+  width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+  background: rgba(255,255,255,.04); color: var(--gray-400); cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s, transform .15s;
 }
-.btn-icon:hover { color: var(--white); border-color: #555; }
+.btn-icon:hover { color: var(--white); border-color: #555; background: rgba(255,255,255,.11); transform: translateY(-1px); }
 
 .connection-status {
   display: flex; align-items: center; gap: 6px;
@@ -365,7 +368,7 @@ body {
   width: 100%; padding: 11px; background: transparent; color: #64748b;
   border: 1px solid #e2e8f0; border-radius: 12px;
   font-family: var(--font-body); font-size: 13px; cursor: pointer;
-  transition: all .15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .btn-demo:hover { background: #f1f5f9; color: #0d0d0d; border-color: #cbd5e1; }
 
@@ -420,11 +423,15 @@ body {
   gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
 }
 .week-nav { display: flex; align-items: center; gap: 10px; }
+/* Definición canónica (fusiona la capa "mejora visual" de más abajo).
+   Override contextual: mobile (:2954). */
 .week-btn {
-  width: 32px; height: 32px; border: 1px solid var(--gray-200);
-  border-radius: var(--radius-sm); background: var(--white);
+  width: 36px; height: 36px; border: none;
+  border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
   cursor: pointer; font-size: 14px; color: var(--gray-600);
-  transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s;
+  display: flex; align-items: center; justify-content: center;
 }
 .week-btn:hover { background: var(--black); color: var(--white); border-color: var(--black); }
 .week-range {
@@ -544,7 +551,7 @@ body {
   padding: 12px 20px; border-radius: var(--radius-md);
   font-size: 13px; box-shadow: var(--shadow-md);
   opacity: 0; transform: translateY(8px);
-  transition: all 0.25s; pointer-events: none; z-index: 999;
+  transition: background-color .25s, border-color .25s, color .25s, box-shadow .25s, transform .25s, opacity .25s; pointer-events: none; z-index: 999;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
 
@@ -792,7 +799,7 @@ body {
   background: #fff;
   color: #64748b;
   cursor: pointer;
-  transition: all .15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .detalle-close-btn:hover {
   background: #f1f5f9;
@@ -818,7 +825,7 @@ body {
   width: 26px; height: 26px;
   border: 1px solid #e2e8f0; border-radius: 8px;
   background: #fff; color: #64748b; cursor: pointer;
-  transition: all .15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .detalle-footer-refresh:hover { background: #0d0d0d; color: #fff; border-color: #0d0d0d; }
 .detalle-header-top {
@@ -859,7 +866,7 @@ body {
   background: #f8fafc; cursor: pointer;
   font-size: 13px; color: #64748b;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: all .15s;
+  flex-shrink: 0; transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .detalle-close:hover { background: #0d0d0d; color: #fff; border-color: #0d0d0d; }
 
@@ -928,7 +935,7 @@ body {
   color: #94a3b8; cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: all .15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .detalle-tab:hover { color: #0d0d0d; }
 .detalle-tab.active { color: #0d0d0d; border-bottom-color: #0d0d0d; }
@@ -967,6 +974,20 @@ body {
   background: #cffafe; color: #0e7490;
   padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600;
 }
+
+/* CTA "Ir a Fichar" (antes con estilos inline en app.js) */
+.btn-fichar-cta {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; margin: 0 0 1rem; padding: 16px;
+  border: none; border-radius: 16px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff; font-family: var(--font-body); font-size: 15px; font-weight: 600;
+  letter-spacing: .2px; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(5,150,105,.28);
+  transition: transform .12s, box-shadow .12s;
+}
+.btn-fichar-cta:hover  { box-shadow: 0 8px 22px rgba(5,150,105,.34); }
+.btn-fichar-cta:active { transform: scale(.99); }
 .check-sab { color: #0F6E56; font-weight: 700; }
 .local-tag { font-size: 12px; font-weight: 500; }
 .nota-cell { font-size: 12px; color: var(--gray-600); max-width: 200px; }
@@ -1030,7 +1051,7 @@ body {
   border: 1px solid #e2e8f0; background: #f8fafc;
   color: #475569; font-family: var(--font-body);
   font-size: 12px; font-weight: 500; cursor: pointer;
-  transition: all .15s; white-space: nowrap;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s; white-space: nowrap;
 }
 .btn-detalle-accion:hover {
   background: #0d0d0d; color: #fff; border-color: #0d0d0d;
@@ -1193,7 +1214,7 @@ body {
   font-family: var(--font-body); font-size: 13px; font-weight: 400;
   color: var(--gray-400); cursor: pointer;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .detalle-tab:hover { color: var(--black); }
 .detalle-tab.active {
@@ -1212,7 +1233,7 @@ body {
 }
 .hamburger-btn span {
   display: block; height: 2px; background: var(--white);
-  border-radius: 2px; transition: all 0.25s;
+  border-radius: 2px; transition: background-color .25s, border-color .25s, color .25s, box-shadow .25s, transform .25s, opacity .25s;
 }
 
 .drawer-overlay {
@@ -1241,12 +1262,13 @@ body {
   padding: 1rem 1.2rem; border-bottom: 1px solid #222;
 }
 .drawer-brand { display: flex; align-items: center; gap: 10px; }
+.drawer-brand-name { font-family: var(--font-display); font-size: 22px; letter-spacing: 2px; color: #fff; }
 .drawer-close {
   background: transparent; border: 1px solid #333;
   border-radius: var(--radius-sm); color: var(--gray-400);
   width: 30px; height: 30px; cursor: pointer; font-size: 13px;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .drawer-close:hover { background: #333; color: var(--white); }
 
@@ -1259,7 +1281,7 @@ body {
   padding: 12px 16px; border: none; background: transparent;
   color: var(--gray-400); font-family: var(--font-body);
   font-size: 15px; font-weight: 400; cursor: pointer;
-  border-radius: var(--radius-md); transition: all 0.15s;
+  border-radius: var(--radius-md); transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   text-align: left; width: 100%;
 }
 .drawer-nav-btn:hover {
@@ -1290,7 +1312,7 @@ body {
   padding: 9px 14px; background: rgba(255,255,255,0.06);
   border: 1px solid #333; border-radius: var(--radius-sm);
   color: var(--gray-400); font-family: var(--font-body);
-  font-size: 13px; cursor: pointer; transition: all 0.15s;
+  font-size: 13px; cursor: pointer; transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   width: 100%; justify-content: center;
 }
 .drawer-action-btn:hover { background: rgba(255,255,255,0.12); color: var(--white); }
@@ -1468,7 +1490,7 @@ body {
   color: #64748b;
   cursor: pointer;
   border-radius: 7px;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   white-space: nowrap;
 }
 .admin-tab:hover { color: #1e293b; background: rgba(255,255,255,.6); }
@@ -1570,7 +1592,7 @@ body {
   font-weight: 500;
   color: #475569;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   white-space: nowrap;
 }
 .btn-admin-edit:hover {
@@ -1873,7 +1895,7 @@ body {
   background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.22);
   color: #c8c8c0; cursor: pointer; font-size: 11px; font-weight: 500;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .sesion-perfil:hover { background: rgba(255,255,255,0.22); border-color: #bbb; color: var(--white); }
 .sesion-logout {
@@ -1881,7 +1903,7 @@ body {
   background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);
   color: #888; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
 }
 .sesion-logout:hover { background: #dc2626; border-color: #dc2626; color: white; }
 
@@ -1980,7 +2002,7 @@ body {
   background: #dcfce7; color: #16a34a;
   font-size: 11px; font-weight: 600;
   text-decoration: none; border: 1px solid #bbf7d0;
-  transition: all 0.15s; white-space: nowrap;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s; white-space: nowrap;
 }
 .wa-btn:hover { background: #16a34a; color: white; border-color: #16a34a; }
 
@@ -2401,14 +2423,7 @@ body {
 .top-search input::placeholder { color: rgba(255,255,255,.45); }
 .top-search svg { color: rgba(255,255,255,.55); }
 
-.btn-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  border-color: rgba(255,255,255,.12);
-  background: rgba(255,255,255,.04);
-}
-.btn-icon:hover { background: rgba(255,255,255,.11); transform: translateY(-1px); }
+/* .btn-icon consolidado en la definición canónica (arriba, sección TOPBAR). */
 .connection-status {
   height: 38px;
   border-color: rgba(255,255,255,.12);
@@ -2483,14 +2498,7 @@ body {
   border-radius: 999px;
   background: var(--panel-soft);
 }
-.week-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
-}
+/* .week-btn consolidado en la definición canónica (sección CONTROLS). */
 .week-range {
   min-width: 220px;
   font-size: 20px;
@@ -2723,7 +2731,7 @@ body {
   font-weight: 600;
   text-decoration: none;
   border: 1px solid #bbf7d0;
-  transition: all 0.15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   white-space: nowrap;
 }
 .wa-btn:hover { background: #16a34a; color: #fff; border-color: #16a34a; }
@@ -2880,7 +2888,7 @@ body {
   border: 1px solid #e2e8f0;
   background: #f8fafc;
   color: #64748b;
-  transition: all .15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   cursor: pointer;
   user-select: none;
 }
@@ -3795,7 +3803,7 @@ body {
   background: #f1f5f9;
   border: 1.5px solid #e2e8f0;
   cursor: pointer;
-  transition: all .15s;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
   white-space: nowrap;
   flex-shrink: 0;
   user-select: none;

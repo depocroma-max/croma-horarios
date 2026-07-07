@@ -3719,7 +3719,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
       </section>
 
-      <button onclick="irAFicharEmpleado()" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin:0 0 1rem;padding:16px;border:none;border-radius:16px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(5,150,105,.28);letter-spacing:.2px;">
+      <button class="btn-fichar-cta" onclick="irAFicharEmpleado()">
         ${icon('clock','icon-18')}
         Registrar mi jornada
       </button>
