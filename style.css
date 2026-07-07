@@ -1237,6 +1237,8 @@ body {
 }
 /* Íconos inline en tabs (palmtree, timer) alineados con el texto */
 .detalle-tab svg { vertical-align: -2px; }
+/* Íconos inline en chips/botones de anuncios */
+.btn-admin-edit svg, .anuncio-admin-meta svg, .anuncio-dest-check svg { vertical-align: -2px; }
 
 /* ===== DRAWER MOBILE ===== */
 .hamburger-btn {

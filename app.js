@@ -5446,7 +5446,7 @@ async function cargarSolicitudesAdmin() {
     if (tabBtn) tabBtn.textContent = 'Solicitudes pendientes' + (sols.length ? ' (' + sols.length + ')' : '');
 
     if (!sols.length) {
-      container.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:14px">No hay solicitudes pendientes 🎉</div>';
+      container.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:14px">No hay solicitudes pendientes</div>';
       return;
     }
 
@@ -6150,7 +6150,7 @@ async function abrirNuevoEvento(fechaPreset) {
         <div class="admin-form-grupo" style="background:#fff0f0;border-radius:10px;padding:12px;border:1px solid #fecaca">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="eventoLocalCerrado" style="width:16px;height:16px;accent-color:#dc2626" onchange="toggleLocalCerrado(this.checked)" />
-            <span style="font-size:13px;font-weight:600;color:#dc2626">🔴 Local cerrado</span>
+            <span style="font-size:13px;font-weight:600;color:#dc2626"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:currentColor;margin-right:6px"></span>Local cerrado</span>
           </label>
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Los empleados verán "LOCAL CERRADO" en su semana en vez de "Libre"</span>
         </div>
@@ -6174,7 +6174,7 @@ async function abrirNuevoEvento(fechaPreset) {
             '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">' +
               '<input type="checkbox" id="eventoEmailAdmins" style="width:16px;height:16px;accent-color:#0369a1" />' +
               '<div>' +
-                '<div style="font-size:13px;font-weight:600;color:#0369a1">✉️ Notificar a Administración</div>' +
+                '<div style="font-size:13px;font-weight:600;color:#0369a1;display:flex;align-items:center;gap:6px">' + icon('mail','icon-14') + ' Notificar a Administración</div>' +
                 '<div style="font-size:11px;color:#64748b;margin-top:2px">' + lista + '</div>' +
               '</div>' +
             '</label>' +
@@ -6417,7 +6417,7 @@ function renderEventosEnSemana(nombreEmp) {
           const card = cards[i];
           card.classList.add('is-cerrado');
           const freeEl = card.querySelector('.portal-week-free');
-          if (freeEl) freeEl.innerHTML = '<span class="portal-week-cerrado">🔴 Local cerrado</span>';
+          if (freeEl) freeEl.innerHTML = '<span class="portal-week-cerrado"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:5px"></span>Local cerrado</span>';
         }
         const evHtml = eventosDelDia.map(function(ev) {
           if (ev.tipo === 'local_cerrado') return ''; // ya se muestra en el header
@@ -6912,9 +6912,9 @@ function renderListaAnuncios(anuncios) {
     return `<div class="anuncio-admin-item">
       <div class="anuncio-admin-meta">
         <span class="anuncio-admin-fecha">${icon('calendar','icon-14')} ${a.fecha}</span>
-        <span class="anuncio-admin-dest">👥 ${destLabel}</span>
+        <span class="anuncio-admin-dest">${icon('users','icon-14')} ${destLabel}</span>
         <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-size:11px;margin-left:auto"
-          onclick="eliminarAnuncioAdmin('${a.id}')">🗑 Eliminar</button>
+          onclick="eliminarAnuncioAdmin('${a.id}')">${icon('trash','icon-14')} Eliminar</button>
       </div>
       <div class="anuncio-admin-titulo">${a.titulo}</div>
       <div class="anuncio-admin-msg">${a.mensaje}</div>
@@ -6975,7 +6975,7 @@ function abrirNuevoAnuncio() {
           <label class="emp-filtro-label">Destinatarios</label>
           <label class="anuncio-dest-check" style="margin-bottom:6px;font-weight:600">
             <input type="checkbox" id="anuncioDestTodos" checked onchange="toggleTodosAnuncio(this)" />
-            <span>📢 Todos los empleados</span>
+            <span>${icon('users','icon-14')} Todos los empleados</span>
           </label>
           <div id="anuncioDestLista" style="display:none;flex-direction:column;gap:4px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;max-height:200px;overflow-y:auto">
             ${empOpts || '<span style="font-size:12px;color:#94a3b8">No hay empleados con usuario vinculado</span>'}
