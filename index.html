@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="croma-ds.css?v=20260707-3q" />
-  <link rel="stylesheet" href="style.css?v=20260707-3q" />
+  <link rel="stylesheet" href="style.css?v=20260707-3r" />
 </head>
 <body>
 
@@ -51,25 +51,25 @@
     <div class="top-actions">
       <!-- Campana de notificaciones (admin) -->
       <div class="bell-wrap" id="bellWrap" style="display:none;position:relative">
-        <button class="btn-icon" id="btnBell" title="Notificaciones" onclick="toggleBellDropdown()">
+        <button class="btn-icon" id="btnBell" title="Notificaciones" aria-label="Notificaciones" onclick="toggleBellDropdown()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </button>
         <span class="bell-badge" id="bellBadge" style="display:none">0</span>
       </div>
       <!-- Campana empleado -->
       <div class="bell-wrap" id="bellWrapEmp" style="display:none;position:relative">
-        <button class="btn-icon" id="btnBellEmp" title="Mis notificaciones" onclick="toggleBellDropdownEmp()">
+        <button class="btn-icon" id="btnBellEmp" title="Mis notificaciones" aria-label="Mis notificaciones" onclick="toggleBellDropdownEmp()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </button>
         <span class="bell-badge" id="bellBadgeEmp" style="display:none">0</span>
       </div>
-      <button class="btn-icon" id="btnRefresh" title="Actualizar datos">
+      <button class="btn-icon" id="btnRefresh" title="Actualizar datos" aria-label="Actualizar datos">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
       </button>
-      <button class="btn-icon" id="btnPrint" title="Imprimir">
+      <button class="btn-icon" id="btnPrint" title="Imprimir" aria-label="Imprimir">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       </button>
-      <button class="btn-icon" id="btnSelector" title="Volver al selector" onclick="window.location.href='https://depocroma-max.github.io/Croma-app/'">
+      <button class="btn-icon" id="btnSelector" title="Volver al selector" aria-label="Volver al selector" onclick="window.location.href='https://depocroma-max.github.io/Croma-app/'">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       </button>
       <div class="connection-status" id="connStatus">
@@ -87,7 +87,7 @@
         <img src="tridente_solo.png" style="height:28px" alt="Croma" />
         <span class="drawer-brand-name">CROMA</span>
       </div>
-      <button class="drawer-close" id="btnDrawerClose">✕</button>
+      <button class="drawer-close" id="btnDrawerClose" aria-label="Cerrar menú">✕</button>
     </div>
     <nav class="drawer-nav">
       <button class="drawer-nav-btn" data-view="envivo" id="drawerNavEnvivo" style="display:none">
@@ -206,14 +206,14 @@
     <!-- CONTROLS -->
     <div class="controls-bar">
       <div class="week-nav">
-        <button class="week-btn" id="prevWeek">&#8592;</button>
+        <button class="week-btn" id="prevWeek" aria-label="Semana anterior">&#8592;</button>
         <span class="week-range" id="weekRange"></span>
-        <button class="week-btn" id="nextWeek">&#8594;</button>
+        <button class="week-btn" id="nextWeek" aria-label="Semana siguiente">&#8594;</button>
       </div>
       <div class="week-nav mes-nav" id="mesNav" style="display:none">
-        <button class="week-btn" id="prevMes">&#8592;</button>
+        <button class="week-btn" id="prevMes" aria-label="Mes anterior">&#8592;</button>
         <span class="week-range" id="mesRange"></span>
-        <button class="week-btn" id="nextMes">&#8594;</button>
+        <button class="week-btn" id="nextMes" aria-label="Mes siguiente">&#8594;</button>
       </div>
       <div class="filters">
         <select id="filterSucursal" class="filter-select">
@@ -271,7 +271,7 @@
   <footer class="app-footer">Croma · Sistema interno v1.0 © 2026</footer>
 
   <script src="croma-icons.js?v=20260707-3q"></script>
-  <script src="app.js?v=20260707-3q"></script>
+  <script src="app.js?v=20260707-3r"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js');

@@ -35,6 +35,12 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    /* Focus visible (accesibilidad por teclado) */
+    a:focus-visible, button:focus-visible, input:focus-visible,
+    textarea:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px;
+    }
+
     /* ── TOPBAR ── */
     .topbar {
       display: flex; align-items: center; gap: 1.25rem;
@@ -344,7 +350,7 @@
     <span class="sesion-nombre" id="topbarSuc">—</span>
   </div>
   <div class="top-actions">
-    <button class="btn-icon" onclick="window.location.href='https://depocroma-max.github.io/Croma-app/'" title="Volver al hub">
+    <button class="btn-icon" onclick="window.location.href='https://depocroma-max.github.io/Croma-app/'" title="Volver al hub" aria-label="Volver al hub">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
     </button>
     <div class="connection-status">
@@ -598,7 +604,7 @@ function irASelectorSucursal() {
 
 function renderSucGrid() {
   document.getElementById('sucGrid').innerHTML = SUCURSALES.map(function(s) {
-    return '<div class="suc-card" onclick="window.location.href=\'kiosco.html?local=' + s.id + '\'">' +
+    return '<div class="suc-card" role="button" tabindex="0" aria-label="Seleccionar sucursal ' + s.nombre + '" onclick="window.location.href=\'kiosco.html?local=' + s.id + '\'">' +
       '<div class="suc-card-icon" style="background:' + s.colorLight + ';color:' + s.color + '">' + icon(s.icon) + '</div>' +
       '<div class="suc-card-name">' + s.nombre + '</div>' +
     '</div>';
@@ -760,7 +766,7 @@ function buildCard(emp, externo) {
   const badge  = statusBadge(emp.nombre, externo);
   const nombreEsc = emp.nombre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
-  return '<div class="emp-card" data-nombre="' + emp.nombre.replace(/"/g,'&quot;') + '">' +
+  return '<div class="emp-card" role="button" tabindex="0" aria-label="Registrar jornada de ' + nombre + '" data-nombre="' + emp.nombre.replace(/"/g,'&quot;') + '">' +
     '<div class="emp-card-photo-wrap">' + fotoHTML + '</div>' +
     '<div class="emp-card-body">' +
       (num ? '<div class="emp-card-num">#' + num + '</div>' : '') +
@@ -793,6 +799,15 @@ document.addEventListener('click', function(ev) {
   const nombre = card.dataset.nombre;
   const emp    = todosEmpleados.find(function(e) { return e.nombre === nombre; });
   if (emp) seleccionarEmpleado(emp);
+});
+
+// Activación por teclado (Enter/Espacio) para cards clickeables (accesibilidad).
+document.addEventListener('keydown', function(ev) {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const card = ev.target.closest('.emp-card, .suc-card');
+  if (!card) return;
+  ev.preventDefault();
+  card.click();
 });
 
 // ── MODAL CROMA (confirmación con estilo) ──

@@ -1158,7 +1158,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td>—</td>
         <td></td>
         <td>—</td>
-        <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar certificado">${icon('x','icon-12')}</button></td>
+        <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar certificado" aria-label="Borrar certificado">${icon('x','icon-12')}</button></td>
       </tr>`;
       return `
       <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
@@ -1331,7 +1331,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
                 <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td>—</td><td></td><td>—</td>
-                <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar">${icon('x','icon-12')}</button></td>
+                <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar" aria-label="Borrar certificado">${icon('x','icon-12')}</button></td>
               </tr>`;
               return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
@@ -1456,7 +1456,7 @@ function abrirDetalleDia(dia, mesIdx, anio) {
             <div class="detalle-titulo">${fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1)}</div>
             <div class="detalle-sub">${totalEmps} empleados · ${totalHoras.toFixed(1)} hs totales</div>
           </div>
-          <button class="detalle-close" onclick="cerrarDetalle()">${icon('x','icon-16')}</button>
+          <button class="detalle-close" onclick="cerrarDetalle()" aria-label="Cerrar">${icon('x','icon-16')}</button>
         </div>
       </div>
       <div class="detalle-tabla-wrap">
@@ -2815,7 +2815,7 @@ function abrirFormCertificado(nombreEmp) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Agregar certificado — ${nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -3072,7 +3072,7 @@ function _mostrarLoginAppLegado() {
             <input type="password" id="loginPin" class="login-input"
               placeholder="••••" maxlength="8" autocomplete="off"
               onkeydown="if(event.key==='Enter')intentarLogin()" />
-            <button class="login-pin-toggle" type="button" onclick="togglePinVisibility()" title="Mostrar PIN">
+            <button class="login-pin-toggle" type="button" onclick="togglePinVisibility()" title="Mostrar PIN" aria-label="Mostrar u ocultar PIN">
               <span id="iconEye">${icon('eye','icon-16')}</span>
             </button>
           </div>
@@ -3232,11 +3232,11 @@ function actualizarIndicadorSesion() {
   const esAdmin = sesionActual.rol === 'admin';
   chip.innerHTML = `
     <span class="sesion-nombre">${esAdmin ? `${icon('user','icon-14')} Admin` : sesionActual.nombre}</span>
-    ${!esAdmin ? `<button class="sesion-perfil" onclick="abrirMiPerfil()" title="Mi perfil">
+    ${!esAdmin ? `<button class="sesion-perfil" onclick="abrirMiPerfil()" title="Mi perfil" aria-label="Mi perfil">
       ${icon('user','icon-12')}
       Mi perfil
     </button>` : ''}
-    <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión">
+    <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión" aria-label="Cerrar sesión">
       ${icon('logOut','icon-13')}
     </button>
   `;
@@ -3767,9 +3767,9 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
             <h2>Mi semana</h2>
           </div>
           <div style="display:flex;gap:6px;align-items:center">
-            <button class="emp-semana-nav-btn" onclick="empNavSemana(-1)" title="Semana anterior">&#8592;</button>
+            <button class="emp-semana-nav-btn" onclick="empNavSemana(-1)" title="Semana anterior" aria-label="Semana anterior">&#8592;</button>
             <button class="emp-semana-nav-btn emp-semana-nav-hoy" onclick="empNavSemana(0,'reset')" title="Ir a esta semana">Hoy</button>
-            <button class="emp-semana-nav-btn" onclick="empNavSemana(1)" title="Semana siguiente">&#8594;</button>
+            <button class="emp-semana-nav-btn" onclick="empNavSemana(1)" title="Semana siguiente" aria-label="Semana siguiente">&#8594;</button>
           </div>
         </div>
         <div class="portal-week-grid" id="empSemanaGrid">
@@ -5494,7 +5494,7 @@ function abrirModalAjusteAdmin(empEnc, anio) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Ajustar días — ${nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -5556,7 +5556,7 @@ function abrirModalRespuesta(solicitudId, estado, empEnc) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">${estado === 'rechazada' ? 'Rechazar solicitud' : 'Responder solicitud'}</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -5612,7 +5612,7 @@ function abrirModalSolicitudVac(empEnc) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Solicitar vacaciones</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
@@ -6092,7 +6092,7 @@ async function abrirNuevoEvento(fechaPreset) {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Nuevo evento</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form" style="gap:14px">
 
@@ -6951,7 +6951,7 @@ function abrirNuevoAnuncio() {
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
         <div class="admin-titulo">Nuevo anuncio</div>
-        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
