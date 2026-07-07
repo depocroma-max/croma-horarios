@@ -223,9 +223,7 @@
       padding: 13px 34px 13px 14px;
       font-family: var(--font-display); font-size: 22px; letter-spacing: 1px;
       border-radius: var(--radius-md); background: var(--white);
-      -webkit-appearance: none; appearance: none;
     }
-    .time-wrap input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0; position: absolute; right: 0; width: 100%; height: 100%; cursor: pointer; }
     .time-chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--accent); pointer-events: none; }
     .fecha-box {
       display: flex; align-items: center; justify-content: space-between;
@@ -734,7 +732,8 @@ document.addEventListener('visibilitychange', function() {
 function estadoEmpleado(nombre) {
   const mine = fichadasHoy.filter(function(f) { return f.empleado === nombre; });
   if (!mine.length) return null;
-  return mine[mine.length - 1].hora_salida ? 'completa' : 'pendiente';
+  const ult = mine[mine.length - 1];
+  return (ult.hora_salida || ult.salida) ? 'completa' : 'pendiente';
 }
 
 function statusBadge(nombre, externo) {
@@ -854,25 +853,33 @@ function verificarTurnoActivo() {
   };
   var now = new Date();
   var minAhora = now.getHours() * 60 + now.getMinutes();
+  var nombre = usuariosSel.nombre;
 
+  // Compatibilidad con ambos formatos de campo (GAS puede devolver hora_salida o salida)
   var mias = fichadasHoy.filter(function(f) {
-    return f.empleado === usuariosSel.nombre && f.hora_salida;
+    var mismoEmp = (f.empleado || '').toLowerCase() === nombre.toLowerCase();
+    return mismoEmp && (f.hora_salida || f.salida);
   });
+
+  console.log('[kiosco] verificarTurnoActivo', { nombre: nombre, total: fichadasHoy.length, encontrados: mias.length, fichadasHoy: fichadasHoy });
+
   if (!mias.length) return;
 
   var ultima = mias.reduce(function(a, b) {
-    return toMin(b.hora_salida) > toMin(a.hora_salida) ? b : a;
+    return toMin(b.hora_salida || b.salida) > toMin(a.hora_salida || a.salida) ? b : a;
   });
 
+  var salida  = ultima.hora_salida || ultima.salida  || '';
+  var entrada = ultima.hora_entrada || ultima.entrada || '';
   var hint = document.getElementById('submitHint');
   var btn  = document.getElementById('btnSubmit');
 
-  if (minAhora < toMin(ultima.hora_salida)) {
+  if (minAhora < toMin(salida)) {
     btn.disabled = true;
-    hint.textContent = 'Turno en curso (' + ultima.hora_entrada + '–' + ultima.hora_salida + '). El botón se habilitará cuando finalice.';
+    hint.textContent = 'Turno en curso (' + entrada + '–' + salida + '). El botón se habilitará cuando finalice.';
     hint.style.color = '#dc2626';
   } else {
-    hint.textContent = 'Ya tiene un turno hoy (' + ultima.hora_entrada + '–' + ultima.hora_salida + '). Podés cargar otro.';
+    hint.textContent = 'Ya tiene un turno hoy (' + entrada + '–' + salida + '). Podés cargar otro.';
     hint.style.color = 'var(--gray-400)';
   }
 }
