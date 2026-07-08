@@ -4355,6 +4355,7 @@ function renderAdminInline() {
       "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\">Categorías</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\">Usuarios</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\">Configuración</button>" +
+      "<button class='admin-tab' onclick=\"switchAdminTab('ajusteJornada',this)\">Ajuste de jornada</button>" +
     "</div>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
       "<div class='admin-toolbar'>" +
@@ -4418,6 +4419,7 @@ function renderAdminInline() {
         "</div>" +
       "</div>" +
     "</div>" +
+    "<div id='adminTabAjusteJornada' class='admin-tab-content' style='display:none'></div>" +
     "</div>";
 }
 
@@ -4436,8 +4438,10 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
   document.getElementById('adminTabUsuarios').style.display     = tab === 'usuarios'      ? 'block' : 'none';
   document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
+  document.getElementById('adminTabAjusteJornada').style.display= tab === 'ajusteJornada'  ? 'block' : 'none';
   if (tab === 'usuarios')      cargarUsuarios().then(() => { const t = document.getElementById('adminTabUsuarios'); if(t) t.innerHTML = renderAdminUsuariosInner(); });
   if (tab === 'configuracion') cargarConfigAdmin();
+  if (tab === 'ajusteJornada') renderAjusteJornadaTab();
 }
 
 function filtrarTablaAdmin(q) {
@@ -4446,6 +4450,356 @@ function filtrarTablaAdmin(q) {
   rows.forEach(row => {
     row.style.display = row.textContent.toLowerCase().includes(ql) ? '' : 'none';
   });
+}
+
+// ══════════════════════════════════════════════════════
+//  AJUSTE DE JORNADA — Fase 3 (conectado a backend real)
+//  Fuente de verdad: hoja FICHADAS vía accion=ajustar_jornada (Fase 2, GAS).
+//  Lectura: accion=get_fichadas_empleado (ya devuelve id_fichada/estado).
+//  JORNADAS_AJUSTE_CACHE es solo el resultado de la última búsqueda real
+//  (para que el modal no tenga que volver a pedirlo al backend) — no es mock.
+// ══════════════════════════════════════════════════════
+
+const MOTIVOS_AJUSTE = [
+  { id: 'olvido_marcar_entrada',     label: 'Olvidó marcar entrada' },
+  { id: 'olvido_marcar_salida',      label: 'Olvidó marcar salida' },
+  { id: 'error_de_carga',            label: 'Error de carga' },
+  { id: 'cambio_autorizado',         label: 'Cambio autorizado' },
+  { id: 'correccion_administrativa', label: 'Corrección administrativa' },
+  { id: 'otro',                      label: 'Otro' },
+];
+
+let JORNADAS_AJUSTE_CACHE = {}; // key `${empleado}|${fecha}` → última jornada real cargada
+let AJUSTES_SESSION       = new Set(); // jornadas ajustadas con éxito en esta sesión (solo para el badge visual)
+
+function _fechaDisplay(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// Agrupa el listado plano de get_fichadas_empleado (una fila por turno) en
+// jornadas de 1-2 turnos, ordenando por hora de entrada dentro del día.
+function _agruparFichadasEnJornadas(empleado, local, fichadas) {
+  const porFecha = {};
+  fichadas.forEach(f => {
+    (porFecha[f.fecha] = porFecha[f.fecha] || []).push(f);
+  });
+  return Object.keys(porFecha).map(fecha => {
+    const turnos = porFecha[fecha].slice().sort((a, b) => (a.entrada || '').localeCompare(b.entrada || ''));
+    const toTurno = f => ({ id_fichada: f.id_fichada, entrada: f.entrada, salida: f.salida, estado: f.estado || 'ACTIVA' });
+    return {
+      empleado, local, fecha,
+      turno1: turnos[0] ? toTurno(turnos[0]) : null,
+      turno2: turnos[1] ? toTurno(turnos[1]) : null,
+      recupera_horas: turnos.some(f => f.tipo === 'RECUPERO'),
+      observacion: turnos.map(f => f.nota).find(n => n) || '',
+    };
+  });
+}
+
+function renderAjusteJornadaTab() {
+  const cont = document.getElementById('adminTabAjusteJornada');
+  if (!cont) return;
+
+  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a, b) => {
+    const na = parseInt(a) || 999, nb = parseInt(b) || 999;
+    return na !== nb ? na - nb : a.localeCompare(b);
+  });
+
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth() + 1;
+  const MESES_LBL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  cont.innerHTML =
+    "<div class='admin-toolbar' style='flex-wrap:wrap;gap:10px'>" +
+      "<input type='text' class='admin-search' id='ajusteBuscarEmp' list='ajusteEmpList' placeholder='Buscar empleado...' style='min-width:220px' />" +
+      "<datalist id='ajusteEmpList'>" + empNombres.map(n => `<option value="${n}">`).join('') + "</datalist>" +
+      "<select class='admin-input' id='ajusteMes' style='margin:0;width:auto'>" +
+        MESES_LBL.map((m, i) => `<option value="${i + 1}" ${i + 1 === mesActual ? 'selected' : ''}>${m}</option>`).join('') +
+      "</select>" +
+      "<select class='admin-input' id='ajusteAnio' style='margin:0;width:auto'>" +
+        [anioActual, anioActual - 1].map(a => `<option value="${a}">${a}</option>`).join('') +
+      "</select>" +
+      "<button class='btn-connect' style='margin:0;width:auto;padding:8px 18px;font-size:13px' onclick='buscarJornadasAjuste()'>" + icon('search', 'icon-14') + " Buscar</button>" +
+    "</div>" +
+    "<div id='ajusteResultados' style='margin-top:1rem'>" +
+      "<div class='ajuste-empty-state'>" + icon('fileText', 'icon-48') + "<p class='text-secondary'>Buscá un empleado y un período para ver sus jornadas.</p></div>" +
+    "</div>";
+}
+
+async function buscarJornadasAjuste() {
+  const empleado = document.getElementById('ajusteBuscarEmp')?.value.trim();
+  const mes = parseInt(document.getElementById('ajusteMes')?.value);
+  const anio = parseInt(document.getElementById('ajusteAnio')?.value);
+  const resEl = document.getElementById('ajusteResultados');
+  if (!resEl) return;
+
+  if (!empleado) {
+    resEl.innerHTML = "<div class='alert alert-warning'>" + icon('alertTriangle', 'icon-16') + " Ingresá un nombre de empleado para buscar.</div>";
+    return;
+  }
+
+  const registro = state.datos.find(r => r.EMPLEADO === empleado);
+  if (!registro) {
+    resEl.innerHTML = "<div class='alert alert-danger'>" + icon('alertTriangle', 'icon-16') + " No se encontró ningún empleado con ese nombre exacto.</div>";
+    return;
+  }
+  const local = registro.LOCAL;
+
+  resEl.innerHTML = "<div class='ajuste-empty-state'><div class='spinner' role='status' aria-label='Cargando'></div><p class='text-secondary'>Buscando jornadas...</p></div>";
+
+  try {
+    const url  = `${APPS_SCRIPT_URL}?accion=get_fichadas_empleado&empleado=${encodeURIComponent(empleado)}&incluir_anuladas=1`;
+    const json = await fetchJSONretry(url);
+    if (!json.ok) throw new Error(json.error || 'Error al cargar las jornadas');
+
+    const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
+    const fichadasPeriodo = (json.fichadas || []).filter(f => f.fecha.startsWith(periodo));
+    const jornadas = _agruparFichadasEnJornadas(empleado, local, fichadasPeriodo)
+      .sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+    jornadas.forEach(j => { JORNADAS_AJUSTE_CACHE[`${j.empleado}|${j.fecha}`] = j; });
+
+    if (!jornadas.length) {
+      resEl.innerHTML = "<div class='ajuste-empty-state'>" + icon('fileText', 'icon-48') + "<p class='text-secondary'>No hay jornadas para ese empleado en ese período.</p></div>";
+      return;
+    }
+
+    resEl.innerHTML = renderTablaAjusteJornada(jornadas);
+  } catch (e) {
+    resEl.innerHTML = "<div class='alert alert-danger'>" + icon('alertTriangle', 'icon-16') + " No se pudieron cargar las jornadas. Revisá la conexión e intentá de nuevo.</div>";
+  }
+}
+
+function renderTablaAjusteJornada(filas) {
+  const fmtTurno = t => {
+    if (!t) return '<span class="text-muted">—</span>';
+    const anulado = t.estado === 'ANULADA' ? ' <span class="badge badge-neutral" style="margin-left:4px">Anulado</span>' : '';
+    return `${t.entrada}–${t.salida}${anulado}`;
+  };
+  const filasHTML = filas.map(j => {
+    const totalHs = _calcularHsJornada(j);
+    const empEnc = j.empleado.replace(/'/g, "\\'");
+    const ajustada = AJUSTES_SESSION.has(`${j.empleado}|${j.fecha}`);
+    return "<tr>" +
+      `<td>${_fechaDisplay(j.fecha)}</td>` +
+      `<td>${fmtTurno(j.turno1)}</td>` +
+      `<td>${fmtTurno(j.turno2)}</td>` +
+      `<td><strong>${totalHs.toFixed(1)}</strong></td>` +
+      `<td>${ajustada ? `<span class="badge badge-info">${icon('edit', 'icon-12')} Ajustada</span>` : '<span class="text-muted" style="font-size:12px">—</span>'}</td>` +
+      `<td><button class="btn-icon" title="Ajustar jornada" aria-label="Ajustar jornada del ${_fechaDisplay(j.fecha)}" onclick="abrirModalAjusteJornada('${empEnc}','${j.fecha}')">${icon('edit', 'icon-16')}</button></td>` +
+      "</tr>";
+  }).join('');
+
+  return "<div class='admin-table-wrap'>" +
+    "<table class='admin-tabla'>" +
+      "<thead><tr><th>Fecha</th><th>Turno 1</th><th>Turno 2</th><th>Hs total</th><th>Estado</th><th></th></tr></thead>" +
+      "<tbody>" + filasHTML + "</tbody>" +
+    "</table>" +
+  "</div>";
+}
+
+function _calcularHsJornada(j) {
+  const hsTurno = t => {
+    if (!t || t.estado === 'ANULADA') return 0;
+    const [eh, em] = t.entrada.split(':').map(Number);
+    const [sh, sm] = t.salida.split(':').map(Number);
+    let hs = (sh * 60 + sm - (eh * 60 + em)) / 60;
+    if (hs < 0) hs += 24;
+    return hs;
+  };
+  return hsTurno(j.turno1) + hsTurno(j.turno2);
+}
+
+// ── Modal "Ajuste de jornada" (comparador Antes → Después) ────
+
+function abrirModalAjusteJornada(empleado, fechaISO) {
+  const key = `${empleado}|${fechaISO}`;
+  const j = JORNADAS_AJUSTE_CACHE[key];
+  if (!j) { showToast('No se encontró la jornada'); return; }
+
+  const nomMatch = empleado.match(/^(\d+)\s+(.+)$/);
+  const nomMostrar = nomMatch ? nomMatch[2] : empleado;
+  const motivoOpts = MOTIVOS_AJUSTE.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+
+  const turnoBlock = (n, t) => {
+    const activo = t && t.estado !== 'ANULADA';
+    return `
+    <div class="admin-form-grupo ajuste-turno-block">
+      <label class="emp-filtro-label">Turno ${n}</label>
+      <div class="ajuste-diff-row">
+        <div class="ajuste-diff-antes">
+          <span class="ajuste-diff-tag">Antes</span>
+          <span>${activo ? `${t.entrada} – ${t.salida}` : '<span class="text-muted">Sin turno</span>'}</span>
+        </div>
+        <div class="ajuste-diff-arrow">${icon('arrowRight', 'icon-16')}</div>
+        <div class="ajuste-diff-despues">
+          <span class="ajuste-diff-tag">Después</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="time" class="admin-input" id="ajusteEntrada${n}" value="${activo ? t.entrada : ''}" onchange="onAjusteCampoChange(${n})" style="margin:0" />
+            <span class="text-muted">–</span>
+            <input type="time" class="admin-input" id="ajusteSalida${n}" value="${activo ? t.salida : ''}" onchange="onAjusteCampoChange(${n})" style="margin:0" />
+          </div>
+        </div>
+      </div>
+      <p id="ajusteDiffTexto${n}" class="ajuste-diff-texto"></p>
+    </div>`;
+  };
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Ajuste de jornada — ${nomMostrar} · ${_fechaDisplay(fechaISO)}</div>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x', 'icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        ${turnoBlock(1, j.turno1)}
+        ${turnoBlock(2, j.turno2)}
+
+        <div class="admin-form-grupo ajuste-diff-row" style="align-items:center">
+          <div class="ajuste-diff-antes">
+            <span class="ajuste-diff-tag">Antes</span>
+            <span>${j.recupera_horas ? 'Sí' : 'No'}</span>
+          </div>
+          <div class="ajuste-diff-arrow">${icon('arrowRight', 'icon-16')}</div>
+          <div class="ajuste-diff-despues">
+            <span class="ajuste-diff-tag">Después</span>
+            <label class="form-switch"><input type="checkbox" id="ajusteRecuperaHoras" ${j.recupera_horas ? 'checked' : ''}><span class="switch-track"></span></label>
+          </div>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Certificado <span class="text-muted" style="font-weight:400">(se guarda aparte, en Certificados)</span></label>
+          <select class="admin-input" id="ajusteCertificado">
+            <option value="">Sin certificado</option>
+            ${TIPOS_CERTIFICADO.map(t => `<option value="${t}">${t}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="admin-form-grupo ajuste-diff-row">
+          <div class="ajuste-diff-antes">
+            <span class="ajuste-diff-tag">Antes</span>
+            <span>${j.observacion ? j.observacion : '<span class="text-muted">Sin observación</span>'}</span>
+          </div>
+          <div class="ajuste-diff-arrow">${icon('arrowRight', 'icon-16')}</div>
+          <div class="ajuste-diff-despues">
+            <span class="ajuste-diff-tag">Después</span>
+            <textarea class="admin-input" id="ajusteObservacion" rows="2" style="margin:0;height:auto;min-height:64px;padding:10px 12px;resize:vertical;font-family:inherit">${j.observacion || ''}</textarea>
+          </div>
+        </div>
+
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Motivo del ajuste *</label>
+          <select class="admin-input" id="ajusteMotivo" onchange="onMotivoAjusteChange()">
+            <option value="">Seleccioná un motivo</option>
+            ${motivoOpts}
+          </select>
+        </div>
+        <div class="admin-form-grupo" id="ajusteMotivoDetalleGrupo" style="display:none">
+          <label class="emp-filtro-label">Detalle del motivo *</label>
+          <input type="text" class="admin-input" id="ajusteMotivoDetalle" placeholder="Detallá el motivo del ajuste" />
+        </div>
+
+        <p id="ajusteError" class="form-error" style="display:none;margin-bottom:0.5rem"></p>
+
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1rem">
+          <button class="btn-connect" style="margin:0" onclick="confirmarAjusteJornada('${empleado.replace(/'/g, "\\'")}','${fechaISO}')">
+            Guardar ajuste
+          </button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+}
+
+function onAjusteCampoChange(turno) {
+  const entrada = document.getElementById(`ajusteEntrada${turno}`)?.value;
+  const salida = document.getElementById(`ajusteSalida${turno}`)?.value;
+  const texto = document.getElementById(`ajusteDiffTexto${turno}`);
+  if (!texto) return;
+  texto.textContent = (!entrada && !salida) ? '' : `Nuevo turno ${turno}: ${entrada || '—'} – ${salida || '—'}`;
+}
+
+function onMotivoAjusteChange() {
+  const motivo = document.getElementById('ajusteMotivo')?.value;
+  const grupo = document.getElementById('ajusteMotivoDetalleGrupo');
+  if (grupo) grupo.style.display = motivo === 'otro' ? 'block' : 'none';
+}
+
+async function confirmarAjusteJornada(empleado, fechaISO) {
+  const errEl = document.getElementById('ajusteError');
+  errEl.style.display = 'none';
+
+  const key = `${empleado}|${fechaISO}`;
+  const j = JORNADAS_AJUSTE_CACHE[key];
+  if (!j) { showToast('No se encontró la jornada'); return; }
+
+  const leerTurno = n => ({
+    entrada: document.getElementById(`ajusteEntrada${n}`)?.value || null,
+    salida: document.getElementById(`ajusteSalida${n}`)?.value || null,
+  });
+  const t1 = leerTurno(1), t2 = leerTurno(2);
+  const motivo = document.getElementById('ajusteMotivo')?.value;
+  const motivoDetalle = document.getElementById('ajusteMotivoDetalle')?.value.trim();
+  const recuperaHoras = document.getElementById('ajusteRecuperaHoras')?.checked;
+  const observacion = document.getElementById('ajusteObservacion')?.value.trim();
+
+  const err = m => { errEl.textContent = m; errEl.style.display = 'block'; };
+
+  if (!motivo) return err('Elegí un motivo para el ajuste.');
+  if (motivo === 'otro' && !motivoDetalle) return err('Detallá el motivo del ajuste.');
+  if ((t1.entrada && !t1.salida) || (!t1.entrada && t1.salida)) return err('Completá entrada y salida del Turno 1.');
+  if ((t2.entrada && !t2.salida) || (!t2.entrada && t2.salida)) return err('Completá entrada y salida del Turno 2.');
+  if (!t1.entrada && !t2.entrada) return err('La jornada no puede quedar sin ningún turno.');
+  if (t2.entrada && !t1.entrada) return err('No puede haber Turno 2 sin Turno 1.');
+  if (t1.entrada && t1.salida && t1.entrada >= t1.salida) return err('La salida del Turno 1 debe ser posterior a la entrada.');
+  if (t2.entrada && t2.salida && t2.entrada >= t2.salida) return err('La salida del Turno 2 debe ser posterior a la entrada.');
+
+  const payload = {
+    empleado, local: j.local,
+    fecha_jornada: fechaISO, fecha_jornada_original: fechaISO,
+    id_fichada_turno1: j.turno1?.id_fichada || null,
+    entrada1: t1.entrada, salida1: t1.salida,
+    turno1_original: j.turno1 ? { entrada: j.turno1.entrada, salida: j.turno1.salida, estado: j.turno1.estado } : null,
+    id_fichada_turno2: j.turno2?.id_fichada || null,
+    entrada2: t2.entrada, salida2: t2.salida,
+    turno2_original: j.turno2 ? { entrada: j.turno2.entrada, salida: j.turno2.salida, estado: j.turno2.estado } : null,
+    recupera_horas: !!recuperaHoras,
+    observacion: observacion || '',
+    motivo, motivo_detalle: motivo === 'otro' ? motivoDetalle : null,
+    admin_usuario: sesionActual?.nombre || '',
+    timestamp_cliente: new Date().toISOString(),
+  };
+
+  const btn = document.querySelector('#adminOverlay .btn-connect');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=ajustar_jornada`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+    });
+    const json = await resp.json();
+
+    if (!json.ok) {
+      err(json.mensaje || 'No se pudo guardar el ajuste.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Guardar ajuste'; }
+      return;
+    }
+
+    AJUSTES_SESSION.add(key);
+    cerrarAdmin();
+    showToast('✓ Jornada ajustada correctamente');
+    buscarJornadasAjuste();
+  } catch (e) {
+    err('No se pudo conectar con el servidor. Revisá la conexión e intentá de nuevo.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar ajuste'; }
+  }
 }
 
 function abrirEditarEmpleado(nombre) {
