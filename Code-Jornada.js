@@ -580,6 +580,7 @@ function doPost(e) {
     if (accion === 'guardarFichada')  return guardarFichada(e);
     if (accion === 'acreditarBanco') return acreditarBanco(e);
     if (accion === 'usarBanco')      return usarBanco(e);
+    if (accion === 'ajustar_jornada') return ajustarJornada(e);
     return ContentService.createTextOutput(JSON.stringify({ error: 'Acción POST no reconocida' }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
@@ -2032,8 +2033,151 @@ const FICHADAS_HEADERS = [
   'LOCAL','AÑO','MES','DIA','Marca temporal','EMPLEADO/A',
   'HORA ENTRADA','HORA SALIDA',
   'Nota adicional: Solo dejar asentado cuando se carga tarde el ingreso (Ejemplo: corte de luz, no enciende la pc, etc)',
-  'TOTAL en hs','FECHA','TIPO_REGISTRO','HS_A_RECUPERAR','DESTINO_RECUPERACION','FECHA_A_RECUPERAR','MODO_CARGA','LAT','LON','DISTANCIA_M'
+  'TOTAL en hs','FECHA','TIPO_REGISTRO','HS_A_RECUPERAR','DESTINO_RECUPERACION','FECHA_A_RECUPERAR','MODO_CARGA','LAT','LON','DISTANCIA_M',
+  'ID_FICHADA','ESTADO'
 ];
+
+const MESES_ES_FICHADAS = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                            'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const DIAS_ES_FICHADAS  = ['DOMINGO','LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES','SÁBADO'];
+
+function _horaAMin(str) {
+  const p = String(str).split(':').map(Number);
+  return p[0] * 60 + (p[1] || 0);
+}
+
+function _calcularTotalHs(entrada, salida) {
+  let totalHs = (_horaAMin(salida) - _horaAMin(entrada)) / 60;
+  if (totalHs < 0) totalHs += 24;
+  return Math.round(totalHs * 100) / 100;
+}
+
+// AÑO/MES/DIA a partir de una fecha YYYY-MM-DD, con la misma lógica que ya
+// usa guardarFichada — reusada también por ajustarJornada.
+function _derivarCamposFecha(fechaISO) {
+  const partes   = fechaISO.split('-').map(Number);
+  const fechaObj = new Date(partes[0], partes[1] - 1, partes[2]);
+  return {
+    anio:     String(partes[0]),
+    mesTexto: MESES_ES_FICHADAS[partes[1] - 1],
+    diaTexto: DIAS_ES_FICHADAS[fechaObj.getDay()],
+  };
+}
+
+// ── ID_FICHADA / ESTADO: columnas, contador atómico y backfill ──
+// ID_FICHADA: identificador permanente y corto (FID000001, FID001250, ...),
+// sin fecha/hora (esa info ya vive en otras columnas). ESTADO: ACTIVA|ANULADA,
+// sostiene la anulación lógica (nunca se borran filas de FICHADAS).
+// Ambas se usan para Ajuste de jornada y futuras auditorías — nunca para el
+// sistema viejo (DATOS GENERALES/QUERY), que no las conoce ni las necesita.
+
+// Asegura que una columna exista al final real de la hoja, sin mover ni
+// renombrar ninguna columna existente. Idempotente: si ya existe, devuelve
+// su posición sin tocar nada.
+function _asegurarColumna(hoja, nombre) {
+  const lastCol = hoja.getLastColumn();
+  const headers = hoja.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+  let col = headers.indexOf(nombre) + 1; // 1-based; 0 si no existe
+  if (col === 0) {
+    col = lastCol + 1;
+    hoja.getRange(1, col).setValue(nombre);
+  }
+  return col;
+}
+
+function _asegurarColumnaIdFichada(hoja) { return _asegurarColumna(hoja, 'ID_FICHADA'); }
+function _asegurarColumnaEstado(hoja)    { return _asegurarColumna(hoja, 'ESTADO'); }
+
+function _formatearIdFichada(n) {
+  return 'FID' + String(n).padStart(6, '0');
+}
+
+// Genera el próximo ID_FICHADA de forma atómica. LockService garantiza que
+// dos fichadas concurrentes nunca lean el mismo valor de NEXT_FICHADA_ID.
+// Si falla el guardado después de reservar el número, ese número queda sin
+// usar (hueco en la secuencia) pero jamás se duplica.
+function generarNuevoIdFichada() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const props  = PropertiesService.getScriptProperties();
+    const actual = parseInt(props.getProperty('NEXT_FICHADA_ID'), 10) || 1;
+    props.setProperty('NEXT_FICHADA_ID', String(actual + 1));
+    return _formatearIdFichada(actual);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Backfill — correr UNA VEZ manualmente desde el editor de Apps Script.
+// No expuesto por doGet/doPost. Idempotente: se puede volver a correr sin
+// generar IDs nuevos ni duplicar la columna.
+// Flujo: agrega la columna si falta → completa solo las filas sin ID →
+// inicializa NEXT_FICHADA_ID → correr validarIdFichada() a continuación.
+function backfillIdFichada() {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('FICHADAS');
+  if (!hoja) { Logger.log('FICHADAS no existe, nada que hacer.'); return; }
+
+  const lastRow = hoja.getLastRow();
+  if (lastRow < 2) { Logger.log('FICHADAS sin filas de datos.'); return; }
+
+  const col   = _asegurarColumnaIdFichada(hoja);
+  const rango = hoja.getRange(2, col, lastRow - 1, 1);
+  const actuales = rango.getValues();
+
+  // Máximo ID ya existente (preserva IDs previos si el script ya corrió antes)
+  let maxActual = 0;
+  actuales.forEach(fila => {
+    const m = String(fila[0] || '').trim().match(/^FID(\d+)$/);
+    if (m) maxActual = Math.max(maxActual, parseInt(m[1], 10));
+  });
+
+  let siguiente = maxActual + 1;
+  let generados = 0;
+  const nuevos = actuales.map(fila => {
+    const v = String(fila[0] || '').trim();
+    if (v) return [v]; // ya tiene ID → se conserva tal cual
+    generados++;
+    return [_formatearIdFichada(siguiente++)];
+  });
+
+  rango.setValues(nuevos);
+
+  const ultimoUsado = siguiente - 1;
+  PropertiesService.getScriptProperties().setProperty('NEXT_FICHADA_ID', String(ultimoUsado + 1));
+
+  Logger.log('Backfill completo. IDs generados: ' + generados + ' / ' + (lastRow - 1) + ' filas.');
+  Logger.log('NEXT_FICHADA_ID inicializado en ' + (ultimoUsado + 1));
+}
+
+// Validación de solo lectura — no corrige nada, solo reporta.
+// Correr después de backfillIdFichada(), y periódicamente como chequeo de salud.
+function validarIdFichada() {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('FICHADAS');
+  if (!hoja) { Logger.log('FICHADAS no existe.'); return; }
+
+  const lastCol = hoja.getLastColumn();
+  const headers = hoja.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+  const col = headers.indexOf('ID_FICHADA');
+  if (col < 0) { Logger.log('ID_FICHADA no existe todavía. Correr backfillIdFichada() primero.'); return; }
+
+  const lastRow = hoja.getLastRow();
+  if (lastRow < 2) { Logger.log('FICHADAS sin filas de datos.'); return; }
+
+  const valores = hoja.getRange(2, col + 1, lastRow - 1, 1).getValues().map(r => String(r[0]).trim());
+  const vacios  = valores.filter(v => !v).length;
+
+  const conteo = {};
+  valores.forEach(v => { if (v) conteo[v] = (conteo[v] || 0) + 1; });
+  const duplicados = Object.entries(conteo).filter(([, n]) => n > 1);
+
+  Logger.log('Filas totales: '   + valores.length);
+  Logger.log('IDs generados: '   + (valores.length - vacios));
+  Logger.log('IDs vacíos: '      + vacios);
+  Logger.log('IDs duplicados: '  + (duplicados.length ? JSON.stringify(duplicados) : 'ninguno'));
+}
 
 function guardarFichada(e) {
   try {
@@ -2050,28 +2194,16 @@ function guardarFichada(e) {
       hoja.getRange(1, 1, 1, FICHADAS_HEADERS.length).setValues([FICHADAS_HEADERS]);
       hoja.setFrozenRows(1);
     }
+    _asegurarColumnaIdFichada(hoja); // por si esta fichada llega antes de correr el backfill
+    _asegurarColumnaEstado(hoja);
 
-    const MESES_ES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
-                      'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-    const DIAS_ES  = ['DOMINGO','LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES','SÁBADO'];
-
-    const partes   = datos.fecha.split('-').map(Number);
-    const fechaObj = new Date(partes[0], partes[1] - 1, partes[2]);
-    const mesTexto = MESES_ES[partes[1] - 1];
-    const diaTexto = DIAS_ES[fechaObj.getDay()];
+    const { anio, mesTexto, diaTexto } = _derivarCamposFecha(datos.fecha);
     const marca    = new Date();
-
-    function horaAMin(str) {
-      const p = String(str).split(':').map(Number);
-      return p[0] * 60 + (p[1] || 0);
-    }
-    let totalHs = (horaAMin(datos.hora_salida) - horaAMin(datos.hora_entrada)) / 60;
-    if (totalHs < 0) totalHs += 24;
-    totalHs = Math.round(totalHs * 100) / 100;
+    const totalHs  = _calcularTotalHs(datos.hora_entrada, datos.hora_salida);
 
     hoja.appendRow([
       datos.local,
-      String(partes[0]),
+      anio,
       mesTexto,
       diaTexto,
       marca,
@@ -2089,6 +2221,8 @@ function guardarFichada(e) {
       datos.lat         !== undefined ? datos.lat         : '',
       datos.lon         !== undefined ? datos.lon         : '',
       datos.distancia_m !== undefined ? datos.distancia_m : '',
+      generarNuevoIdFichada(),
+      'ACTIVA',
     ]);
 
     return ContentService
@@ -2099,6 +2233,308 @@ function guardarFichada(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  AJUSTE DE JORNADA — accion=ajustar_jornada (POST)
+//  Fuente de verdad: FICHADAS. Nunca toca DATOS GENERALES ni su QUERY.
+//  Identificador principal: ID_FICHADA. Snapshot (turnoN_original) como
+//  mitigación de conflicto de edición. Nunca DELETE físico: turnos que se
+//  quitan quedan con ESTADO='ANULADA', preservando sus valores originales.
+//  Auditoría: hoja AjustesJornada, una fila por turno tocado.
+// ══════════════════════════════════════════════════════
+
+const MOTIVOS_AJUSTE_VALIDOS = [
+  'olvido_marcar_entrada','olvido_marcar_salida','error_de_carga',
+  'cambio_autorizado','correccion_administrativa','otro',
+];
+
+const AJUSTES_JORNADA_HEADERS = [
+  'ID_AJUSTE','ID_OPERACION','ID_FICHADA','FECHA_HORA_AJUSTE','ADMIN_USUARIO',
+  'EMPLEADO','LOCAL','FECHA_JORNADA','TURNO','TIPO_OPERACION',
+  'ESTADO_ANTERIOR','ESTADO_NUEVO','ENTRADA_ANTERIOR','SALIDA_ANTERIOR',
+  'ENTRADA_NUEVA','SALIDA_NUEVA','RECUPERA_HORAS_ANTERIOR','RECUPERA_HORAS_NUEVO',
+  'OBSERVACION_ANTERIOR','OBSERVACION_NUEVA','MOTIVO','MOTIVO_DETALLE','TIMESTAMP_CLIENTE',
+];
+
+function _getAjustesJornadaHoja(ss) {
+  let hoja = ss.getSheetByName('AjustesJornada');
+  if (!hoja) {
+    hoja = ss.insertSheet('AjustesJornada');
+    hoja.getRange(1, 1, 1, AJUSTES_JORNADA_HEADERS.length).setValues([AJUSTES_JORNADA_HEADERS]);
+    hoja.setFrozenRows(1);
+  }
+  return hoja;
+}
+
+function _esAdminValido(nombreAdmin) {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('USUARIOS');
+  if (!hoja) return false;
+  const vals = hoja.getDataRange().getValues();
+  const nombreLower = String(nombreAdmin).trim().toLowerCase();
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0] || '').trim().toLowerCase() === nombreLower) {
+      return String(vals[i][2] || '').trim().toLowerCase() === 'admin';
+    }
+  }
+  return false;
+}
+
+function _empleadoExiste(nombreEmpleado) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const nombreLower = String(nombreEmpleado).trim().toLowerCase();
+
+  const hEmp = ss.getSheetByName('EMPLEADOS');
+  if (hEmp) {
+    const vals = hEmp.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      if (String(vals[i][0] || '').trim().toLowerCase() === nombreLower) return true;
+    }
+  }
+
+  // Fallback: si no está en EMPLEADOS, alcanza con que ya tenga fichadas
+  const hFich = ss.getSheetByName('FICHADAS');
+  if (hFich) {
+    const vals = hFich.getDataRange().getValues();
+    const hdrs = vals[0] ? vals[0].map(h => String(h).trim()) : [];
+    const iEmp = hdrs.indexOf('EMPLEADO/A');
+    if (iEmp >= 0) {
+      for (let i = 1; i < vals.length; i++) {
+        if (String(vals[i][iEmp] || '').trim().toLowerCase() === nombreLower) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function _mensajeErrorAjuste(codigo) {
+  const mensajes = {
+    JORNADA_NO_ENCONTRADA: 'No se encontró la jornada para ese turno. Puede que ya haya sido modificada.',
+    YA_ANULADA:            'Ese turno ya fue anulado previamente.',
+    CONFLICTO_EDICION:     'Esta jornada fue modificada por otra persona. Volvé a abrirla para ver los datos actuales.',
+  };
+  return mensajes[codigo] || 'No se pudo guardar el ajuste.';
+}
+
+function ajustarJornada(e) {
+  const err = (codigo, detalle, mensaje) => ContentService.createTextOutput(JSON.stringify({
+    ok: false,
+    mensaje: mensaje || _mensajeErrorAjuste(codigo),
+    jornada_actualizada: null,
+    ajustes_registrados: [],
+    error: { codigo, detalle: detalle || '' },
+  })).setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    const datos = JSON.parse(e.postData.contents || '{}');
+
+    // ── Validaciones de payload (no dependen de la hoja) ──
+    if (!datos.admin_usuario) return err('ADMIN_FALTANTE', '', 'Falta el administrador que realiza el ajuste.');
+    if (!_esAdminValido(datos.admin_usuario)) return err('ADMIN_NO_AUTORIZADO', datos.admin_usuario, 'El usuario indicado no tiene permisos de administrador.');
+
+    if (!datos.motivo || MOTIVOS_AJUSTE_VALIDOS.indexOf(datos.motivo) < 0) return err('MOTIVO_FALTANTE', '', 'Elegí un motivo para el ajuste.');
+    if (datos.motivo === 'otro' && !String(datos.motivo_detalle || '').trim()) return err('MOTIVO_DETALLE_FALTANTE', '', 'Detallá el motivo del ajuste.');
+
+    const fechaValida = f => /^\d{4}-\d{2}-\d{2}$/.test(String(f || ''));
+    if (!fechaValida(datos.fecha_jornada) || !fechaValida(datos.fecha_jornada_original)) {
+      return err('FECHA_INVALIDA', '', 'La fecha de la jornada no es válida.');
+    }
+
+    const horaValida = h => h === null || h === undefined || /^([01]\d|2[0-3]):[0-5]\d$/.test(h);
+    if (!horaValida(datos.entrada1) || !horaValida(datos.salida1) || !horaValida(datos.entrada2) || !horaValida(datos.salida2)) {
+      return err('HORA_INVALIDA', '', 'Alguno de los horarios no tiene un formato válido.');
+    }
+    const rangoValido = (ent, sal) => !ent || !sal || ent < sal;
+    if (!rangoValido(datos.entrada1, datos.salida1)) return err('HORA_INVALIDA', 'turno1', 'La salida del Turno 1 debe ser posterior a la entrada.');
+    if (!rangoValido(datos.entrada2, datos.salida2)) return err('HORA_INVALIDA', 'turno2', 'La salida del Turno 2 debe ser posterior a la entrada.');
+
+    if (!datos.entrada1 && !datos.entrada2) return err('AJUSTE_VACIO', '', 'La jornada no puede quedar sin ningún turno.');
+    if (datos.entrada2 && !datos.entrada1) return err('TURNO_INVALIDO', '', 'No puede haber Turno 2 sin Turno 1.');
+
+    if (!_empleadoExiste(datos.empleado)) return err('EMPLEADO_NO_ENCONTRADO', datos.empleado, 'No se encontró el empleado indicado.');
+
+    // ── Hoja FICHADAS ──
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const hoja = ss.getSheetByName('FICHADAS');
+    if (!hoja) return err('JORNADA_NO_ENCONTRADA', 'FICHADAS', 'No existe la hoja de fichadas.');
+    _asegurarColumnaIdFichada(hoja);
+    _asegurarColumnaEstado(hoja);
+
+    const lastCol = hoja.getLastColumn();
+    const headers = hoja.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+    const col = name => headers.indexOf(name); // 0-based
+
+    const cLocal  = col('LOCAL');
+    const cAnio   = col('AÑO');
+    const cMes    = col('MES');
+    const cDia    = col('DIA');
+    const cMarca  = col('Marca temporal');
+    const cEmp    = col('EMPLEADO/A');
+    const cEntrada= col('HORA ENTRADA');
+    const cSalida = col('HORA SALIDA');
+    const cNota   = headers.findIndex(h => h.startsWith('Nota adicional'));
+    const cTotal  = col('TOTAL en hs');
+    const cFecha  = col('FECHA');
+    const cTipo   = col('TIPO_REGISTRO');
+    const cHsRec  = col('HS_A_RECUPERAR');
+    const cIdFich = col('ID_FICHADA');
+    const cEstado = col('ESTADO');
+
+    const allValues = hoja.getDataRange().getValues(); // incluye header en [0]
+
+    function localizarFila(idFichada) {
+      for (let i = 1; i < allValues.length; i++) {
+        if (String(allValues[i][cIdFich] || '').trim() === idFichada) return i + 1; // fila real (1-based)
+      }
+      return null;
+    }
+
+    const jornadaTurnos  = { turno1: null, turno2: null };
+    const resultadoTurnos = [];
+    const auditoriaFilas  = [];
+    let opError = null;
+
+    function procesarTurno(n, idFichada, entradaNueva, salidaNueva, turnoOriginal) {
+      if (opError) return;
+      const hayIdOriginal = !!idFichada;
+      const hayValorNuevo = !!entradaNueva;
+      if (!hayIdOriginal && !hayValorNuevo) return; // turno no se toca
+
+      if (!hayIdOriginal && hayValorNuevo) {
+        // ── CREATE ──
+        const nuevoId = generarNuevoIdFichada();
+        const { anio, mesTexto, diaTexto } = _derivarCamposFecha(datos.fecha_jornada);
+        const totalHs = _calcularTotalHs(entradaNueva, salidaNueva);
+        const filaNueva = new Array(headers.length).fill('');
+        filaNueva[cLocal]   = datos.local;
+        filaNueva[cAnio]    = anio;
+        filaNueva[cMes]     = mesTexto;
+        filaNueva[cDia]     = diaTexto;
+        filaNueva[cMarca]   = new Date();
+        filaNueva[cEmp]     = datos.empleado;
+        filaNueva[cEntrada] = entradaNueva;
+        filaNueva[cSalida]  = salidaNueva;
+        if (cNota >= 0) filaNueva[cNota] = datos.observacion || '';
+        filaNueva[cTotal]   = totalHs;
+        filaNueva[cFecha]   = datos.fecha_jornada;
+        filaNueva[cTipo]    = datos.recupera_horas ? 'RECUPERO' : 'NORMAL';
+        filaNueva[cHsRec]   = datos.recupera_horas ? totalHs : 0;
+        filaNueva[cIdFich]  = nuevoId;
+        filaNueva[cEstado]  = 'ACTIVA';
+        hoja.appendRow(filaNueva);
+
+        jornadaTurnos['turno' + n] = { id_fichada: nuevoId, entrada: entradaNueva, salida: salidaNueva, estado: 'ACTIVA' };
+        resultadoTurnos.push({ turno: n, tipo_operacion: 'CREATE', valor_anterior: null, valor_nuevo: `${entradaNueva}–${salidaNueva}` });
+        auditoriaFilas.push({
+          id_fichada: nuevoId, turno: n, tipo_operacion: 'CREATE',
+          estado_anterior: '', estado_nuevo: 'ACTIVA',
+          entrada_anterior: '', salida_anterior: '', entrada_nueva: entradaNueva, salida_nueva: salidaNueva,
+          recupera_anterior: false, recupera_nueva: !!datos.recupera_horas,
+          observacion_anterior: '', observacion_nueva: datos.observacion || '',
+        });
+        return;
+      }
+
+      // ── UPDATE o ANULAR: localizar la fila por ID_FICHADA ──
+      const fila = localizarFila(idFichada);
+      if (!fila) { opError = { codigo: 'JORNADA_NO_ENCONTRADA', detalle: 'turno=' + n + ' id_fichada=' + idFichada }; return; }
+
+      const valoresFila   = allValues[fila - 1];
+      const entradaActual = formatearHora(valoresFila[cEntrada]);
+      const salidaActual  = formatearHora(valoresFila[cSalida]);
+      const estadoActual  = String(valoresFila[cEstado] || 'ACTIVA').trim() || 'ACTIVA';
+      const recuperaActual= String(valoresFila[cTipo] || '').trim() === 'RECUPERO';
+      const notaActual    = cNota >= 0 ? String(valoresFila[cNota] || '') : '';
+
+      if (estadoActual === 'ANULADA') { opError = { codigo: 'YA_ANULADA', detalle: 'turno=' + n + ' id_fichada=' + idFichada }; return; }
+
+      const snap = turnoOriginal || {};
+      if (snap.entrada !== undefined &&
+          (entradaActual !== (snap.entrada || '') || salidaActual !== (snap.salida || '') || estadoActual !== (snap.estado || 'ACTIVA'))) {
+        opError = { codigo: 'CONFLICTO_EDICION', detalle: `turno=${n} esperado=${snap.entrada}-${snap.salida} encontrado=${entradaActual}-${salidaActual}` };
+        return;
+      }
+
+      if (!hayValorNuevo) {
+        // ── ANULAR: preserva entrada/salida, solo cambia ESTADO ──
+        hoja.getRange(fila, cEstado + 1).setValue('ANULADA');
+        jornadaTurnos['turno' + n] = { id_fichada: idFichada, entrada: entradaActual, salida: salidaActual, estado: 'ANULADA' };
+        resultadoTurnos.push({ turno: n, tipo_operacion: 'ANULAR', valor_anterior: `${entradaActual}–${salidaActual}`, valor_nuevo: `${entradaActual}–${salidaActual} (anulado)` });
+        auditoriaFilas.push({
+          id_fichada: idFichada, turno: n, tipo_operacion: 'ANULAR',
+          estado_anterior: estadoActual, estado_nuevo: 'ANULADA',
+          entrada_anterior: entradaActual, salida_anterior: salidaActual, entrada_nueva: entradaActual, salida_nueva: salidaActual,
+          recupera_anterior: recuperaActual, recupera_nueva: recuperaActual,
+          observacion_anterior: notaActual, observacion_nueva: notaActual,
+        });
+        return;
+      }
+
+      // ── UPDATE ──
+      const totalHs = _calcularTotalHs(entradaNueva, salidaNueva);
+      hoja.getRange(fila, cEntrada + 1).setValue(entradaNueva);
+      hoja.getRange(fila, cSalida + 1).setValue(salidaNueva);
+      hoja.getRange(fila, cTotal + 1).setValue(totalHs);
+      hoja.getRange(fila, cTipo + 1).setValue(datos.recupera_horas ? 'RECUPERO' : 'NORMAL');
+      hoja.getRange(fila, cHsRec + 1).setValue(datos.recupera_horas ? totalHs : 0);
+      if (cNota >= 0) hoja.getRange(fila, cNota + 1).setValue(datos.observacion || '');
+      if (datos.fecha_jornada !== datos.fecha_jornada_original) {
+        const { anio, mesTexto, diaTexto } = _derivarCamposFecha(datos.fecha_jornada);
+        hoja.getRange(fila, cFecha + 1).setValue(datos.fecha_jornada);
+        hoja.getRange(fila, cAnio + 1).setValue(anio);
+        hoja.getRange(fila, cMes + 1).setValue(mesTexto);
+        hoja.getRange(fila, cDia + 1).setValue(diaTexto);
+      }
+
+      jornadaTurnos['turno' + n] = { id_fichada: idFichada, entrada: entradaNueva, salida: salidaNueva, estado: 'ACTIVA' };
+      resultadoTurnos.push({ turno: n, tipo_operacion: 'UPDATE', valor_anterior: `${entradaActual}–${salidaActual}`, valor_nuevo: `${entradaNueva}–${salidaNueva}` });
+      auditoriaFilas.push({
+        id_fichada: idFichada, turno: n, tipo_operacion: 'UPDATE',
+        estado_anterior: estadoActual, estado_nuevo: 'ACTIVA',
+        entrada_anterior: entradaActual, salida_anterior: salidaActual, entrada_nueva: entradaNueva, salida_nueva: salidaNueva,
+        recupera_anterior: recuperaActual, recupera_nueva: !!datos.recupera_horas,
+        observacion_anterior: notaActual, observacion_nueva: datos.observacion || '',
+      });
+    }
+
+    procesarTurno(1, datos.id_fichada_turno1, datos.entrada1, datos.salida1, datos.turno1_original);
+    procesarTurno(2, datos.id_fichada_turno2, datos.entrada2, datos.salida2, datos.turno2_original);
+
+    if (opError) return err(opError.codigo, opError.detalle);
+
+    // ── Auditoría: una fila por turno tocado ──
+    const idOperacion    = 'OP-' + Date.now();
+    const timestampAjuste= new Date();
+    const hojaAuditoria  = _getAjustesJornadaHoja(ss);
+    auditoriaFilas.forEach(f => {
+      hojaAuditoria.appendRow([
+        'ADJ-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
+        idOperacion, f.id_fichada, timestampAjuste, datos.admin_usuario,
+        datos.empleado, datos.local, datos.fecha_jornada, f.turno, f.tipo_operacion,
+        f.estado_anterior, f.estado_nuevo,
+        f.entrada_anterior, f.salida_anterior, f.entrada_nueva, f.salida_nueva,
+        f.recupera_anterior, f.recupera_nueva,
+        f.observacion_anterior, f.observacion_nueva,
+        datos.motivo, datos.motivo === 'otro' ? (datos.motivo_detalle || '') : '',
+        datos.timestamp_cliente || '',
+      ]);
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      mensaje: 'Jornada actualizada correctamente en FICHADAS',
+      jornada_actualizada: {
+        empleado: datos.empleado, local: datos.local, fecha_jornada: datos.fecha_jornada,
+        turno1: jornadaTurnos.turno1, turno2: jornadaTurnos.turno2,
+      },
+      ajustes_registrados: resultadoTurnos,
+      error: null,
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (errGeneral) {
+    return err('SHEETS_ERROR', errGeneral.message, 'No se pudo guardar el ajuste, intentá nuevamente.');
   }
 }
 
@@ -2321,10 +2757,12 @@ function getFichadasHoyLocal() {
     const iFecha   = headers.indexOf('FECHA');
     const iEntrada = headers.indexOf('HORA ENTRADA');
     const iSalida  = headers.indexOf('HORA SALIDA');
+    const iEstado  = headers.indexOf('ESTADO');
 
     const fichadas = [];
     for (var i = 1; i < vals.length; i++) {
       var row   = vals[i];
+      if (iEstado >= 0 && String(row[iEstado] || '').trim() === 'ANULADA') continue;
       var fecha = row[iFecha];
       if (fecha instanceof Date) {
         fecha = Utilities.formatDate(fecha, tz, 'yyyy-MM-dd');
@@ -2404,6 +2842,7 @@ function getFichadasEmpleado(e) {
   try {
     const empleado = String(e.parameter.empleado || '').trim();
     if (!empleado) throw new Error('Falta empleado');
+    const incluirAnuladas = e.parameter.incluir_anuladas === '1';
 
     const ss   = SpreadsheetApp.getActiveSpreadsheet();
     const hoja = ss.getSheetByName('FICHADAS');
@@ -2432,6 +2871,8 @@ function getFichadasEmpleado(e) {
     const iFRecup = ci('FECHA_A_RECUPERAR');
     const iNota   = hdrs.findIndex(h => h.startsWith('Nota adicional'));
     const iMarca  = ci('Marca temporal');
+    const iIdFich = ci('ID_FICHADA');
+    const iEstado = ci('ESTADO');
 
     const fichadas = vals.slice(1)
       .filter(r => String(r[iEmp] || '').trim().toLowerCase() === empleado.toLowerCase())
@@ -2445,7 +2886,10 @@ function getFichadasEmpleado(e) {
         fecha_a_recuperar: String(r[iFRecup] || ''),
         nota:              iNota >= 0 ? String(r[iNota] || '') : '',
         marca:             r[iMarca] instanceof Date ? r[iMarca].toISOString() : String(r[iMarca] || ''),
+        id_fichada:        iIdFich >= 0 ? String(r[iIdFich] || '') : '',
+        estado:            iEstado >= 0 ? (String(r[iEstado] || '').trim() || 'ACTIVA') : 'ACTIVA',
       }))
+      .filter(f => incluirAnuladas || f.estado !== 'ANULADA')
       .sort((a, b) => b.fecha.localeCompare(a.fecha))
       .slice(0, 60);
 
