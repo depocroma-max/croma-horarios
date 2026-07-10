@@ -2268,20 +2268,6 @@ function _getAjustesJornadaHoja(ss) {
   return hoja;
 }
 
-function _esAdminValido(nombreAdmin) {
-  const ss   = SpreadsheetApp.getActiveSpreadsheet();
-  const hoja = ss.getSheetByName('USUARIOS');
-  if (!hoja) return false;
-  const vals = hoja.getDataRange().getValues();
-  const nombreLower = String(nombreAdmin).trim().toLowerCase();
-  for (let i = 1; i < vals.length; i++) {
-    if (String(vals[i][0] || '').trim().toLowerCase() === nombreLower) {
-      return String(vals[i][2] || '').trim().toLowerCase() === 'admin';
-    }
-  }
-  return false;
-}
-
 // Normaliza espacios (incluidos dobles espacios de carga manual) para
 // comparar nombres de empleado de forma robusta entre EMPLEADOS y FICHADAS,
 // sin modificar el dato guardado en ningún lado.
@@ -2338,8 +2324,13 @@ function ajustarJornada(e) {
     const datos = JSON.parse(e.postData.contents || '{}');
 
     // ── Validaciones de payload (no dependen de la hoja) ──
+    // Nota: no se valida admin_usuario contra la hoja USUARIOS de GAS — esa
+    // hoja solo tiene cuentas de empleado (login por PIN). Los admins entran
+    // por el Hub vía JWT contra el backend Node (SQLite), que GAS no puede
+    // consultar. El gate real de "es admin" ya ocurre client-side (rol + PIN
+    // de administración); acá solo se exige que venga identificado, igual
+    // que el resto de los endpoints de escritura de este sistema.
     if (!datos.admin_usuario) return err('ADMIN_FALTANTE', '', 'Falta el administrador que realiza el ajuste.');
-    if (!_esAdminValido(datos.admin_usuario)) return err('ADMIN_NO_AUTORIZADO', datos.admin_usuario, 'El usuario indicado no tiene permisos de administrador.');
 
     if (!datos.motivo || MOTIVOS_AJUSTE_VALIDOS.indexOf(datos.motivo) < 0) return err('MOTIVO_FALTANTE', '', 'Elegí un motivo para el ajuste.');
     if (datos.motivo === 'otro' && !String(datos.motivo_detalle || '').trim()) return err('MOTIVO_DETALLE_FALTANTE', '', 'Detallá el motivo del ajuste.');
