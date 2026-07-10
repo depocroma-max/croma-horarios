@@ -2881,11 +2881,16 @@ function getFichadasEmpleado(e) {
     const iIdFich = ci('ID_FICHADA');
     const iEstado = ci('ESTADO');
 
+    const tz = Session.getScriptTimeZone();
+    const fmtFechaCelda = v => v instanceof Date
+      ? Utilities.formatDate(v, tz, 'yyyy-MM-dd')
+      : String(v || '').substring(0, 10);
+
     const empleadoNorm = _normalizarNombreEmpleado(empleado);
     const fichadas = vals.slice(1)
       .filter(r => _normalizarNombreEmpleado(r[iEmp]) === empleadoNorm)
       .map(r => ({
-        fecha:             String(r[iFecha]  || '').substring(0, 10),
+        fecha:             fmtFechaCelda(r[iFecha]),
         entrada:           formatearHora(r[iEntr]),
         salida:            formatearHora(r[iSal]),
         total:             parseFloat(r[iTotal]) || 0,
