@@ -2282,15 +2282,22 @@ function _esAdminValido(nombreAdmin) {
   return false;
 }
 
+// Normaliza espacios (incluidos dobles espacios de carga manual) para
+// comparar nombres de empleado de forma robusta entre EMPLEADOS y FICHADAS,
+// sin modificar el dato guardado en ningún lado.
+function _normalizarNombreEmpleado(s) {
+  return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 function _empleadoExiste(nombreEmpleado) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const nombreLower = String(nombreEmpleado).trim().toLowerCase();
+  const nombreNorm = _normalizarNombreEmpleado(nombreEmpleado);
 
   const hEmp = ss.getSheetByName('EMPLEADOS');
   if (hEmp) {
     const vals = hEmp.getDataRange().getValues();
     for (let i = 1; i < vals.length; i++) {
-      if (String(vals[i][0] || '').trim().toLowerCase() === nombreLower) return true;
+      if (_normalizarNombreEmpleado(vals[i][0]) === nombreNorm) return true;
     }
   }
 
@@ -2302,7 +2309,7 @@ function _empleadoExiste(nombreEmpleado) {
     const iEmp = hdrs.indexOf('EMPLEADO/A');
     if (iEmp >= 0) {
       for (let i = 1; i < vals.length; i++) {
-        if (String(vals[i][iEmp] || '').trim().toLowerCase() === nombreLower) return true;
+        if (_normalizarNombreEmpleado(vals[i][iEmp]) === nombreNorm) return true;
       }
     }
   }
@@ -2874,8 +2881,9 @@ function getFichadasEmpleado(e) {
     const iIdFich = ci('ID_FICHADA');
     const iEstado = ci('ESTADO');
 
+    const empleadoNorm = _normalizarNombreEmpleado(empleado);
     const fichadas = vals.slice(1)
-      .filter(r => String(r[iEmp] || '').trim().toLowerCase() === empleado.toLowerCase())
+      .filter(r => _normalizarNombreEmpleado(r[iEmp]) === empleadoNorm)
       .map(r => ({
         fecha:             String(r[iFecha]  || '').substring(0, 10),
         entrada:           formatearHora(r[iEntr]),
