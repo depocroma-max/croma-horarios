@@ -1864,7 +1864,11 @@ function ajustarJornada(e) {
       LOCAL: cLocal, 'AÑO': cAnio, MES: cMes, DIA: cDia, 'Marca temporal': cMarca,
       'EMPLEADO/A': cEmp, 'HORA ENTRADA': cEntrada, 'HORA SALIDA': cSalida,
       'TOTAL en hs': cTotal, FECHA: cFecha, TIPO_REGISTRO: cTipo,
-      HS_A_RECUPERAR: cHsRec, ID_FICHADA: cIdFich, ESTADO: cEstado,
+      ID_FICHADA: cIdFich, ESTADO: cEstado,
+      // HS_A_RECUPERAR queda fuera de esta validación a propósito: en la hoja
+      // real esa columna no está rotulada así (ver headers reales de FICHADAS).
+      // Se escribe solo si existe (cHsRec >= 0); si no, se sigue igual —
+      // TIPO_REGISTRO='RECUPERO' ya refleja el switch "Recupera horas".
     };
     const faltantes = Object.entries(columnasEsperadas).filter(([, idx]) => idx < 0).map(([nombre]) => nombre);
     if (faltantes.length) {
@@ -1910,7 +1914,7 @@ function ajustarJornada(e) {
         filaNueva[cTotal]   = totalHs;
         filaNueva[cFecha]   = datos.fecha_jornada;
         filaNueva[cTipo]    = datos.recupera_horas ? 'RECUPERO' : 'NORMAL';
-        filaNueva[cHsRec]   = datos.recupera_horas ? totalHs : 0;
+        if (cHsRec >= 0) filaNueva[cHsRec] = datos.recupera_horas ? totalHs : 0;
         filaNueva[cIdFich]  = nuevoId;
         filaNueva[cEstado]  = 'ACTIVA';
         hoja.appendRow(filaNueva);
@@ -1968,7 +1972,7 @@ function ajustarJornada(e) {
       hoja.getRange(fila, cSalida + 1).setValue(salidaNueva);
       hoja.getRange(fila, cTotal + 1).setValue(totalHs);
       hoja.getRange(fila, cTipo + 1).setValue(datos.recupera_horas ? 'RECUPERO' : 'NORMAL');
-      hoja.getRange(fila, cHsRec + 1).setValue(datos.recupera_horas ? totalHs : 0);
+      if (cHsRec >= 0) hoja.getRange(fila, cHsRec + 1).setValue(datos.recupera_horas ? totalHs : 0);
       if (cNota >= 0) hoja.getRange(fila, cNota + 1).setValue(datos.observacion || '');
       if (datos.fecha_jornada !== datos.fecha_jornada_original) {
         const { anio, mesTexto, diaTexto } = _derivarCamposFecha(datos.fecha_jornada);
