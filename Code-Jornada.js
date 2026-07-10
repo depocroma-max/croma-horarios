@@ -1856,6 +1856,22 @@ function ajustarJornada(e) {
     const cIdFich = col('ID_FICHADA');
     const cEstado = col('ESTADO');
 
+    // Validación defensiva: si algún header no matchea exacto (mayúsculas,
+    // espacios, tilde), getRange recibiría columna 0 y Sheets tira un error
+    // críptico ("columna demasiado pequeña"). Acá se detecta antes y se dice
+    // exactamente qué columna falta.
+    const columnasEsperadas = {
+      LOCAL: cLocal, 'AÑO': cAnio, MES: cMes, DIA: cDia, 'Marca temporal': cMarca,
+      'EMPLEADO/A': cEmp, 'HORA ENTRADA': cEntrada, 'HORA SALIDA': cSalida,
+      'TOTAL en hs': cTotal, FECHA: cFecha, TIPO_REGISTRO: cTipo,
+      HS_A_RECUPERAR: cHsRec, ID_FICHADA: cIdFich, ESTADO: cEstado,
+    };
+    const faltantes = Object.entries(columnasEsperadas).filter(([, idx]) => idx < 0).map(([nombre]) => nombre);
+    if (faltantes.length) {
+      return err('SHEETS_ERROR', 'Columnas no encontradas en FICHADAS: ' + faltantes.join(', '),
+        'Faltan columnas en FICHADAS: ' + faltantes.join(', ') + '. Revisá que el nombre del header coincida exacto.');
+    }
+
     const allValues = hoja.getDataRange().getValues(); // incluye header en [0]
 
     function localizarFila(idFichada) {
