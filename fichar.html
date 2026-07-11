@@ -271,20 +271,83 @@
     .fecha-full { font-family: var(--font-display); font-size: 19px; letter-spacing: .5px; text-transform: uppercase; }
     .fecha-cal { color: var(--gray-400); flex-shrink: 0; }
 
-    /* time inputs */
+    /* time picker propio (24hs) */
     .time-wrap { position: relative; }
-    .time-wrap input[type="time"] {
+    .time-btn {
       width: 100%; padding: 13px 34px 13px 14px;
       border: 1.5px solid var(--gray-200); border-radius: var(--radius-md);
       font-family: var(--font-display); font-size: 22px; letter-spacing: 1px;
-      color: var(--black); background: var(--white); outline: none;
-      transition: border-color .15s; -webkit-appearance: none; appearance: none;
+      color: var(--black); background: var(--white);
+      transition: border-color .15s; text-align: left; cursor: pointer;
     }
-    .time-wrap input[type="time"]:focus { border-color: var(--black); }
-    .time-wrap input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0; position: absolute; right: 0; width: 100%; height: 100%; cursor: pointer; }
-    .time-wrap input[type="time"]::-webkit-inner-spin-button,
-    .time-wrap input[type="time"]::-webkit-clear-button { display: none; -webkit-appearance: none; }
+    .time-btn:active, .time-btn:focus-visible { border-color: var(--black); }
+    .time-btn.placeholder { color: var(--gray-400); }
     .time-chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--accent); pointer-events: none; }
+
+    /* bottom sheet del picker */
+    .sheet-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+      z-index: 40;
+    }
+    .sheet-overlay.open { opacity: 1; pointer-events: auto; }
+    .sheet {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      background: var(--white);
+      border-radius: 20px 20px 0 0;
+      padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+      transform: translateY(100%);
+      transition: transform .25s cubic-bezier(.32,.72,0,1);
+      z-index: 41;
+      box-shadow: 0 -8px 30px rgba(0,0,0,.18);
+    }
+    .sheet.open { transform: translateY(0); }
+    .sheet-grip { width: 36px; height: 4px; border-radius: 4px; background: var(--gray-200); margin: 6px auto 14px; }
+    .sheet-title {
+      font-family: var(--font-display); font-size: 22px; letter-spacing: .5px;
+      text-align: center; margin-bottom: 4px; text-transform: uppercase;
+    }
+    .sheet-sub { text-align: center; font-size: 12px; color: var(--gray-400); margin-bottom: 18px; }
+    .wheel-wrap {
+      position: relative;
+      display: flex; justify-content: center; align-items: center; gap: 4px;
+      height: 176px;
+    }
+    .wheel-band {
+      position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+      height: 44px; background: var(--gray-50);
+      border-top: 1.5px solid var(--gray-200); border-bottom: 1.5px solid var(--gray-200);
+      pointer-events: none; z-index: 0;
+    }
+    .wheel {
+      height: 176px; width: 78px; overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      -ms-overflow-style: none; scrollbar-width: none;
+      position: relative; z-index: 1;
+    }
+    .wheel::-webkit-scrollbar { display: none; }
+    .wheel-pad { height: 66px; scroll-snap-align: none; }
+    .wheel-item {
+      height: 44px; display: flex; align-items: center; justify-content: center;
+      scroll-snap-align: center;
+      font-family: var(--font-display); font-size: 26px; letter-spacing: 1px;
+      color: var(--gray-400); transition: color .15s, transform .15s; user-select: none;
+    }
+    .wheel-item.sel { color: var(--black); transform: scale(1.05); }
+    .wheel-colon { font-family: var(--font-display); font-size: 26px; color: var(--gray-400); z-index: 1; }
+    .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
+    .sheet-actions button {
+      flex: 1; padding: 13px; border-radius: var(--radius-sm); border: none;
+      font-family: var(--font-body); font-size: 14px; font-weight: 500; cursor: pointer;
+      transition: background .15s; letter-spacing: .3px;
+    }
+    .btn-cancel { background: var(--gray-100); color: var(--gray-600); }
+    .btn-cancel:active { background: var(--gray-200); }
+    .btn-ok { background: var(--black); color: var(--white); }
+    .btn-ok:active { background: #222; }
+    @media (min-width: 480px) {
+      .sheet { left: 50%; right: auto; width: 420px; margin-left: -210px; }
+    }
 
     /* total */
     .total-row {
@@ -543,16 +606,18 @@
     </div>
     <div class="horas-row">
       <div class="field">
-        <label for="campoEntrada">Entrada</label>
+        <label for="btnEntrada">Entrada</label>
         <div class="time-wrap">
-          <input type="time" id="campoEntrada" />
+          <input type="hidden" id="campoEntrada" />
+          <button type="button" class="time-btn placeholder" id="btnEntrada" data-campo="campoEntrada">Elegir hora</button>
           <svg class="time-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
       <div class="field">
-        <label for="campoSalida">Salida</label>
+        <label for="btnSalida">Salida</label>
         <div class="time-wrap">
-          <input type="time" id="campoSalida" />
+          <input type="hidden" id="campoSalida" />
+          <button type="button" class="time-btn placeholder" id="btnSalida" data-campo="campoSalida">Elegir hora</button>
           <svg class="time-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
@@ -646,6 +711,24 @@
     </div>
   </div>
 </section>
+
+<!-- PICKER DE HORA (24hs) -->
+<div class="sheet-overlay" id="sheetOverlay"></div>
+<div class="sheet" id="sheetHora">
+  <div class="sheet-grip"></div>
+  <div class="sheet-title" id="sheetHoraTitle">Entrada</div>
+  <div class="sheet-sub">Formato 24hs</div>
+  <div class="wheel-wrap">
+    <div class="wheel-band"></div>
+    <div class="wheel" id="wheelH"></div>
+    <span class="wheel-colon">:</span>
+    <div class="wheel" id="wheelM"></div>
+  </div>
+  <div class="sheet-actions">
+    <button type="button" class="btn-cancel" id="btnHoraCancel">Cancelar</button>
+    <button type="button" class="btn-ok" id="btnHoraOk">Listo</button>
+  </div>
+</div>
 
 <script src="croma-icons.js?v=20260703-ds"></script>
 <script>
@@ -1005,14 +1088,6 @@ async function mostrarFormulario() {
   document.getElementById('fechaHoyDisplay').textContent =
     `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
 
-  // El total se recalcula al tipear; el redondeo a :00/:30 se hace recién al
-  // salir del campo (blur), así no interrumpe mientras escribís los minutos.
-  ['campoEntrada','campoSalida'].forEach(id => {
-    const el = document.getElementById(id);
-    el.addEventListener('change', calcularTotal);
-    el.addEventListener('blur', function() { snapMedia(this); calcularTotal(); });
-  });
-
   mostrarScreen('screenForm');
   cargarHistorial(empNombre);
 }
@@ -1020,17 +1095,6 @@ async function mostrarFormulario() {
 function hoy() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-// Redondea el valor de un <input type="time"> al :00 o :30 más cercano.
-function snapMedia(el) {
-  if (!el.value) return;
-  const [h, m] = el.value.split(':').map(Number);
-  let total = h * 60 + Math.round(m / 30) * 30;   // redondea a la media hora
-  total = ((total % 1440) + 1440) % 1440;         // wrap 24hs
-  const hh = String(Math.floor(total / 60)).padStart(2, '0');
-  const mm = String(total % 60).padStart(2, '0');
-  el.value = `${hh}:${mm}`;
 }
 
 function calcularTotal() {
@@ -1169,8 +1233,8 @@ function nuevoTurno() {
   const _fObj = new Date(_a, _m - 1, _d);
   document.getElementById('fechaHoyDisplay').textContent =
     `${DIAS_ES[_fObj.getDay()]} ${_d} de ${MESES_ES[_m - 1]}`;
-  document.getElementById('campoEntrada').value  = '';
-  document.getElementById('campoSalida').value   = '';
+  resetCampoHora('campoEntrada');
+  resetCampoHora('campoSalida');
   document.getElementById('toggleNota').checked  = false;
   document.getElementById('notaWrap').classList.remove('visible');
   document.getElementById('campoNota').value     = '';
@@ -1259,6 +1323,107 @@ function haversine(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
+
+// ── PICKER DE HORA (24hs, reemplaza al <input type="time"> nativo para
+// evitar que se confunda AM/PM en el reloj del celular) ──
+(function() {
+  const HORAS = [];
+  for (let h = 0; h < 24; h++) HORAS.push(String(h).padStart(2, '0'));
+  const MINUTOS = ['00', '30'];
+  const ALTO_ITEM = 44;
+
+  const wheelH = document.getElementById('wheelH');
+  const wheelM = document.getElementById('wheelM');
+  const overlay = document.getElementById('sheetOverlay');
+  const sheet = document.getElementById('sheetHora');
+  const sheetTitle = document.getElementById('sheetHoraTitle');
+
+  function buildWheel(el, items) {
+    el.innerHTML = '';
+    el.appendChild(Object.assign(document.createElement('div'), { className: 'wheel-pad' }));
+    items.forEach(v => {
+      const it = document.createElement('div');
+      it.className = 'wheel-item';
+      it.textContent = v;
+      el.appendChild(it);
+    });
+    el.appendChild(Object.assign(document.createElement('div'), { className: 'wheel-pad' }));
+  }
+  buildWheel(wheelH, HORAS);
+  buildWheel(wheelM, MINUTOS);
+
+  function scrollToValue(el, items, value, animate) {
+    let idx = items.indexOf(value);
+    if (idx < 0) idx = 0;
+    el.scrollTo({ top: idx * ALTO_ITEM, behavior: animate ? 'smooth' : 'auto' });
+  }
+  function currentIndex(el) { return Math.round(el.scrollTop / ALTO_ITEM); }
+  function updateSelection(el, items) {
+    const idx = Math.min(Math.max(currentIndex(el), 0), items.length - 1);
+    el.querySelectorAll('.wheel-item').forEach((c, i) => c.classList.toggle('sel', i === idx));
+    return items[idx];
+  }
+  const snapTimers = {};
+  function onScroll(el, items, key) {
+    updateSelection(el, items);
+    clearTimeout(snapTimers[key]);
+    snapTimers[key] = setTimeout(() => {
+      const idx = Math.min(Math.max(currentIndex(el), 0), items.length - 1);
+      scrollToValue(el, items, items[idx], true);
+      updateSelection(el, items);
+    }, 90);
+  }
+  wheelH.addEventListener('scroll', () => onScroll(wheelH, HORAS, 'h'));
+  wheelM.addEventListener('scroll', () => onScroll(wheelM, MINUTOS, 'm'));
+
+  let campoActivo = null;
+
+  function abrirPickerHora(campoId) {
+    campoActivo = campoId;
+    sheetTitle.textContent = campoId === 'campoEntrada' ? 'Entrada' : 'Salida';
+    const actual = document.getElementById(campoId).value || '08:00';
+    const [hh, mm] = actual.split(':');
+    overlay.classList.add('open');
+    sheet.classList.add('open');
+    requestAnimationFrame(() => {
+      scrollToValue(wheelH, HORAS, hh, false);
+      scrollToValue(wheelM, MINUTOS, MINUTOS.includes(mm) ? mm : '00', false);
+      updateSelection(wheelH, HORAS);
+      updateSelection(wheelM, MINUTOS);
+    });
+  }
+  function cerrarPickerHora() {
+    overlay.classList.remove('open');
+    sheet.classList.remove('open');
+    campoActivo = null;
+  }
+
+  document.querySelectorAll('.time-btn[data-campo]').forEach(btn => {
+    btn.addEventListener('click', () => abrirPickerHora(btn.dataset.campo));
+  });
+  overlay.addEventListener('click', cerrarPickerHora);
+  document.getElementById('btnHoraCancel').addEventListener('click', cerrarPickerHora);
+  document.getElementById('btnHoraOk').addEventListener('click', () => {
+    if (!campoActivo) return;
+    const hVal = updateSelection(wheelH, HORAS);
+    const mVal = updateSelection(wheelM, MINUTOS);
+    const val = `${hVal}:${mVal}`;
+    const campo = document.getElementById(campoActivo);
+    campo.value = val;
+    const btn = document.getElementById(campoActivo === 'campoEntrada' ? 'btnEntrada' : 'btnSalida');
+    btn.textContent = val;
+    btn.classList.remove('placeholder');
+    calcularTotal();
+    cerrarPickerHora();
+  });
+
+  window.resetCampoHora = function(campoId) {
+    document.getElementById(campoId).value = '';
+    const btn = document.getElementById(campoId === 'campoEntrada' ? 'btnEntrada' : 'btnSalida');
+    btn.textContent = 'Elegir hora';
+    btn.classList.add('placeholder');
+  };
+})();
 </script>
 </body>
 </html>
