@@ -473,7 +473,7 @@ function estadoEnVivo(bloquesRaw, nowMin) {
   const ultimo  = bloques[bloques.length - 1];
   for (const bl of bloques) {
     if (nowMin >= bl.ini && nowMin < bl.fin) {
-      return { estado: 'presente', salida: ultimo.finStr, salidaMin: ultimo.fin };
+      return { estado: 'presente', entra: bl.iniStr, salida: ultimo.finStr, salidaMin: ultimo.fin };
     }
   }
   if (nowMin < primero.ini) return { estado: 'proximo', entra: primero.iniStr, entraMin: primero.ini };
@@ -560,7 +560,7 @@ function renderEnVivo() {
           ${avatarEnVivoHTML(o.emp, suc, 'presente')}
           <div class="envivo-emp-info">
             <span class="envivo-emp-nombre">${nombreCortoEnVivo(o.emp)}</span>
-            <span class="envivo-emp-meta">Sale ${o.est.salida}</span>
+            <span class="envivo-emp-meta">Ingreso ${o.est.entra} - Sale ${o.est.salida}</span>
           </div>
         </div>`;
       });
