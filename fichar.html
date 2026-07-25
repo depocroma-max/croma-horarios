@@ -1196,7 +1196,12 @@ async function enviarFichada() {
     iniciarRedireccion();
 
   } catch(err) {
-    alert('No se pudo guardar el turno. Verificá tu conexión e intentá de nuevo.\n(' + err.message + ')');
+    const msg = String(err.message || '');
+    if (msg.startsWith('FICHADA_DUPLICADA')) {
+      alert('Ya tenés un turno cargado ese día que se superpone con este horario. Si es un error, pedile a un admin que lo revise en "Ajustar jornada".\n\n' + msg.replace('FICHADA_DUPLICADA: ', ''));
+    } else {
+      alert('No se pudo guardar el turno. Verificá tu conexión e intentá de nuevo.\n(' + msg + ')');
+    }
     btn.disabled = false; btn.textContent = 'Guardar turno';
   }
 }
@@ -1307,7 +1312,15 @@ async function cargarHistorial(empNombre) {
       list.appendChild(li);
     });
     wrap.style.display = '';
-  } catch(e) {}
+  } catch(e) {
+    // No pudimos traer el historial: no sabemos si ya cargó un turno hoy,
+    // así que avisamos en vez de dejar el botón habilitado en silencio.
+    const hint = document.getElementById('submitHint');
+    if (hint) {
+      hint.textContent = 'No se pudo verificar si ya cargaste un turno hoy. Revisá tu conexión antes de guardar.';
+      hint.style.color = '#dc2626';
+    }
+  }
 }
 
 // ── UTILS ──

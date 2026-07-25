@@ -1655,7 +1655,52 @@ function validarIdFichada() {
   Logger.log('IDs duplicados: '  + (duplicados.length ? JSON.stringify(duplicados) : 'ninguno'));
 }
 
+// Dos rangos horarios se pisan si arrancan antes de que el otro termine.
+// Maneja turnos que cruzan medianoche igual que _calcularTotalHs (salida <=
+// entrada ⇒ es al día siguiente).
+function _horariosSeSuperponen(aEntrada, aSalida, bEntrada, bSalida) {
+  const aIni = _horaAMin(aEntrada); let aFin = _horaAMin(aSalida); if (aFin <= aIni) aFin += 1440;
+  const bIni = _horaAMin(bEntrada); let bFin = _horaAMin(bSalida); if (bFin <= bIni) bFin += 1440;
+  return aIni < bFin && bIni < aFin;
+}
+
+// Busca, entre las fichadas ACTIVAs ya cargadas para ese empleado y esa
+// fecha, alguna cuyo horario se superponga con el que se quiere guardar.
+// Devuelve la fila encontrada (con entrada/salida) o null.
+function _buscarFichadaSuperpuesta(hoja, empleado, fechaISO, entrada, salida) {
+  const lastRow = hoja.getLastRow();
+  if (lastRow < 2) return null;
+
+  const lastCol  = hoja.getLastColumn();
+  const headers  = hoja.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+  const cEmp     = headers.indexOf('EMPLEADO/A');
+  const cFecha   = headers.indexOf('FECHA');
+  const cEntrada = headers.indexOf('HORA ENTRADA');
+  const cSalida  = headers.indexOf('HORA SALIDA');
+  const cEstado  = headers.indexOf('ESTADO');
+  if (cEmp < 0 || cFecha < 0 || cEntrada < 0 || cSalida < 0) return null;
+
+  const filas = hoja.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  for (let i = 0; i < filas.length; i++) {
+    const f = filas[i];
+    if (cEstado >= 0 && String(f[cEstado] || 'ACTIVA').trim() === 'ANULADA') continue;
+    if (String(f[cEmp] || '').trim() !== empleado) continue;
+    if (String(f[cFecha] || '').trim() !== fechaISO) continue;
+
+    const eExist = formatearHora(f[cEntrada]);
+    const sExist = formatearHora(f[cSalida]);
+    if (!eExist || !sExist) continue;
+
+    if (_horariosSeSuperponen(entrada, salida, eExist, sExist)) {
+      return { entrada: eExist, salida: sExist };
+    }
+  }
+  return null;
+}
+
 function guardarFichada(e) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
   try {
     const datos = JSON.parse(e.postData.contents || '{}');
 
@@ -1672,6 +1717,16 @@ function guardarFichada(e) {
     }
     _asegurarColumnaIdFichada(hoja); // por si esta fichada llega antes de correr el backfill
     _asegurarColumnaEstado(hoja);
+
+    // Bloqueo definitivo de duplicados/superposiciones: se hace acá, del lado
+    // del servidor, porque el aviso del frontend es solo una ayuda visual y
+    // puede no llegar a tiempo (red lenta, doble tap, pestañas distintas).
+    const dup = _buscarFichadaSuperpuesta(hoja, datos.empleado, datos.fecha, datos.hora_entrada, datos.hora_salida);
+    if (dup) {
+      throw new Error(
+        `FICHADA_DUPLICADA: ya tenés un turno cargado ese día de ${dup.entrada} a ${dup.salida} que se superpone con ${datos.hora_entrada}–${datos.hora_salida}.`
+      );
+    }
 
     const { anio, mesTexto, diaTexto } = _derivarCamposFecha(datos.fecha);
     const marca    = new Date();
@@ -1709,6 +1764,8 @@ function guardarFichada(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
