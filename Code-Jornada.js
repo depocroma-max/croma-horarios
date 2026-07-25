@@ -315,6 +315,13 @@ function getPerfiles() {
           regla_custom:  r[col('REGLA_CUSTOM')]  || '',
           sucursal_id:   col('SUCURSAL_ID')  >= 0 ? (r[col('SUCURSAL_ID')]  || '') : '',
           fecha_ingreso: col('FECHA_INGRESO') >= 0 ? fiStr(r[col('FECHA_INGRESO')]) : '',
+          // Campos agregados por ADMINISTRACIÓN UNIFICADA DE EMPLEADOS +
+          // ACCESO (Commit 2/3) — aditivo, no rompe consumidores viejos que
+          // ignoran claves que no conocen. col()>=0 por si la hoja todavía
+          // no pasó por _upsertEmpleado ni una vez (columnas no creadas aún).
+          numero_vendedor_sysneo: col('NUMERO_VENDEDOR_SYSNEO') >= 0 ? (r[col('NUMERO_VENDEDOR_SYSNEO')] || '') : '',
+          celular:                col('CELULAR') >= 0 ? (r[col('CELULAR')] || '') : '',
+          estado:                 col('ESTADO') >= 0 ? (r[col('ESTADO')] || 'activo') : 'activo',
         };
       });
     }
