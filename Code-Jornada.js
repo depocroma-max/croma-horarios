@@ -197,7 +197,7 @@ function doGet(e) {
   if (accion === 'perfiles')            return getPerfiles();
   if (accion === 'guardar_perfil')      return guardarPerfil(e);
   if (accion === 'guardar_categoria')   return guardarCategoria(e);
-  if (accion === 'cargar_usuarios')     return getUsuarios();
+  if (accion === 'cargar_usuarios')     return getUsuarios(e);
   if (accion === 'guardar_usuarios')    return guardarUsuarios(e);
   if (accion === 'cargar_certificados') return getCertificados();
   if (accion === 'guardar_certificado') return guardarCertificado(e);
@@ -419,11 +419,23 @@ function guardarCategoria(e) {
 // ── USUARIOS / LOGIN ──────────────────────────────────
 // Hoja USUARIOS: NOMBRE | PIN | ROL | EMPLEADO_NOMBRE
 // (+ ESTADO | FIN_ACCESO agregadas por el flujo nuevo — ver más abajo
-// "ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO". getUsuarios/guardarUsuarios
-// se dejan sin tocar; el flujo nuevo usa sus propias funciones de lectura/escritura.)
+// "ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO". guardarUsuarios se deja
+// sin tocar; el flujo nuevo usa sus propias funciones de lectura/escritura.)
+//
+// getUsuarios SÍ se modifica acá (fix de seguridad, posterior al Commit 2):
+// ya no devuelve nada sin BACKEND_SECRET — ver _validarBackendSecret más
+// abajo en ADMINISTRACIÓN UNIFICADA. Sin secreto válido: 401 lógico
+// { ok:false, error:'No autorizado' }, nunca la lista ni el PIN. Con
+// secreto válido (query ?clave_backend=...): mantiene la misma respuesta
+// de siempre, para no romper ningún consumidor server-to-server que todavía
+// dependa de esta ruta GET en vez de la acción interna por POST
+// (cargar_usuarios_interno, la que usa Node desde el Commit 1/2).
 
-function getUsuarios() {
+function getUsuarios(e) {
   try {
+    const clave = e && e.parameter && e.parameter.clave_backend;
+    if (!_validarBackendSecret(clave)) return _respuestaNoAutorizado();
+
     const ss   = SpreadsheetApp.getActiveSpreadsheet();
     let hoja   = ss.getSheetByName('USUARIOS');
 
