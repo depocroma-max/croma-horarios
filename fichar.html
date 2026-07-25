@@ -487,6 +487,37 @@
       .login-card, .geo-card, .ok-card { padding: 32px 20px; }
       #screenForm { padding: 16px 12px; }
     }
+
+    /* ── MODAL DE ALERTA (reemplaza al alert() nativo) ── */
+    .alert-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; opacity: 0; pointer-events: none; transition: opacity .2s;
+      z-index: 60;
+    }
+    .alert-overlay.open { opacity: 1; pointer-events: auto; }
+    .alert-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px 24px; text-align: center;
+      width: 100%; max-width: 360px;
+      box-shadow: var(--shadow-md);
+      transform: translateY(12px) scale(.97); transition: transform .2s cubic-bezier(.32,.72,0,1);
+    }
+    .alert-overlay.open .alert-card { transform: translateY(0) scale(1); }
+    .alert-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .alert-icon.warn  { background: #fef2f2; color: var(--accent); }
+    .alert-icon.error { background: #fef2f2; color: var(--accent); }
+    .alert-title { font-family: var(--font-display); font-size: 26px; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 10px; }
+    .alert-msg { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 8px; white-space: pre-line; }
+    .alert-msg strong { color: var(--black); }
+    .alert-actions { margin-top: 20px; }
+    .alert-actions .btn-primary { background: var(--accent); }
+    .alert-actions .btn-primary:hover { background: #c81f16; }
   </style>
 </head>
 <body>
@@ -711,6 +742,20 @@
     </div>
   </div>
 </section>
+
+<!-- MODAL DE ALERTA -->
+<div class="alert-overlay" id="alertOverlay">
+  <div class="alert-card">
+    <div class="alert-icon warn" id="alertIcon">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div class="alert-title" id="alertTitle">Atención</div>
+    <div class="alert-msg" id="alertMsg"></div>
+    <div class="alert-actions">
+      <button class="btn-primary" id="alertBtn" onclick="cerrarAlertaCroma()">Aceptar</button>
+    </div>
+  </div>
+</div>
 
 <!-- PICKER DE HORA (24hs) -->
 <div class="sheet-overlay" id="sheetOverlay"></div>
@@ -1146,9 +1191,9 @@ async function enviarFichada() {
   const destino  = 'FECHA';
   const fechaRec = document.getElementById('campoFechaRecup').value;
 
-  if (!entrada) { alert('Completá la hora de entrada.'); return; }
-  if (!salida)  { alert('Completá la hora de salida.'); return; }
-  if (esRecup && !fechaRec) { alert('Indicá qué fecha recuperás.'); return; }
+  if (!entrada) { mostrarAlertaCroma('Falta un dato', 'Completá la hora de entrada.'); return; }
+  if (!salida)  { mostrarAlertaCroma('Falta un dato', 'Completá la hora de salida.'); return; }
+  if (esRecup && !fechaRec) { mostrarAlertaCroma('Falta un dato', 'Indicá qué fecha recuperás.'); return; }
 
   const btn = document.getElementById('btnSubmit');
   btn.disabled = true; btn.textContent = 'Guardando...';
@@ -1198,9 +1243,14 @@ async function enviarFichada() {
   } catch(err) {
     const msg = String(err.message || '');
     if (msg.startsWith('FICHADA_DUPLICADA')) {
-      alert('Ya tenés un turno cargado ese día que se superpone con este horario. Si es un error, pedile a un admin que lo revise en "Ajustar jornada".\n\n' + msg.replace('FICHADA_DUPLICADA: ', ''));
+      mostrarAlertaCroma(
+        'Turno duplicado',
+        'Ya tenés un turno cargado ese día que se superpone con este horario.<br><br>' +
+        '<strong>' + msg.replace('FICHADA_DUPLICADA: ', '') + '</strong><br><br>' +
+        'Si es un error, pedile a un admin que lo revise en "Ajustar jornada".'
+      );
     } else {
-      alert('No se pudo guardar el turno. Verificá tu conexión e intentá de nuevo.\n(' + msg + ')');
+      mostrarAlertaCroma('No se pudo guardar', 'Verificá tu conexión e intentá de nuevo.<br><br>' + msg);
     }
     btn.disabled = false; btn.textContent = 'Guardar turno';
   }
@@ -1321,6 +1371,16 @@ async function cargarHistorial(empNombre) {
       hint.style.color = '#dc2626';
     }
   }
+}
+
+// ── MODAL DE ALERTA (reemplaza alert() nativo con el diseño de Croma) ──
+function mostrarAlertaCroma(titulo, mensaje) {
+  document.getElementById('alertTitle').textContent = titulo;
+  document.getElementById('alertMsg').innerHTML = mensaje;
+  document.getElementById('alertOverlay').classList.add('open');
+}
+function cerrarAlertaCroma() {
+  document.getElementById('alertOverlay').classList.remove('open');
 }
 
 // ── UTILS ──
