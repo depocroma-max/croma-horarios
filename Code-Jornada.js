@@ -1667,6 +1667,15 @@ function _horariosSeSuperponen(aEntrada, aSalida, bEntrada, bSalida) {
 // Busca, entre las fichadas ACTIVAs ya cargadas para ese empleado y esa
 // fecha, alguna cuyo horario se superponga con el que se quiere guardar.
 // Devuelve la fila encontrada (con entrada/salida) o null.
+// La columna FECHA a veces queda como texto "YYYY-MM-DD" y a veces como
+// Date de Sheets (según cómo se escribió esa fila) — mismo problema que
+// resuelve fmtFechaCelda en cargar_fichadas_empleado. Hay que normalizar
+// antes de comparar o un Date nunca va a matchear un string ISO.
+function _fmtFechaComparable(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v || '').trim().substring(0, 10);
+}
+
 function _buscarFichadaSuperpuesta(hoja, empleado, fechaISO, entrada, salida) {
   const lastRow = hoja.getLastRow();
   if (lastRow < 2) return null;
@@ -1680,12 +1689,13 @@ function _buscarFichadaSuperpuesta(hoja, empleado, fechaISO, entrada, salida) {
   const cEstado  = headers.indexOf('ESTADO');
   if (cEmp < 0 || cFecha < 0 || cEntrada < 0 || cSalida < 0) return null;
 
+  const empleadoNorm = _normalizarNombreEmpleado(empleado);
   const filas = hoja.getRange(2, 1, lastRow - 1, lastCol).getValues();
   for (let i = 0; i < filas.length; i++) {
     const f = filas[i];
     if (cEstado >= 0 && String(f[cEstado] || 'ACTIVA').trim() === 'ANULADA') continue;
-    if (String(f[cEmp] || '').trim() !== empleado) continue;
-    if (String(f[cFecha] || '').trim() !== fechaISO) continue;
+    if (_normalizarNombreEmpleado(f[cEmp]) !== empleadoNorm) continue;
+    if (_fmtFechaComparable(f[cFecha]) !== fechaISO) continue;
 
     const eExist = formatearHora(f[cEntrada]);
     const sExist = formatearHora(f[cSalida]);
