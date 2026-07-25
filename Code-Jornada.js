@@ -57,6 +57,19 @@ function doPost(e) {
     if (accion === 'acreditarBanco') return acreditarBanco(e);
     if (accion === 'usarBanco')      return usarBanco(e);
     if (accion === 'ajustar_jornada') return ajustarJornada(e);
+
+    // ── Acciones administrativas nuevas (Node → GAS) ──
+    // Estas nunca llegan con accion en la query string (a diferencia de
+    // todas las de arriba) — viajan en un sobre JSON dentro del body:
+    // { accion, clave_backend, datos }. Si no hay accion por query, se
+    // intenta interpretar el body como ese sobre; si no lo es, se cae al
+    // mismo error de siempre, sin afectar ninguna acción existente.
+    if (!accion && e.postData && e.postData.contents) {
+      let envelope = null;
+      try { envelope = JSON.parse(e.postData.contents); } catch (parseErr) { envelope = null; }
+      if (envelope && envelope.accion) return despacharAccionSegura(envelope);
+    }
+
     return ContentService.createTextOutput(JSON.stringify({ error: 'Acción POST no reconocida' }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
@@ -340,8 +353,14 @@ function guardarPerfil(e) {
     const vals = hoja.getDataRange().getValues();
     const idx  = vals.findIndex(r => r[0] === perfil.nombre);
 
-    // Construir fila respetando el orden real de columnas
-    const fila = new Array(headers.length).fill('');
+    // Construir fila respetando el orden real de columnas. Si la fila ya
+    // existe, se parte de sus valores actuales (no de un array en blanco)
+    // para no pisar columnas que este flujo legado no conoce — p.ej.
+    // NUMERO_VENDEDOR_SYSNEO/CELULAR/ESTADO agregadas por el flujo nuevo
+    // (ver ADMINISTRACIÓN UNIFICADA más abajo). Sin este cambio, cualquier
+    // edición hecha desde el modal viejo de empleado borraría esos campos.
+    const fila = idx > 0 ? vals[idx].slice() : new Array(headers.length).fill('');
+    while (fila.length < headers.length) fila.push(''); // por si headers creció
     fila[0]                      = perfil.nombre;
     fila[col('EMPRESA')]         = perfil.empresa       || '';
     fila[col('CATEGORIA')]       = perfil.categoria_id  || '';
@@ -399,6 +418,9 @@ function guardarCategoria(e) {
 }
 // ── USUARIOS / LOGIN ──────────────────────────────────
 // Hoja USUARIOS: NOMBRE | PIN | ROL | EMPLEADO_NOMBRE
+// (+ ESTADO | FIN_ACCESO agregadas por el flujo nuevo — ver más abajo
+// "ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO". getUsuarios/guardarUsuarios
+// se dejan sin tocar; el flujo nuevo usa sus propias funciones de lectura/escritura.)
 
 function getUsuarios() {
   try {
@@ -442,6 +464,21 @@ function getUsuarios() {
   }
 }
 
+// LEGACY — reescribe toda la hoja (clearContents) a partir de la lista
+// completa que manda el cliente. No usar desde el flujo nuevo (ver
+// ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO más abajo, que hace
+// operaciones puntuales por fila con LockService). Se conserva únicamente
+// por si el modal viejo de "Usuarios" del frontend actual todavía la usa
+// hasta que se migre en el Commit 3.
+//
+// RIESGO CONOCIDO mientras conviven ambos flujos: esta función hace
+// clearContents() y reescribe solo NOMBRE|PIN|ROL|EMPLEADO_NOMBRE|CELULAR,
+// así que si se usa después de que existan las columnas ESTADO/FIN_ACCESO,
+// borra esos valores para todos los usuarios. No se corrige acá porque
+// cambiar su comportamiento interno para preservarlas iría en contra de
+// "no cambiar el contrato de las acciones viejas" — queda documentado como
+// motivo para migrar el frontend (Commit 3) cuanto antes después de este
+// despliegue, no para reescribir esta función legada.
 function guardarUsuarios(e) {
   try {
     const raw  = e.parameter.datos || '[]';
@@ -477,6 +514,629 @@ function guardarUsuarios(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
+// =====================================================
+//  ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO
+// =====================================================
+// Todas las acciones de esta sección llegan por doPost, en un sobre JSON
+// { accion, clave_backend, datos } (ver despacharAccionSegura). Las llama
+// exclusivamente croma-backend (Node), nunca el navegador directo — Node
+// agrega clave_backend server-side y el actor sale del JWT, nunca del body
+// que mandó el cliente. No confundir con las acciones legadas de arriba
+// (cargar_usuarios, guardar_usuarios, guardar_perfil), que siguen
+// funcionando exactamente igual, sin este sobre ni el secreto.
+//
+// No se implementa EMPLEADO_ID ni PIN_HASH todavía — la vinculación sigue
+// siendo por EMPLEADO_NOMBRE normalizado (trim/espacios/mayúsculas), sin
+// tocar jamás el nombre histórico guardado.
+
+// ── Seguridad: BACKEND_SECRET ─────────────────────────
+function _validarBackendSecret(clave) {
+  const esperado = PropertiesService.getScriptProperties().getProperty('BACKEND_SECRET');
+  if (!esperado) return false; // no configurado en este entorno → nunca autorizar
+  if (!clave) return false;
+  return String(clave) === String(esperado);
+}
+
+function _resp(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function _respuestaNoAutorizado() {
+  return _resp({ ok: false, error: 'No autorizado' });
+}
+
+// ── Auditoría ──────────────────────────────────────────
+// Hoja AUDITORIA: FECHA_HORA | ACTOR | ACCION | ENTIDAD | CLAVE |
+//                 DATOS_ANTERIORES | DATOS_NUEVOS
+const _CAMPOS_SENSIBLES_AUDITORIA = [
+  'pin', 'pin_actual', 'pin_nuevo', 'pin_hash',
+  'password', 'token', 'authorization', 'clave_backend', 'backend_secret',
+];
+
+// Limpieza RECURSIVA: recorre objetos y arrays a cualquier profundidad y
+// reemplaza el valor de cualquier campo sensible por '[omitido]'. Nunca
+// deja pasar un PIN/hash/token a la hoja de auditoría, sin importar en qué
+// nivel del objeto esté.
+function _sanitizarProfundo(valor) {
+  if (Array.isArray(valor)) return valor.map(_sanitizarProfundo);
+  if (valor && typeof valor === 'object') {
+    const limpio = {};
+    Object.keys(valor).forEach(function(k) {
+      limpio[k] = _CAMPOS_SENSIBLES_AUDITORIA.indexOf(String(k).toLowerCase()) >= 0
+        ? '[omitido]'
+        : _sanitizarProfundo(valor[k]);
+    });
+    return limpio;
+  }
+  return valor;
+}
+
+function _asegurarHojaAuditoria() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('AUDITORIA');
+  if (!hoja) {
+    hoja = ss.insertSheet('AUDITORIA');
+    hoja.getRange(1, 1, 1, 7).setValues([[
+      'FECHA_HORA', 'ACTOR', 'ACCION', 'ENTIDAD', 'CLAVE', 'DATOS_ANTERIORES', 'DATOS_NUEVOS',
+    ]]);
+  }
+  return hoja;
+}
+
+// Best-effort: un fallo al auditar no debe revertir ni bloquear la
+// operación que ya se hizo (Sheets no tiene transacciones — ver diseño,
+// punto 6). Se loguea con Logger.log para poder diagnosticarlo aparte.
+// antes/despues pueden venir con pin en texto plano (son snapshots de fila
+// real) — acá es donde se sanitizan antes de tocar la hoja de auditoría.
+function registrarAuditoria(actor, accion, entidad, clave, antes, despues) {
+  try {
+    const hoja = _asegurarHojaAuditoria();
+    hoja.appendRow([
+      new Date(),
+      String(actor || 'desconocido'),
+      accion,
+      entidad,
+      String(clave || ''),
+      antes   ? JSON.stringify(_sanitizarProfundo(antes))   : '',
+      despues ? JSON.stringify(_sanitizarProfundo(despues)) : '',
+    ]);
+  } catch (auditErr) {
+    Logger.log('Error registrando auditoría: ' + auditErr.message);
+  }
+}
+
+// ── EMPLEADOS: helpers del flujo nuevo ────────────────
+// Existencia para el admin: EMPLEADOS primero, DATOS GENERALES (columna
+// EMPLEADO, col F) como fallback de compatibilidad — igual criterio que
+// obtenerEmpleadosAdmin() del frontend. Deliberadamente NO usa FICHADAS
+// (eso es _empleadoExiste(), que sirve a un propósito distinto: validar
+// fichadas, no administración).
+function _empleadoExisteParaAdmin(nombre) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const nombreNorm = _normalizarNombreEmpleado(nombre);
+
+  const hEmp = ss.getSheetByName('EMPLEADOS');
+  if (hEmp) {
+    const vals = hEmp.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      if (_normalizarNombreEmpleado(vals[i][0]) === nombreNorm) return true;
+    }
+  }
+
+  const hDatos = ss.getSheetByName('DATOS GENERALES');
+  if (hDatos) {
+    const vals = hDatos.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      if (_normalizarNombreEmpleado(vals[i][5]) === nombreNorm) return true; // F=5 EMPLEADO
+    }
+  }
+  return false;
+}
+
+function _numeroSysneoDisponible(numero, nombreExcluirNorm) {
+  if (!numero) return true; // opcional — vacío siempre está "disponible"
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('EMPLEADOS');
+  if (!hoja) return true;
+  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(h => String(h).trim().toUpperCase());
+  const cNum = headers.indexOf('NUMERO_VENDEDOR_SYSNEO');
+  if (cNum < 0) return true;
+  const vals = hoja.getDataRange().getValues();
+  const numeroStr = String(numero).trim();
+  for (let i = 1; i < vals.length; i++) {
+    if (_normalizarNombreEmpleado(vals[i][0]) === nombreExcluirNorm) continue;
+    if (String(vals[i][cNum] || '').trim() === numeroStr) return false;
+  }
+  return true;
+}
+
+function _filaEmpleadoAObjeto(headers, fila) {
+  const col = function(name) { return headers.indexOf(name); };
+  const val = function(name) { const c = col(name); return c >= 0 ? fila[c] : ''; };
+  return {
+    nombre:                  fila[0],
+    empresa:                 val('EMPRESA') || '',
+    categoria_id:             val('CATEGORIA') || '',
+    hs_base:                 val('HS_BASE') || 0,
+    foto_url:                val('FOTO_URL') || '',
+    regla_custom:             val('REGLA_CUSTOM') || '',
+    fecha_ingreso:            val('FECHA_INGRESO') || '',
+    sucursal_id:              val('SUCURSAL_ID') || '',
+    celular:                 val('CELULAR') || '',
+    numero_vendedor_sysneo:   val('NUMERO_VENDEDOR_SYSNEO') || '',
+    estado:                  val('ESTADO') || 'activo',
+  };
+}
+
+// Alta/edición puntual de EMPLEADOS por fila (sin clearContents, con
+// LockService en el llamador). Nunca toca la columna NOMBRE de una fila
+// existente — el nombre solo se fija al crear (ver bloqueo de edición en
+// el diseño, decisión "NOMBRE DEL EMPLEADO"). Solo pisa los campos que
+// vienen definidos (!== undefined) en `perfil`, así que se puede usar
+// tanto para el alta completa como para parches puntuales (p.ej. asignar
+// solo el número Sysneo).
+function _upsertEmpleado(perfil) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('EMPLEADOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('EMPLEADOS');
+    hoja.getRange(1, 1, 1, 9).setValues([[
+      'NOMBRE', 'EMPRESA', 'CATEGORIA', 'HS_BASE', 'FOTO_URL', 'ACTIVO', 'REGLA_CUSTOM', 'FECHA_INGRESO', 'SUCURSAL_ID',
+    ]]);
+  }
+  _asegurarColumna(hoja, 'FECHA_INGRESO');
+  _asegurarColumna(hoja, 'SUCURSAL_ID');
+  _asegurarColumna(hoja, 'NUMERO_VENDEDOR_SYSNEO');
+  _asegurarColumna(hoja, 'CELULAR');
+  _asegurarColumna(hoja, 'ESTADO');
+
+  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(h => String(h).trim().toUpperCase());
+  const col = function(name) { return headers.indexOf(name); };
+
+  const vals = hoja.getDataRange().getValues();
+  const nombreNorm = _normalizarNombreEmpleado(perfil.nombre);
+  let idx = -1;
+  for (let i = 1; i < vals.length; i++) {
+    if (_normalizarNombreEmpleado(vals[i][0]) === nombreNorm) { idx = i; break; }
+  }
+
+  const antes = idx >= 0 ? _filaEmpleadoAObjeto(headers, vals[idx]) : null;
+
+  const fila = idx >= 0 ? vals[idx].slice() : new Array(headers.length).fill('');
+  while (fila.length < headers.length) fila.push('');
+
+  if (idx < 0) fila[0] = perfil.nombre; // nombre solo se fija al crear
+
+  if (col('EMPRESA') >= 0 && perfil.empresa !== undefined)             fila[col('EMPRESA')]       = perfil.empresa || '';
+  if (col('CATEGORIA') >= 0 && perfil.categoria_id !== undefined)       fila[col('CATEGORIA')]      = perfil.categoria_id || '';
+  if (col('HS_BASE') >= 0 && perfil.hs_base !== undefined)             fila[col('HS_BASE')]       = perfil.hs_base || 0;
+  if (col('FOTO_URL') >= 0 && perfil.foto_url !== undefined)           fila[col('FOTO_URL')]       = perfil.foto_url || '';
+  if (col('REGLA_CUSTOM') >= 0 && perfil.regla_custom !== undefined)    fila[col('REGLA_CUSTOM')]    = perfil.regla_custom || '';
+  if (col('FECHA_INGRESO') >= 0 && perfil.fecha_ingreso !== undefined)  fila[col('FECHA_INGRESO')]   = perfil.fecha_ingreso || '';
+  if (col('SUCURSAL_ID') >= 0 && perfil.sucursal_id !== undefined)      fila[col('SUCURSAL_ID')]     = perfil.sucursal_id || '';
+  if (col('CELULAR') >= 0 && perfil.celular !== undefined)             fila[col('CELULAR')]        = perfil.celular || '';
+  if (col('NUMERO_VENDEDOR_SYSNEO') >= 0 && perfil.numero_vendedor_sysneo !== undefined) {
+    fila[col('NUMERO_VENDEDOR_SYSNEO')] = perfil.numero_vendedor_sysneo || '';
+  }
+
+  const estadoPrevio = antes ? antes.estado : null;
+  const estado = perfil.estado || estadoPrevio || 'activo';
+  if (col('ESTADO') >= 0) fila[col('ESTADO')] = estado;
+  if (col('ACTIVO') >= 0) fila[col('ACTIVO')] = estado !== 'inactivo'; // espejo booleano para el código viejo
+
+  if (idx >= 0) hoja.getRange(idx + 1, 1, 1, fila.length).setValues([fila]);
+  else hoja.appendRow(fila);
+
+  return { antes: antes, despues: _filaEmpleadoAObjeto(headers, fila), esNuevo: idx < 0 };
+}
+
+// ── USUARIOS: helpers del flujo nuevo (sin clearContents) ─────────────
+function _asegurarHojaUsuarios() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('USUARIOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('USUARIOS');
+    hoja.getRange(1, 1, 1, 5).setValues([['NOMBRE', 'PIN', 'ROL', 'EMPLEADO_NOMBRE', 'CELULAR']]);
+  }
+  _asegurarColumna(hoja, 'ESTADO');
+  _asegurarColumna(hoja, 'FIN_ACCESO');
+  return hoja;
+}
+
+function _leerUsuariosCrudo(hoja) {
+  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(h => String(h).trim().toUpperCase());
+  const vals = hoja.getDataRange().getValues();
+  return { headers: headers, vals: vals };
+}
+
+function _usuarioAObjeto(headers, fila) {
+  const col = function(name) { return headers.indexOf(name); };
+  const val = function(name) { const c = col(name); return c >= 0 ? fila[c] : ''; };
+  return {
+    nombre:         String(fila[0] || '').trim(),
+    pin:            String(val('PIN') || ''),
+    rol:            String(val('ROL') || 'empleado').trim() || 'empleado',
+    empleadoNombre: String(val('EMPLEADO_NOMBRE') || '').trim() || null,
+    celular:        String(val('CELULAR') || '').trim() || null,
+    estado:         String(val('ESTADO') || 'activo').trim() || 'activo',
+    fin_acceso:     val('FIN_ACCESO') ? String(val('FIN_ACCESO')) : null,
+  };
+}
+
+function _buscarFilaUsuarioPorEmpleado(headers, vals, empleadoNombreNorm) {
+  const cEmp = headers.indexOf('EMPLEADO_NOMBRE');
+  if (cEmp < 0) return -1;
+  for (let i = 1; i < vals.length; i++) {
+    if (!vals[i][0]) continue;
+    if (_normalizarNombreEmpleado(vals[i][cEmp]) === empleadoNombreNorm) return i;
+  }
+  return -1;
+}
+
+function _buscarFilaUsuarioPorUsername(headers, vals, usernameNorm, excluirIdx) {
+  for (let i = 1; i < vals.length; i++) {
+    if (i === excluirIdx) continue;
+    if (!vals[i][0]) continue;
+    if (String(vals[i][0]).trim().toLowerCase() === usernameNorm) return i;
+  }
+  return -1;
+}
+
+// Crea o actualiza el ÚNICO registro de USUARIOS vinculado a empleadoNombre
+// (regla 1-a-1, ver diseño). Si ya existe una fila para ese empleado, la
+// reutiliza (reactivación = misma fila) en vez de crear una segunda.
+// pin vacío/omitido en una edición conserva el PIN existente. Lanza
+// Error('USERNAME_DUPLICADO') si el username ya pertenece a otra fila.
+function _upsertUsuarioPorFila(usuarioData, empleadoNombre) {
+  const hoja = _asegurarHojaUsuarios();
+  const leido = _leerUsuariosCrudo(hoja);
+  const headers = leido.headers, vals = leido.vals;
+  const empNorm = _normalizarNombreEmpleado(empleadoNombre);
+
+  const idxExistente = _buscarFilaUsuarioPorEmpleado(headers, vals, empNorm);
+  const usernameNorm = String(usuarioData.username || '').trim().toLowerCase();
+  const idxUsername = _buscarFilaUsuarioPorUsername(headers, vals, usernameNorm, idxExistente);
+  if (idxUsername >= 0) throw new Error('USERNAME_DUPLICADO');
+
+  const antes = idxExistente >= 0 ? _usuarioAObjeto(headers, vals[idxExistente]) : null;
+
+  const col = function(name) { return headers.indexOf(name); };
+  const fila = idxExistente >= 0 ? vals[idxExistente].slice() : new Array(headers.length).fill('');
+  while (fila.length < headers.length) fila.push('');
+
+  fila[0] = usuarioData.username;
+  if (usuarioData.pin) fila[col('PIN')] = String(usuarioData.pin); // vacío = conservar el existente
+  fila[col('ROL')] = usuarioData.rol || (antes ? antes.rol : 'empleado') || 'empleado';
+  fila[col('EMPLEADO_NOMBRE')] = empleadoNombre;
+  if (usuarioData.celular !== undefined) fila[col('CELULAR')] = usuarioData.celular || '';
+  fila[col('ESTADO')] = usuarioData.estado || (antes ? antes.estado : 'activo') || 'activo';
+  if (col('FIN_ACCESO') >= 0) {
+    fila[col('FIN_ACCESO')] = usuarioData.fin_acceso !== undefined
+      ? (usuarioData.fin_acceso || '')
+      : (antes ? (antes.fin_acceso || '') : '');
+  }
+
+  if (idxExistente >= 0) hoja.getRange(idxExistente + 1, 1, 1, fila.length).setValues([fila]);
+  else hoja.appendRow(fila);
+
+  return { antes: antes, despues: _usuarioAObjeto(headers, fila), esNuevo: idxExistente < 0 };
+}
+
+// Parche puntual sobre la fila de USUARIOS vinculada a empleadoNombre.
+// `cambios` es un objeto { NOMBRE_DE_COLUMNA: valor }. Devuelve null si ese
+// empleado todavía no tiene acceso creado.
+function _actualizarCampoUsuarioPorEmpleado(empleadoNombre, cambios) {
+  const hoja = _asegurarHojaUsuarios();
+  const leido = _leerUsuariosCrudo(hoja);
+  const headers = leido.headers, vals = leido.vals;
+  const empNorm = _normalizarNombreEmpleado(empleadoNombre);
+
+  const idx = _buscarFilaUsuarioPorEmpleado(headers, vals, empNorm);
+  if (idx < 0) return null;
+
+  const antes = _usuarioAObjeto(headers, vals[idx]);
+  const fila = vals[idx].slice();
+  Object.keys(cambios).forEach(function(campo) {
+    const c = headers.indexOf(campo);
+    if (c >= 0) fila[c] = cambios[campo];
+  });
+  hoja.getRange(idx + 1, 1, 1, fila.length).setValues([fila]);
+
+  return { antes: antes, despues: _usuarioAObjeto(headers, fila) };
+}
+
+// ── Acciones expuestas (todas vía despacharAccionSegura) ──────────────
+
+// Uso exclusivo de croma-backend (Node) para el login por PIN y el listado
+// admin sanitizado — nunca se expone directo al navegador. Devuelve el PIN
+// en texto plano porque Node lo necesita para comparar en el login; Node
+// es responsable de nunca reenviar este resultado crudo al cliente.
+function accionCargarUsuariosInterno() {
+  const hoja = _asegurarHojaUsuarios();
+  const leido = _leerUsuariosCrudo(hoja);
+  const headers = leido.headers, vals = leido.vals;
+  const usuarios = [];
+  for (let i = 1; i < vals.length; i++) {
+    if (!vals[i][0]) continue;
+    usuarios.push(_usuarioAObjeto(headers, vals[i]));
+  }
+  return _resp({ ok: true, usuarios: usuarios });
+}
+
+function accionCrearEmpleadoConAcceso(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const empleado = datos.empleado || {};
+    const nombre = String(empleado.nombre || '').trim();
+    if (!nombre) return _resp({ ok: false, error: 'El nombre del empleado es obligatorio' });
+
+    const nombreNorm = _normalizarNombreEmpleado(nombre);
+    if (!_numeroSysneoDisponible(empleado.numero_vendedor_sysneo, nombreNorm)) {
+      return _resp({ ok: false, error: 'Ese número de vendedor Sysneo ya está asignado a otro empleado' });
+    }
+
+    const resultadoEmpleado = _upsertEmpleado(empleado);
+    registrarAuditoria(
+      actor,
+      resultadoEmpleado.esNuevo ? 'EMPLEADO_CREADO' : 'EMPLEADO_EDITADO',
+      'EMPLEADO', nombre, resultadoEmpleado.antes, resultadoEmpleado.despues
+    );
+
+    if (!datos.crear_acceso) return _resp({ ok: true, usuario_creado: false });
+
+    const usuario = datos.usuario || {};
+    if (!usuario.username || !String(usuario.username).trim()) {
+      return _resp({
+        ok: false, estado: 'empleado_creado_acceso_fallido',
+        empleado_guardado: true, usuario_creado: false,
+        error: 'Falta el nombre de usuario',
+      });
+    }
+    if (!usuario.pin || String(usuario.pin).length < 4) {
+      return _resp({
+        ok: false, estado: 'empleado_creado_acceso_fallido',
+        empleado_guardado: true, usuario_creado: false,
+        error: 'El PIN debe tener al menos 4 caracteres',
+      });
+    }
+
+    try {
+      const resUsuario = _upsertUsuarioPorFila({
+        username: String(usuario.username).trim(),
+        pin:      String(usuario.pin),
+        rol:      'empleado',
+        celular:  empleado.celular || usuario.celular || '',
+        estado:   'activo',
+      }, nombre);
+      registrarAuditoria(
+        actor,
+        resUsuario.esNuevo ? 'USUARIO_CREADO' : 'USUARIO_EDITADO',
+        'USUARIO', usuario.username, resUsuario.antes, resUsuario.despues
+      );
+      return _resp({ ok: true, usuario_creado: true });
+    } catch (errUsuario) {
+      const msg = errUsuario.message === 'USERNAME_DUPLICADO'
+        ? 'Ese nombre de usuario ya existe'
+        : ('No se pudo crear el acceso: ' + errUsuario.message);
+      // El empleado YA quedó guardado arriba — no se revierte (ver diseño,
+      // punto 6: compensación informativa, no rollback real sobre Sheets).
+      return _resp({
+        ok: false, estado: 'empleado_creado_acceso_fallido',
+        empleado_guardado: true, usuario_creado: false, error: msg,
+      });
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Nombre del empleado siempre sale de datos.empleado_nombre (el path de la
+// ruta Node), nunca se deja pisar por lo que venga en datos.empleado.nombre.
+function accionEditarEmpleado(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const nombre = String(datos.empleado_nombre || '').trim();
+    if (!nombre) return _resp({ ok: false, error: 'Falta el nombre del empleado' });
+    if (!_empleadoExisteParaAdmin(nombre)) return _resp({ ok: false, error: 'Empleado no encontrado' });
+
+    const empleado = Object.assign({}, datos.empleado || {}, { nombre: nombre });
+    const nombreNorm = _normalizarNombreEmpleado(nombre);
+    if (!_numeroSysneoDisponible(empleado.numero_vendedor_sysneo, nombreNorm)) {
+      return _resp({ ok: false, error: 'Ese número de vendedor Sysneo ya está asignado a otro empleado' });
+    }
+
+    const resultado = _upsertEmpleado(empleado);
+    registrarAuditoria(actor, 'EMPLEADO_EDITADO', 'EMPLEADO', nombre, resultado.antes, resultado.despues);
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionCrearOActivarAcceso(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const nombre = String(datos.empleado_nombre || '').trim();
+    if (!nombre) return _resp({ ok: false, error: 'Falta el nombre del empleado' });
+    if (!_empleadoExisteParaAdmin(nombre)) return _resp({ ok: false, error: 'Empleado no encontrado' });
+
+    const usuario = datos.usuario || {};
+    if (!usuario.username || !String(usuario.username).trim()) {
+      return _resp({ ok: false, error: 'Falta el nombre de usuario' });
+    }
+    if (!usuario.pin || String(usuario.pin).length < 4) {
+      return _resp({ ok: false, error: 'El PIN debe tener al menos 4 caracteres' });
+    }
+
+    try {
+      const res = _upsertUsuarioPorFila({
+        username: String(usuario.username).trim(),
+        pin:      String(usuario.pin),
+        rol:      'empleado',
+        celular:  usuario.celular || '',
+        estado:   'activo',
+      }, nombre);
+      registrarAuditoria(
+        actor,
+        res.esNuevo ? 'USUARIO_CREADO' : 'ACCESO_ACTIVADO',
+        'USUARIO', usuario.username, res.antes, res.despues
+      );
+      return _resp({ ok: true, usuario_creado: res.esNuevo });
+    } catch (err) {
+      const msg = err.message === 'USERNAME_DUPLICADO' ? 'Ese nombre de usuario ya existe' : err.message;
+      return _resp({ ok: false, error: msg });
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionCambiarEstadoAcceso(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const nombre = String(datos.empleado_nombre || '').trim();
+    const estado = datos.estado;
+    if (estado !== 'activo' && estado !== 'inactivo') {
+      return _resp({ ok: false, error: "Estado debe ser 'activo' o 'inactivo'" });
+    }
+    if (!nombre) return _resp({ ok: false, error: 'Falta el nombre del empleado' });
+
+    const cambios = { ESTADO: estado };
+    if (datos.fin_acceso !== undefined) cambios.FIN_ACCESO = datos.fin_acceso || '';
+
+    const res = _actualizarCampoUsuarioPorEmpleado(nombre, cambios);
+    if (!res) return _resp({ ok: false, error: 'Ese empleado no tiene acceso creado todavía' });
+
+    registrarAuditoria(
+      actor,
+      estado === 'activo' ? 'ACCESO_ACTIVADO' : 'ACCESO_DESACTIVADO',
+      'USUARIO', res.despues.nombre, res.antes, res.despues
+    );
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// PIN puesto por un admin — no requiere conocer el PIN anterior. Nunca se
+// pasa el valor del PIN a registrarAuditoria (ni antes ni después: se
+// manda null explícitamente, doble resguardo además del sanitizador).
+function accionCambiarPin(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const nombre = String(datos.empleado_nombre || '').trim();
+    const pinNuevo = datos.pin_nuevo;
+    if (!nombre) return _resp({ ok: false, error: 'Falta el nombre del empleado' });
+    if (!pinNuevo || String(pinNuevo).length < 4) {
+      return _resp({ ok: false, error: 'El PIN debe tener al menos 4 caracteres' });
+    }
+
+    const res = _actualizarCampoUsuarioPorEmpleado(nombre, { PIN: String(pinNuevo) });
+    if (!res) return _resp({ ok: false, error: 'Ese empleado no tiene acceso creado todavía' });
+
+    registrarAuditoria(actor, 'PIN_CAMBIADO', 'USUARIO', res.despues.nombre, null, null);
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Autoservicio: el propio empleado cambia su PIN. nombre_usuario llega
+// desde el JWT de Node (nunca del body que mandó el navegador — Node ya
+// lo garantiza, pero acá igual se valida contra la fila real). El PIN
+// actual se valida enteramente server-side; nunca se devuelve ni se
+// compara en el cliente.
+function accionCambiarPinPropio(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const nombreUsuario = String(datos.nombre_usuario || '').trim();
+    const pinActual = datos.pin_actual;
+    const pinNuevo  = datos.pin_nuevo;
+    if (!nombreUsuario || !pinActual || !pinNuevo) return _resp({ ok: false, error: 'Faltan datos' });
+    if (String(pinNuevo).length < 4) return _resp({ ok: false, error: 'El PIN nuevo debe tener al menos 4 caracteres' });
+
+    const hoja = _asegurarHojaUsuarios();
+    const leido = _leerUsuariosCrudo(hoja);
+    const headers = leido.headers, vals = leido.vals;
+    const usernameNorm = nombreUsuario.toLowerCase();
+    let idx = -1;
+    for (let i = 1; i < vals.length; i++) {
+      if (String(vals[i][0] || '').trim().toLowerCase() === usernameNorm) { idx = i; break; }
+    }
+    if (idx < 0) return _resp({ ok: false, error: 'Usuario no encontrado' });
+
+    const cPin = headers.indexOf('PIN');
+    const pinGuardado = String(vals[idx][cPin] || '');
+    if (pinGuardado !== String(pinActual)) return _resp({ ok: false, error: 'El PIN actual es incorrecto' });
+
+    const fila = vals[idx].slice();
+    fila[cPin] = String(pinNuevo);
+    hoja.getRange(idx + 1, 1, 1, fila.length).setValues([fila]);
+
+    registrarAuditoria(nombreUsuario, 'PIN_CAMBIADO', 'USUARIO', nombreUsuario, null, null);
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionAsignarNumeroSysneo(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const nombre = String(datos.empleado_nombre || '').trim();
+    const numero = datos.numero_vendedor_sysneo;
+    if (!nombre) return _resp({ ok: false, error: 'Falta el nombre del empleado' });
+    if (!_empleadoExisteParaAdmin(nombre)) return _resp({ ok: false, error: 'Empleado no encontrado' });
+
+    const nombreNorm = _normalizarNombreEmpleado(nombre);
+    if (!_numeroSysneoDisponible(numero, nombreNorm)) {
+      return _resp({ ok: false, error: 'Ese número de vendedor Sysneo ya está asignado a otro empleado' });
+    }
+
+    const resultado = _upsertEmpleado({ nombre: nombre, numero_vendedor_sysneo: numero || '' });
+    const accion = (resultado.antes && resultado.antes.numero_vendedor_sysneo)
+      ? 'NUMERO_SYSNEO_MODIFICADO' : 'NUMERO_SYSNEO_ASIGNADO';
+    registrarAuditoria(actor, accion, 'EMPLEADO', nombre, resultado.antes, resultado.despues);
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Punto de entrada único para las 8 acciones nuevas — valida el secreto acá
+// una sola vez, antes de despachar a cualquiera de ellas (ver doPost).
+function despacharAccionSegura(envelope) {
+  const accion = envelope.accion;
+  const clave  = envelope.clave_backend;
+  const datos  = envelope.datos || {};
+
+  if (!_validarBackendSecret(clave)) return _respuestaNoAutorizado();
+
+  if (accion === 'cargar_usuarios_interno')   return accionCargarUsuariosInterno();
+  if (accion === 'crear_empleado_con_acceso') return accionCrearEmpleadoConAcceso(datos);
+  if (accion === 'editar_empleado')           return accionEditarEmpleado(datos);
+  if (accion === 'crear_o_activar_acceso')    return accionCrearOActivarAcceso(datos);
+  if (accion === 'cambiar_estado_acceso')     return accionCambiarEstadoAcceso(datos);
+  if (accion === 'cambiar_pin')               return accionCambiarPin(datos);
+  if (accion === 'cambiar_pin_propio')        return accionCambiarPinPropio(datos);
+  if (accion === 'asignar_numero_sysneo')     return accionAsignarNumeroSysneo(datos);
+
+  return _resp({ ok: false, error: 'Acción no reconocida' });
+}
+
 // ── CERTIFICADOS ──────────────────────────────────────
 // Hoja CERTIFICADOS: ID | EMPLEADO | FECHA | TIPO | HS | NOTA
 
