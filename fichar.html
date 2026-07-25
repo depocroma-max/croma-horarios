@@ -1400,8 +1400,10 @@ function haversine(lat1, lon1, lat2, lon2) {
 // ── PICKER DE HORA (24hs, reemplaza al <input type="time"> nativo para
 // evitar que se confunda AM/PM en el reloj del celular) ──
 (function() {
+  // Rango acotado a 07-23hs: evita que un empleado con turno tarde
+  // (ej. 16 a 20) termine cargando de madrugada por confundir AM/PM.
   const HORAS = [];
-  for (let h = 0; h < 24; h++) HORAS.push(String(h).padStart(2, '0'));
+  for (let h = 7; h <= 23; h++) HORAS.push(String(h).padStart(2, '0'));
   const MINUTOS = ['00', '30'];
   const ALTO_ITEM = 44;
 
