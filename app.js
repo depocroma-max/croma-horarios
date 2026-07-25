@@ -2298,9 +2298,11 @@ async function cargarDatos(urls) {
   state.cargando = true;
   showToast('Cargando datos...');
 
-  // Cargar perfiles, usuarios y certificados en paralelo
+  // Cargar perfiles y certificados en paralelo. La lista de usuarios
+  // (GET /api/empleados/usuarios) requiere rol admin/jefe — se carga bajo
+  // demanda al entrar a Administración (ver setView/'administracion'), no
+  // acá, para no pedirla de arriba para todos los empleados.
   cargarPerfiles();
-  cargarUsuarios();
   cargarCertificados();
 
   const urlUnica = urls['unica'] || null;
@@ -2483,6 +2485,7 @@ function setView(view) {
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);
     renderAdminInline();
+    cargarUsuariosAdmin().then(() => renderAdminInline());
   } else if (view === 'calendario') {
     weekNav.style.display  = 'none';
     mesNav.style.display   = 'none';
@@ -2677,66 +2680,47 @@ function diaFiltrado(date) {
 }
 
 
-// ── SISTEMA DE USUARIOS ────────────────────────────────
-// Los usuarios se guardan en el Sheet (hoja USUARIOS), NO en localStorage.
-// Cache en memoria para la sesión actual.
-let _usuariosCache = null;      // null = no cargado todavía
+// ── SISTEMA DE USUARIOS (LEGACY / DESHABILITADO) ───────
+// Hasta acá, esto llamaba directo a GAS (accion=cargar_usuarios /
+// guardar_usuarios) y cacheaba la lista completa de usuarios — PIN en
+// texto plano incluido — en localStorage. Reemplazado por el flujo nuevo
+// de Administración unificada (ver más abajo "ADMINISTRACIÓN UNIFICADA:
+// EMPLEADOS + ACCESO"), que usa /api/empleados/usuarios (Node, sin PIN) y
+// nunca cachea nada sensible en el navegador.
+//
+// Se dejan cargarUsuarios/getUsuarios/saveUsuarios definidas (no borradas,
+// por si algo suelto todavía las referencia) pero SIN hacer ninguna
+// llamada real a cargar_usuarios/guardar_usuarios — ya no deben usarse
+// desde el flujo activo. cargar_usuarios además ahora exige
+// BACKEND_SECRET del lado de GAS (fix de seguridad previo a este commit),
+// así que aunque algo las llamara, GAS respondería "No autorizado".
+let _usuariosCache = null;      // ya no se puebla — queda solo por compatibilidad de lectura
 let _usuariosCargando = false;
 
 // Usuario de sesión activa: { nombre, rol, empleadoNombre }
 // rol: 'admin' | 'empleado'
 let sesionActual = null;
 
-// ── Cargar usuarios desde el Sheet ──
+// Limpieza única: si un navegador todavía tiene el cache viejo con PIN en
+// texto plano (de antes de este commit), se borra apenas carga la app.
+(function _limpiarCacheUsuariosLegado() {
+  try { localStorage.removeItem('croma_usuarios_cache'); } catch(e) {}
+})();
+
+// LEGACY — ya no hace fetch. Devuelve [] siempre.
 async function cargarUsuarios() {
-  try {
-    // Cache local → login instantáneo en segunda visita
-    const cached = localStorage.getItem('croma_usuarios_cache');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed?.length) {
-          _usuariosCache = parsed;
-          // Refrescar en background sin bloquear
-          fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`)
-            .then(r => r.ok ? r.json() : null)
-            .then(json => {
-              if (json?.ok && json.usuarios?.length) {
-                _usuariosCache = json.usuarios;
-                localStorage.setItem('croma_usuarios_cache', JSON.stringify(json.usuarios));
-              }
-            }).catch(() => {});
-          return _usuariosCache;
-        }
-      } catch(e) {}
-    }
-    // Sin cache — fetch bloqueante (primera vez)
-    const json = await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
-    if (!json.ok) return [];
-    _usuariosCache = json.usuarios || [];
-    localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuariosCache));
-    return _usuariosCache;
-  } catch(e) {
-    console.warn('No se pudieron cargar usuarios:', e);
-    return [];
-  }
+  console.warn('cargarUsuarios() está deshabilitada — usar cargarUsuariosAdmin() (/api/empleados/usuarios).');
+  return [];
 }
 
-// Devuelve cache (o array vacío si aún no cargó)
+// LEGACY — cache siempre vacío ahora (cargarUsuarios ya no la puebla).
 function getUsuarios() {
   return _usuariosCache || [];
 }
 
-// Guarda la lista completa en el Sheet
+// LEGACY — ya no hace fetch ni toca la hoja USUARIOS.
 async function saveUsuarios(lista) {
-  _usuariosCache = lista;
-  // Pasar datos como parámetro en la URL (Apps Script no acepta POST cross-origin)
-  try {
-    const datos = encodeURIComponent(JSON.stringify(lista));
-    await fetch(`${APPS_SCRIPT_URL}?accion=guardar_usuarios&datos=${datos}`);
-  } catch(e) {
-    console.warn('Error guardando usuarios:', e);
-  }
+  console.warn('saveUsuarios() está deshabilitada — usar las rutas de /api/empleados desde la ficha del empleado.');
 }
 
 // ── CERTIFICADOS ──────────────────────────────────────
@@ -3979,13 +3963,19 @@ function imprimirVistaEmpleado() {
 }
 
 // ── MI PERFIL (vista empleado) ─────────────────────────
+// Mi Perfil ya no depende de la lista completa de usuarios (eliminada —
+// ver SISTEMA DE USUARIOS LEGACY más abajo). El nombre de usuario sale de
+// la sesión (JWT), y el celular se lee de EMPLEADOS vía cargarPerfiles()
+// (ya cargado por la app, no requiere permisos de admin). El cambio de PIN
+// va contra POST /api/mi-perfil/pin — nunca se compara el PIN en el
+// cliente, nunca se le pide/devuelve el PIN completo a nadie.
 async function abrirMiPerfil() {
-  let lista = getUsuarios();
-  if (!lista.length) lista = await cargarUsuarios();
-  const u = lista.find(u => u.nombre.toLowerCase() === sesionActual.nombre.toLowerCase());
-  if (!u) { showToast('No se encontró tu usuario'); return; }
+  if (!sesionActual || !sesionActual.nombre) { showToast('No se encontró tu sesión'); return; }
 
-  // Crear overlay
+  const empleadoNombre = sesionActual.empleadoNombre || null;
+  const perfilEmp = empleadoNombre ? (EMPLEADOS_PERFILES[empleadoNombre] || {}) : {};
+  const celularActual = perfilEmp.celular || '';
+
   let overlay = document.getElementById('miPerfilOverlay');
   if (overlay) overlay.remove();
   overlay = document.createElement('div');
@@ -4002,29 +3992,27 @@ async function abrirMiPerfil() {
         <div class="admin-form-grupo">
           <label class="emp-filtro-label">Usuario</label>
           <div style="padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:14px;color:#374151;border:1px solid #e2e8f0">
-            ${u.nombre}
+            ${sesionActual.nombre}
           </div>
         </div>
 
         <div class="admin-form-grupo">
           <label class="emp-filtro-label">Celular (WhatsApp)</label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
-            <input type="text" class="admin-input" id="miPerfilCelular"
-              value="${u.celular||''}" placeholder="2994123456"
-              inputmode="numeric" style="flex:1" />
+          <div style="padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:14px;color:#374151;border:1px solid #e2e8f0">
+            ${celularActual || 'Sin cargar'}
           </div>
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
-            Sin el 0 ni el 15 — solo los 10 dígitos
+            Para actualizarlo, pedile a un administrador que lo edite desde tu ficha de empleado.
           </span>
         </div>
 
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Cambiar PIN</label>
+          <label class="emp-filtro-label">PIN actual</label>
           <input type="password" class="admin-input" id="miPerfilPinActual"
             placeholder="PIN actual" maxlength="8" autocomplete="off" />
         </div>
         <div class="admin-form-grupo">
+          <label class="emp-filtro-label">PIN nuevo</label>
           <input type="password" class="admin-input" id="miPerfilPinNuevo"
             placeholder="PIN nuevo (mínimo 4 dígitos)" maxlength="8" autocomplete="off" />
         </div>
@@ -4032,14 +4020,14 @@ async function abrirMiPerfil() {
           <input type="password" class="admin-input" id="miPerfilPinRepetir"
             placeholder="Repetir PIN nuevo" maxlength="8" autocomplete="off" />
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
-            Dejá los campos de PIN vacíos si no querés cambiarlo
+            Dejá los tres campos de PIN vacíos si no querés cambiarlo
           </span>
         </div>
 
         <p id="miPerfilError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
 
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1rem">
-          <button class="btn-connect" style="margin:0;width:100%" onclick="guardarMiPerfil()">
+          <button class="btn-connect" style="margin:0;width:100%" id="miPerfilBtnGuardar" onclick="guardarMiPerfil()">
             Guardar cambios
           </button>
           <button class="btn-demo" style="width:100%;padding:11px 16px" onclick="cerrarMiPerfil()">
@@ -4057,219 +4045,80 @@ function cerrarMiPerfil() {
 }
 
 async function guardarMiPerfil() {
-  const celular    = document.getElementById('miPerfilCelular')?.value.trim().replace(/\D/g,'');
-  const pinActual  = document.getElementById('miPerfilPinActual')?.value;
-  const pinNuevo   = document.getElementById('miPerfilPinNuevo')?.value;
-  const pinRepetir = document.getElementById('miPerfilPinRepetir')?.value;
+  const btn = document.getElementById('miPerfilBtnGuardar');
+  if (!btn || btn.disabled) return; // evita doble submit
+  const pinActual  = document.getElementById('miPerfilPinActual')?.value || '';
+  const pinNuevo   = document.getElementById('miPerfilPinNuevo')?.value || '';
+  const pinRepetir = document.getElementById('miPerfilPinRepetir')?.value || '';
   const errEl      = document.getElementById('miPerfilError');
+  if (errEl) errEl.style.display = 'none';
 
-  let lista = getUsuarios();
-  if (!lista.length) lista = await cargarUsuarios();
-  const idx   = lista.findIndex(u => u.nombre.toLowerCase() === sesionActual.nombre.toLowerCase());
-  if (idx < 0) { showToast('Error: usuario no encontrado'); return; }
+  if (!pinActual && !pinNuevo && !pinRepetir) { cerrarMiPerfil(); return; } // nada para cambiar
 
-  const u = { ...lista[idx] };
-
-  // Validar cambio de PIN si se intentó
-  if (pinActual || pinNuevo || pinRepetir) {
-    if (pinActual !== u.pin) {
-      errEl.textContent = 'El PIN actual es incorrecto';
-      errEl.style.display = 'block'; return;
-    }
-    if (!pinNuevo || pinNuevo.length < 4) {
-      errEl.textContent = 'El PIN nuevo debe tener al menos 4 caracteres';
-      errEl.style.display = 'block'; return;
-    }
-    if (pinNuevo !== pinRepetir) {
-      errEl.textContent = 'Los PINs nuevos no coinciden';
-      errEl.style.display = 'block'; return;
-    }
-    u.pin = pinNuevo;
+  if (!pinActual || !pinNuevo || !pinRepetir) {
+    if (errEl) { errEl.textContent = 'Completá los tres campos de PIN, o dejalos todos vacíos'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (pinNuevo.length < 4) {
+    if (errEl) { errEl.textContent = 'El PIN nuevo debe tener al menos 4 caracteres'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (pinNuevo !== pinRepetir) {
+    if (errEl) { errEl.textContent = 'Los PINs nuevos no coinciden'; errEl.style.display = 'block'; }
+    return;
   }
 
-  u.celular = celular || null;
-  lista[idx] = u;
-
-  await saveUsuarios(lista);
-  cerrarMiPerfil();
-  showToast('✓ Perfil actualizado');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const data = await apiMiPerfil('/pin', {
+      method: 'POST',
+      body: JSON.stringify({ pin_actual: pinActual, pin_nuevo: pinNuevo }),
+    });
+    if (data.ok) {
+      showToast('✓ PIN actualizado');
+      cerrarMiPerfil();
+    } else if (errEl) {
+      errEl.textContent = data.error || 'No se pudo cambiar el PIN';
+      errEl.style.display = 'block';
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+  }
 }
 
 // ── GESTIÓN DE USUARIOS EN ADMIN ───────────────────────
+// ── TAB "USUARIOS" VIEJA — LEGACY / MODO REPARACIÓN ────
+// Reemplazada por la ficha unificada de empleado (pestaña Acceso, ver
+// ADMINISTRACIÓN UNIFICADA más abajo). Ya no está en la navegación normal
+// (no hay botón de tab que la muestre — ver renderAdminInline/switchAdminTab)
+// y sus funciones quedan deshabilitadas: no llaman a cargar_usuarios ni
+// guardar_usuarios, no leen ni escriben PIN reales. Se dejan definidas
+// (no borradas) únicamente por si algo suelto todavía las referencia.
 function renderAdminUsuariosInner() {
-  const lista = getUsuarios();
-
-  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a,b)=>{
-    const na = parseInt(a)||999, nb = parseInt(b)||999;
-    return na!==nb ? na-nb : a.localeCompare(b);
-  });
-
-  const filas = lista.map((u, i) => {
-    const numMatch = (u.empleadoNombre||'').match(/^(\d+)\s+(.+)$/);
-    const empLabel = numMatch ? `#${numMatch[1]} ${numMatch[2]}` : (u.empleadoNombre || '—');
-    return `<tr>
-      <td><strong>${u.nombre}</strong></td>
-      <td>${empLabel}</td>
-      <td><span class="pill ${u.rol==='admin'?'pill-comp':'pill-tm'}" style="font-size:10px">${u.rol}</span></td>
-      <td><code style="font-size:12px;background:#f1f5f9;padding:2px 8px;border-radius:4px">${'•'.repeat(u.pin.length)}</code></td>
-      <td>
-        <div style="display:flex;gap:6px">
-          <button class="btn-admin-edit" onclick="abrirEditarUsuario(${i})">Editar</button>
-          <button class="btn-admin-edit" style="color:#dc2626;border-color:#fecaca" onclick="eliminarUsuario(${i})">Eliminar</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  return `
-    <div class="admin-toolbar">
-      <button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px" onclick="abrirNuevoUsuario()">+ Nuevo usuario</button>
-      <span style="font-size:12px;color:#94a3b8">${lista.length} usuario${lista.length!==1?'s':''} + Admin</span>
-    </div>
-    <div class="admin-table-wrap">
-      <table class="admin-tabla">
-        <thead>
-          <tr><th>Usuario</th><th>Empleado vinculado</th><th>Rol</th><th>PIN</th><th></th></tr>
-        </thead>
-        <tbody>
-          ${filas || '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#94a3b8">Sin usuarios creados aún</td></tr>'}
-        </tbody>
-      </table>
-    </div>
-  `;
+  return `<div class="alert alert-warning" style="margin:1rem 0">` +
+    icon('alertTriangle', 'icon-16') +
+    ` Esta pantalla fue reemplazada. Gestioná el acceso desde la ficha de cada empleado, pestaña "Acceso".` +
+    `</div>`;
 }
 
 function renderAdminUsuarios() {
   return `<div id="adminTabUsuarios" class="admin-tab-content" style="display:none">${renderAdminUsuariosInner()}</div>`;
 }
 
-function abrirNuevoUsuario() { abrirEditarUsuario(null); }
+function abrirNuevoUsuario() {
+  showToast('Esta pantalla fue reemplazada — creá el acceso desde la ficha del empleado.');
+}
 
 function abrirEditarUsuario(idx) {
-  const lista = getUsuarios();
-  const u = idx !== null ? lista[idx] : null;
-
-  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a,b)=>{
-    const na = parseInt(a)||999, nb = parseInt(b)||999;
-    return na!==nb ? na-nb : a.localeCompare(b);
-  });
-
-  const empOpts = ['<option value="">Sin empleado vinculado</option>']
-    .concat(empNombres.map(e => {
-      const nm = e.match(/^(\d+)\s+(.+)$/);
-      const lbl = nm ? `#${nm[1]} ${nm[2]}` : e;
-      return `<option value="${e}" ${u?.empleadoNombre===e?'selected':''}>${lbl}</option>`;
-    })).join('');
-
-  const html = `
-  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
-    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
-      <div class="admin-header">
-        <div class="admin-titulo">${u ? 'Editar usuario' : 'Nuevo usuario'}</div>
-        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">${icon('x','icon-16')}</button>
-      </div>
-      <div class="admin-form">
-        <input type="hidden" id="editUsuarioIdx" value="${idx !== null ? idx : ''}" />
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Nombre de usuario</label>
-          <input type="text" class="admin-input" id="editUsuarioNombre"
-            value="${u?.nombre||''}" placeholder="Ej: maria.garcia"
-            autocomplete="off" autocapitalize="off" />
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
-            El empleado va a ingresar con este nombre
-          </span>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Empleado vinculado</label>
-          <select class="admin-input" id="editUsuarioEmp">${empOpts}</select>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
-            El empleado solo verá sus propios datos
-          </span>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">PIN de acceso</label>
-          <input type="text" class="admin-input" id="editUsuarioPin"
-            value="${u?.pin||''}" placeholder="Ej: 1234" maxlength="8"
-            inputmode="numeric" autocomplete="off" />
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Celular (WhatsApp)</label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
-            <input type="text" class="admin-input" id="editUsuarioCelular"
-              value="${u?.celular||''}" placeholder="2994123456"
-              inputmode="numeric" autocomplete="off" style="flex:1" />
-          </div>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
-            Sin el 0 ni el 15 — solo los 10 dígitos
-          </span>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0" onclick="guardarUsuarioDesdeForm()">
-            ${u ? 'Guardar cambios' : 'Crear usuario'}
-          </button>
-          <button class="btn-demo" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
-        </div>
-      </div>
-    </div>
-  </div>`;
-
-  montarOverlayAdmin(html);
+  showToast('Esta pantalla fue reemplazada — editá el acceso desde la ficha del empleado.');
 }
 
 function guardarUsuarioDesdeForm() {
-  const idxStr = document.getElementById('editUsuarioIdx')?.value;
-  const idx    = idxStr !== '' ? parseInt(idxStr) : null;
-  const nombre   = document.getElementById('editUsuarioNombre')?.value.trim();
-  const emp      = document.getElementById('editUsuarioEmp')?.value;
-  const pin      = document.getElementById('editUsuarioPin')?.value.trim();
-  const celular  = document.getElementById('editUsuarioCelular')?.value.trim().replace(/\D/g,'');
-
-  if (!nombre) { showToast('Ingresá un nombre de usuario'); return; }
-  if (!pin || pin.length < 4) { showToast('El PIN debe tener al menos 4 caracteres'); return; }
-
-  const lista = getUsuarios();
-
-  const existe = lista.find((u, i) => u.nombre.toLowerCase() === nombre.toLowerCase() && i !== idx);
-  if (existe) { showToast('Ya existe un usuario con ese nombre'); return; }
-
-  const usuario = {
-    nombre,
-    pin,
-    rol: 'empleado',
-    empleadoNombre: emp || null,
-    celular: celular || null,
-  };
-
-  if (idx !== null) {
-    lista[idx] = usuario;
-  } else {
-    lista.push(usuario);
-  }
-
-  saveUsuarios(lista);
-  showToast(idx !== null ? '✓ Usuario actualizado' : '✓ Usuario creado');
-  cerrarAdmin();
-  // Actualizar solo el tab de usuarios sin rerenderizar todo el panel
-  const tabEl = document.getElementById('adminTabUsuarios');
-  if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
+  showToast('Esta acción fue deshabilitada.');
 }
 
 function eliminarUsuario(idx) {
-  const lista = getUsuarios();
-  const u = lista[idx];
-  if (!u) return;
-  if (!confirm(`¿Eliminar el usuario "${u.nombre}"?`)) return;
-  lista.splice(idx, 1);
-  saveUsuarios(lista);
-  showToast('Usuario eliminado');
-  const tabEl = document.getElementById('adminTabUsuarios');
-  if (tabEl) tabEl.innerHTML = renderAdminUsuariosInner();
+  showToast('Esta acción fue deshabilitada. Usá "Desactivar acceso" desde la ficha del empleado.');
 }
 // ── PANEL ADMIN ────────────────────────────────────────
 // adminAutenticado: true si el JWT tiene rol admin o jefe
@@ -4289,17 +4138,14 @@ function renderAdminInline() {
   const container = document.getElementById('adminContainer');
   if (!container) return;
 
-  const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a, b) => {
-    const na = parseInt(a) || 999, nb = parseInt(b) || 999;
-    return na !== nb ? na - nb : a.localeCompare(b);
-  });
+  const empleadosAdmin = obtenerEmpleadosAdmin();
 
-  const filasEmps = empNombres.map(nombre => {
-    const perfil    = EMPLEADOS_PERFILES[nombre] || {};
-    const suc       = SUCURSALES.find(s => s.id === (perfil.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
+  const filasEmps = empleadosAdmin.map(emp => {
+    const nombre    = emp.nombre;
+    const suc       = SUCURSALES.find(s => s.id === (emp.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
     const numMatch  = nombre.match(/^(\d+)\s+(.+)$/);
     const nomMostrar= numMatch ? numMatch[2] : nombre;
-    const avatarUrl = perfil.foto_url || '';
+    const avatarUrl = emp.foto_url || '';
     const iniciales = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
     const nomEnc    = nombre.replace(/'/g, "\\'");
     let avatarInner;
@@ -4308,24 +4154,46 @@ function renderAdminInline() {
     } else {
       avatarInner = "<span style='font-size:11px;font-weight:600;color:#64748b'>" + iniciales + "</span>";
     }
-    const empresaHTML = perfil.empresa
-      ? "<span class='emp-empresa-badge " + (perfil.empresa === 'MOSHE SRL' ? 'badge-moshe' : 'badge-cromawave') + "'>" + perfil.empresa + "</span>"
+    const empresaHTML = emp.empresa
+      ? "<span class='emp-empresa-badge " + (emp.empresa === 'MOSHE SRL' ? 'badge-moshe' : 'badge-cromawave') + "'>" + emp.empresa + "</span>"
       : "<span style='color:#94a3b8;font-size:12px'>—</span>";
-    const catNom  = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id)?.nombre || '—';
-    const catHTML = perfil.categoria_id
+    const catNom  = CATEGORIAS_CONFIG.find(c => c.id === emp.categoria_id)?.nombre || '—';
+    const catHTML = emp.categoria_id
       ? "<span class='emp-cat-badge'>" + catNom + "</span>"
       : "<span style='color:#94a3b8;font-size:12px'>—</span>";
-    const fotoOk  = perfil.foto_url ? icon('camera','icon-12') + ' OK' : '—';
-    return "<tr class='admin-emp-row' onclick=\"abrirEditarEmpleado('" + nomEnc + "')\">" +
+
+    const sysneo = _infoSysneoAdmin(emp);
+    const acceso = _infoAccesoAdmin(emp);
+    const usuarioLabel = emp._usuario ? emp._usuario.nombre : '<span style="color:#94a3b8">—</span>';
+    const inactivoBadge = emp.estado === 'inactivo'
+      ? " <span class='badge badge-neutral' style='margin-left:6px'>Inactivo</span>" : '';
+
+    const botones = [
+      "<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "')\">Editar</button>",
+    ];
+    if (!emp._usuario) {
+      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "','acceso')\">Crear acceso</button>");
+    } else if (emp._usuario.estado === 'inactivo') {
+      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();accionReactivarAcceso('" + nomEnc + "')\">Reactivar</button>");
+    } else {
+      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();accionDesactivarAcceso('" + nomEnc + "')\">Desactivar</button>");
+      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirCambiarPinAdmin('" + nomEnc + "')\">Cambiar PIN</button>");
+    }
+    if (!emp.numero_vendedor_sysneo) {
+      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirAsignarSysneo('" + nomEnc + "')\">Asignar Sysneo</button>");
+    }
+
+    return "<tr class='admin-emp-row' onclick=\"abrirFormularioEmpleado('" + nomEnc + "')\">" +
       "<td><div style='display:flex;align-items:center;gap:10px'>" +
         "<div class='admin-avatar-mini' style='background:" + (avatarUrl ? 'transparent' : '#f1f5f9') + "'>" + avatarInner + "</div>" +
-        "<span>" + nomMostrar + "</span>" +
+        "<span>" + nomMostrar + "</span>" + inactivoBadge +
       "</div></td>" +
       "<td><span class='suc-badge-mini' style='background:#f1f5f9;color:#475569'>" + suc.nombre + "</span></td>" +
-      "<td>" + empresaHTML + "</td>" +
-      "<td>" + catHTML + "</td>" +
-      "<td><span style='font-size:11px;color:#94a3b8'>" + fotoOk + "</span></td>" +
-      "<td><button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirEditarEmpleado('" + nomEnc + "')\" >Editar</button></td>" +
+      "<td>" + empresaHTML + catHTML + "</td>" +
+      "<td><span class='" + sysneo.clase + "'>" + sysneo.label + "</span></td>" +
+      "<td>" + usuarioLabel + "</td>" +
+      "<td><span class='" + acceso.clase + "'>" + acceso.label + "</span></td>" +
+      "<td><div style='display:flex;gap:6px;flex-wrap:wrap'>" + botones.join('') + "</div></td>" +
       "</tr>";
   }).join('');
 
@@ -4346,26 +4214,26 @@ function renderAdminInline() {
     "<div class='admin-inline-header'>" +
       "<div>" +
         "<div class='admin-titulo'>Administración</div>" +
-        "<span style='font-size:12px;color:#94a3b8;font-family:var(--font-body)'>" + empNombres.length + " empleados · " + SUCURSALES.length + " sucursales</span>" +
+        "<span style='font-size:12px;color:#94a3b8;font-family:var(--font-body)'>" + empleadosAdmin.length + " empleados · " + SUCURSALES.length + " sucursales</span>" +
       "</div>" +
       "<button class='btn-admin-edit' style='font-size:12px' onclick='cerrarSesionAdmin()'>Cerrar sesión</button>" +
     "</div>" +
     "<div class='admin-tabs' id='adminTabs'>" +
-      "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\">Empleados <span style='font-size:11px;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;margin-left:4px'>" + empNombres.length + "</span></button>" +
+      "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\">Empleados <span style='font-size:11px;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;margin-left:4px'>" + empleadosAdmin.length + "</span></button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\">Categorías</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('usuarios',this)\">Usuarios</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\">Configuración</button>" +
       "<button class='admin-tab' onclick=\"switchAdminTab('ajusteJornada',this)\">Ajuste de jornada</button>" +
     "</div>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
       "<div class='admin-toolbar'>" +
         "<input type='text' class='admin-search' id='adminBuscarEmp' placeholder='Buscar empleado...' oninput='filtrarTablaAdmin(this.value)' />" +
-        "<span style='font-size:12px;color:#94a3b8'>" + empNombres.length + " empleados en el sistema</span>" +
+        "<span style='font-size:12px;color:#94a3b8'>" + empleadosAdmin.length + " empleados en el sistema</span>" +
+        "<button class='btn-connect' style='width:auto;padding:8px 16px;font-size:13px;margin:0' onclick=\"abrirFormularioEmpleado(null)\">+ Nuevo empleado</button>" +
       "</div>" +
       "<div class='admin-table-wrap'>" +
         "<table class='admin-tabla' id='adminTablaEmps'>" +
-          "<thead><tr><th>Empleado</th><th>Sucursal</th><th>Empresa</th><th>Categoría</th><th>Foto</th><th></th></tr></thead>" +
-          "<tbody>" + (filasEmps || "<tr><td colspan='6' style='text-align:center;padding:2.5rem;color:#94a3b8;font-size:13px'>Sin datos cargados</td></tr>") + "</tbody>" +
+          "<thead><tr><th>Empleado</th><th>Sucursal</th><th>Empresa / Categoría</th><th>Número Sysneo</th><th>Usuario</th><th>Acceso</th><th></th></tr></thead>" +
+          "<tbody>" + (filasEmps || "<tr><td colspan='7' style='text-align:center;padding:2.5rem;color:#94a3b8;font-size:13px'>Sin datos cargados</td></tr>") + "</tbody>" +
         "</table>" +
       "</div>" +
     "</div>" +
@@ -4378,7 +4246,6 @@ function renderAdminInline() {
         "<tbody>" + filasCats + "</tbody></table>" +
       "</div>" +
     "</div>" +
-    renderAdminUsuarios() +
     "<div id='adminTabConfiguracion' class='admin-tab-content' style='display:none'>" +
       "<div style='padding:1.25rem 0;max-width:480px'>" +
         "<div class='admin-table-wrap' style='padding:1.5rem'>" +
@@ -4436,10 +4303,8 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('adminTabEmpleados').style.display    = tab === 'empleados'     ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
-  document.getElementById('adminTabUsuarios').style.display     = tab === 'usuarios'      ? 'block' : 'none';
   document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
   document.getElementById('adminTabAjusteJornada').style.display= tab === 'ajusteJornada'  ? 'block' : 'none';
-  if (tab === 'usuarios')      cargarUsuarios().then(() => { const t = document.getElementById('adminTabUsuarios'); if(t) t.innerHTML = renderAdminUsuariosInner(); });
   if (tab === 'configuracion') cargarConfigAdmin();
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
 }
@@ -4802,6 +4667,610 @@ async function confirmarAjusteJornada(empleado, fechaISO) {
   }
 }
 
+// ══════════════════════════════════════════════════════
+//  ADMINISTRACIÓN UNIFICADA: EMPLEADOS + ACCESO (Commit 3)
+// ══════════════════════════════════════════════════════
+// Reemplaza el modal de empleado + la tab de usuarios por una única ficha
+// por empleado (Perfil / Datos laborales / Acceso). Todo lo que toca
+// acceso (usuario/PIN/estado/número Sysneo) va contra croma-backend
+// (Node, JWT) — rutas exactas confirmadas contra
+// croma-backend/src/routes/empleados.js y mi-perfil.js (Commit 1):
+//   GET  /api/empleados/usuarios
+//   POST /api/empleados
+//   PUT  /api/empleados/:nombre
+//   POST /api/empleados/:nombre/acceso
+//   PATCH /api/empleados/:nombre/acceso/estado
+//   POST /api/empleados/:nombre/acceso/pin
+//   POST /api/empleados/:nombre/numero-sysneo
+//   POST /api/mi-perfil/pin
+// Nunca se llama accion=cargar_usuarios ni accion=guardar_usuarios desde
+// acá. Nunca se cachea ni se loguea un PIN.
+
+function _normalizarNombreEmpleadoJS(s) {
+  return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+async function _apiFetch(base, path, opciones) {
+  opciones = opciones || {};
+  try {
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opciones.headers || {});
+    const token = _getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const resp = await fetch(`${BACKEND_URL}${base}${path}`, Object.assign({}, opciones, { headers }));
+    const data = await resp.json().catch(() => null);
+    if (!data) return { ok: false, error: 'Respuesta inválida del servidor' };
+    return data;
+  } catch (err) {
+    return { ok: false, error: 'Error de conexión. Revisá tu internet e intentá de nuevo.' };
+  }
+}
+const apiEmpleados = (path, opciones) => _apiFetch('/api/empleados', path, opciones);
+const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opciones);
+
+// ── Fuente del listado administrativo ─────────────────
+let USUARIOS_ADMIN_CACHE = null; // lista saneada (sin PIN) desde GET /api/empleados/usuarios
+
+async function cargarUsuariosAdmin() {
+  const data = await apiEmpleados('/usuarios');
+  if (!data.ok) {
+    console.warn('No se pudo cargar el listado de usuarios:', data.error);
+    if (!USUARIOS_ADMIN_CACHE) USUARIOS_ADMIN_CACHE = [];
+    return USUARIOS_ADMIN_CACHE;
+  }
+  USUARIOS_ADMIN_CACHE = data.usuarios || [];
+  return USUARIOS_ADMIN_CACHE;
+}
+
+function getUsuariosAdmin() { return USUARIOS_ADMIN_CACHE || []; }
+
+// EMPLEADOS (prioridad) + nombres históricos de DATOS GENERALES
+// (compatibilidad, sin crear nada ahí — ver diseño aprobado). Semana/Mes/
+// Calendario NO usan esta función, siguen leyendo state.datos directo.
+function obtenerEmpleadosAdmin() {
+  const porNorm = {};
+
+  (state.datos || []).forEach(r => {
+    if (!r.EMPLEADO) return;
+    const norm = _normalizarNombreEmpleadoJS(r.EMPLEADO);
+    if (!porNorm[norm]) porNorm[norm] = { nombre: r.EMPLEADO, origen: 'horarios' };
+  });
+
+  Object.keys(EMPLEADOS_PERFILES).forEach(nombre => {
+    const norm = _normalizarNombreEmpleadoJS(nombre);
+    // EMPLEADOS pisa lo derivado de horarios pero conserva el nombre tal
+    // como está guardado en esta hoja (fuente prioritaria).
+    porNorm[norm] = Object.assign({}, porNorm[norm], EMPLEADOS_PERFILES[nombre], { nombre, origen: 'empleados' });
+  });
+
+  const usuarioPorNorm = {};
+  getUsuariosAdmin().forEach(u => {
+    if (u.empleadoNombre) usuarioPorNorm[_normalizarNombreEmpleadoJS(u.empleadoNombre)] = u;
+  });
+
+  return Object.keys(porNorm).map(norm => {
+    return Object.assign({}, porNorm[norm], { _usuario: usuarioPorNorm[norm] || null });
+  }).sort((a, b) => {
+    const na = parseInt(a.nombre) || 999, nb = parseInt(b.nombre) || 999;
+    return na !== nb ? na - nb : a.nombre.localeCompare(b.nombre);
+  });
+}
+
+function _infoSysneoAdmin(emp) {
+  return emp.numero_vendedor_sysneo
+    ? { label: emp.numero_vendedor_sysneo, clase: 'badge badge-info' }
+    : { label: 'Pendiente', clase: 'badge badge-neutral' };
+}
+
+function _infoAccesoAdmin(emp) {
+  const u = emp._usuario;
+  if (!u) return { label: 'Sin acceso', clase: 'badge badge-neutral' };
+  if (u.estado === 'inactivo') return { label: 'Acceso desactivado', clase: 'badge badge-warning' };
+  if (u.fin_acceso) {
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const fin = new Date(u.fin_acceso + 'T00:00:00');
+    if (!isNaN(fin.getTime()) && fin < hoy) return { label: 'Acceso vencido', clase: 'badge badge-danger' };
+  }
+  return { label: 'Con acceso', clase: 'badge badge-success' };
+}
+
+async function _refrescarAdminEmpleados() {
+  await Promise.all([cargarPerfiles(), cargarUsuariosAdmin()]);
+  renderAdminInline();
+}
+
+// ── Ficha unificada (crear / editar) ──────────────────
+// tabInicial: 'perfil' (default) | 'laboral' | 'acceso'
+function abrirFormularioEmpleado(nombre, tabInicial) {
+  const esNuevo = !nombre;
+  const emp = esNuevo ? {} : (obtenerEmpleadosAdmin().find(e => e.nombre === nombre) || { nombre });
+  const nomEnc = (nombre || '').replace(/'/g, "\\'");
+  const tieneAcceso = !!emp._usuario;
+
+  const sucOpts = ['<option value="">Sin asignar</option>']
+    .concat(SUCURSALES.map(s => `<option value="${s.id}" ${emp.sucursal_id === s.id ? 'selected' : ''}>${s.nombre}</option>`)).join('');
+  const catOpts = ['<option value="">Sin categoría</option>']
+    .concat(CATEGORIAS_CONFIG.map(c => `<option value="${c.id}" ${emp.categoria_id === c.id ? 'selected' : ''}>${c.nombre}</option>`)).join('');
+  const empOpts = ['<option value="">Sin empresa</option>']
+    .concat(EMPRESAS.map(e => `<option value="${e}" ${emp.empresa === e ? 'selected' : ''}>${e}</option>`)).join('');
+  const reglaOpts = `
+    <option value="" ${!emp.regla_custom ? 'selected' : ''}>Usar regla de la categoría</option>
+    <option value="lv4" ${emp.regla_custom === 'lv4' ? 'selected' : ''}>4h Lun-Vie (excedente = extra)</option>
+    <option value="lv8" ${emp.regla_custom === 'lv8' ? 'selected' : ''}>8h Lun-Vie (excedente = extra)</option>
+    <option value="personalizado" ${emp.regla_custom === 'personalizado' ? 'selected' : ''}>Personalizado (usar Hs base)</option>
+  `;
+
+  const nombreCampoHtml = esNuevo
+    ? `<input type="text" class="admin-input" id="formEmpNombre" placeholder="Ej: Aixa Rojas" autocomplete="off" />`
+    : `<input type="text" class="admin-input" id="formEmpNombre" value="${emp.nombre}" readonly />
+       <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+         El nombre no puede modificarse desde esta pantalla porque está vinculado a registros históricos.
+       </span>`;
+
+  const nomMostrar = esNuevo ? '' : emp.nombre.replace(/^\d+\s+/, '');
+
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarFormularioEmpleado(event)">
+    <div class="admin-panel" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">${esNuevo ? 'Nuevo empleado' : 'Editar — ' + nomMostrar}</div>
+        <button class="detalle-close" onclick="cerrarFormularioEmpleado()">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form" style="overflow:auto">
+        <input type="hidden" id="formEmpNombreOriginal" value="${nomEnc}" />
+        <input type="hidden" id="formEmpTieneAccesoOriginal" value="${tieneAcceso ? '1' : ''}" />
+        <div class="admin-tabs" id="formEmpTabs">
+          <button class="admin-tab active" type="button" onclick="_switchFormEmpTab('perfil', this)">Perfil</button>
+          <button class="admin-tab" type="button" onclick="_switchFormEmpTab('laboral', this)">Datos laborales</button>
+          <button class="admin-tab" type="button" onclick="_switchFormEmpTab('acceso', this)">Acceso</button>
+        </div>
+
+        <div id="formEmpTabPerfil" class="admin-tab-content">
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Nombre</label>
+            ${nombreCampoHtml}
+          </div>
+          <div class="admin-foto-preview" id="adminFotoPreview">
+            ${emp.foto_url
+              ? `<img src="${emp.foto_url}" onerror="this.parentElement.innerHTML='Sin foto'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0">`
+              : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8">Sin foto</div>`}
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">URL de foto (Google Drive)</label>
+            <input type="url" class="admin-input" id="formEmpFotoUrl" value="${emp.foto_url || ''}"
+              placeholder="https://drive.google.com/..." oninput="previewFoto(this.value)" />
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Celular (WhatsApp)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
+              <input type="text" class="admin-input" id="formEmpCelular" value="${emp.celular || ''}"
+                placeholder="2994123456" inputmode="numeric" autocomplete="off" style="flex:1;margin:0" />
+            </div>
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Sin el 0 ni el 15 — solo los 10 dígitos</span>
+          </div>
+        </div>
+
+        <div id="formEmpTabLaboral" class="admin-tab-content" style="display:none">
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Sucursal principal</label>
+            <select class="admin-input" id="formEmpSucursal">${sucOpts}</select>
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Fecha de ingreso</label>
+            <input type="date" class="admin-input" id="formEmpFechaIngreso" value="${emp.fecha_ingreso || ''}" />
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Empresa</label>
+            <select class="admin-input" id="formEmpEmpresa">${empOpts}</select>
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Categoría</label>
+            <select class="admin-input" id="formEmpCategoria">${catOpts}</select>
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Regla personalizada de horas extra</label>
+            <select class="admin-input" id="formEmpReglaCustom" onchange="_toggleHsBaseFormEmp(this.value)">${reglaOpts}</select>
+          </div>
+          <div class="admin-form-grupo" id="formEmpHsBaseGrupo" style="${emp.regla_custom === 'personalizado' ? '' : 'display:none'}">
+            <label class="emp-filtro-label">Horas base por día (límite para extra)</label>
+            <input type="number" class="admin-input" id="formEmpHsBase" value="${emp.hs_base || 8}" min="1" max="12" step="0.5" />
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Número de vendedor Sysneo</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="text" class="admin-input" id="formEmpSysneo" value="${emp.numero_vendedor_sysneo || ''}"
+                placeholder="Opcional" autocomplete="off" style="flex:1;margin:0" />
+              <span class="${_infoSysneoAdmin(emp).clase}">${_infoSysneoAdmin(emp).label}</span>
+            </div>
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+              Este número se crea manualmente en Sysneo y acá se guarda únicamente como referencia. Croma Horarios no se conecta ni sincroniza con Sysneo.
+            </span>
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Estado del empleado</label>
+            <select class="admin-input" id="formEmpEstado">
+              <option value="activo" ${emp.estado !== 'inactivo' ? 'selected' : ''}>Activo</option>
+              <option value="inactivo" ${emp.estado === 'inactivo' ? 'selected' : ''}>Inactivo</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="formEmpTabAcceso" class="admin-tab-content" style="display:none">
+          ${_renderTabAccesoEmpleado(emp, tabInicial === 'acceso')}
+        </div>
+
+        <p id="formEmpError" class="alert alert-danger" style="display:none;margin-top:1rem"></p>
+
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" id="formEmpBtnGuardar" onclick="guardarFormularioEmpleado()">
+            ${esNuevo ? 'Crear empleado' : 'Guardar cambios'}
+          </button>
+          <button class="btn-demo" onclick="cerrarFormularioEmpleado()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  montarOverlayAdmin(html);
+  if (tabInicial === 'laboral' || tabInicial === 'acceso') {
+    const idx = tabInicial === 'laboral' ? 1 : 2;
+    _switchFormEmpTab(tabInicial, document.querySelectorAll('#formEmpTabs .admin-tab')[idx]);
+  }
+}
+
+function _renderTabAccesoEmpleado(emp, crearAccesoInicial) {
+  const tieneAcceso = !!emp._usuario;
+
+  if (!tieneAcceso) {
+    return `
+      <div class="admin-form-grupo">
+        <label class="form-switch"><input type="checkbox" id="formEmpCrearAcceso" ${crearAccesoInicial ? 'checked' : ''} onchange="_toggleCrearAccesoEmpleado(this.checked)"><span class="switch-track"></span></label>
+        <span style="margin-left:10px;font-size:13px;color:#1e293b;vertical-align:middle">Crear acceso para este empleado</span>
+      </div>
+      <div id="formEmpAccesoCampos" style="${crearAccesoInicial ? '' : 'display:none'}">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Nombre de usuario</label>
+          <input type="text" class="admin-input" id="formEmpUsername" placeholder="Ej: aixa03" autocomplete="off" autocapitalize="off" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">PIN</label>
+          <input type="text" class="admin-input" id="formEmpPin" placeholder="Ej: 1234" maxlength="8" inputmode="numeric" autocomplete="off" />
+        </div>
+      </div>
+    `;
+  }
+
+  const u = emp._usuario;
+  return `
+    <div class="admin-form-grupo">
+      <label class="emp-filtro-label">Nombre de usuario</label>
+      <input type="text" class="admin-input" id="formEmpUsername" value="${u.nombre}" readonly />
+    </div>
+    <div class="admin-form-grupo">
+      <label class="emp-filtro-label">PIN</label>
+      <div><button type="button" class="btn-admin-edit" id="formEmpBtnCambiarPin" onclick="_mostrarCampoPinEmpleado()">Cambiar PIN</button></div>
+      <input type="text" class="admin-input" id="formEmpPin" placeholder="PIN nuevo" maxlength="8" inputmode="numeric" autocomplete="off" style="display:none;margin-top:8px" />
+      <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Dejalo así para conservar el PIN actual</span>
+    </div>
+    <div class="admin-form-grupo">
+      <label class="emp-filtro-label">Estado del acceso</label>
+      <select class="admin-input" id="formEmpAccesoEstado">
+        <option value="activo" ${u.estado !== 'inactivo' ? 'selected' : ''}>Activo</option>
+        <option value="inactivo" ${u.estado === 'inactivo' ? 'selected' : ''}>Inactivo</option>
+      </select>
+    </div>
+    <div class="admin-form-grupo">
+      <label class="emp-filtro-label">Fin de acceso (opcional)</label>
+      <input type="date" class="admin-input" id="formEmpFinAcceso" value="${u.fin_acceso || ''}" />
+    </div>
+  `;
+}
+
+function _toggleCrearAccesoEmpleado(checked) {
+  const el = document.getElementById('formEmpAccesoCampos');
+  if (el) el.style.display = checked ? '' : 'none';
+}
+
+function _toggleHsBaseFormEmp(val) {
+  const el = document.getElementById('formEmpHsBaseGrupo');
+  if (el) el.style.display = val === 'personalizado' ? 'block' : 'none';
+}
+
+function _mostrarCampoPinEmpleado() {
+  const el = document.getElementById('formEmpPin');
+  if (el) { el.style.display = ''; el.focus(); }
+  const btn = document.getElementById('formEmpBtnCambiarPin');
+  if (btn) btn.style.display = 'none';
+}
+
+function _switchFormEmpTab(tab, btn) {
+  document.querySelectorAll('#formEmpTabs .admin-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('formEmpTabPerfil').style.display  = tab === 'perfil'  ? '' : 'none';
+  document.getElementById('formEmpTabLaboral').style.display = tab === 'laboral' ? '' : 'none';
+  document.getElementById('formEmpTabAcceso').style.display  = tab === 'acceso'  ? '' : 'none';
+}
+
+function cerrarFormularioEmpleado(event) {
+  if (event && event.target !== event.currentTarget) return;
+  cerrarAdmin();
+}
+
+function _mostrarErrorFormEmpleado(msg) {
+  const errEl = document.getElementById('formEmpError');
+  if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+}
+
+function _setGuardandoFormEmpleado(guardando) {
+  const btn = document.getElementById('formEmpBtnGuardar');
+  if (!btn) return;
+  if (guardando) {
+    btn.dataset.textoOriginal = btn.dataset.textoOriginal || btn.textContent;
+    btn.textContent = 'Guardando…';
+  } else if (btn.dataset.textoOriginal) {
+    btn.textContent = btn.dataset.textoOriginal;
+  }
+  btn.disabled = guardando;
+}
+
+async function guardarFormularioEmpleado() {
+  const btn = document.getElementById('formEmpBtnGuardar');
+  if (!btn || btn.disabled) return; // evita doble submit
+  const errEl = document.getElementById('formEmpError');
+  if (errEl) errEl.style.display = 'none';
+
+  const nombreOriginal   = document.getElementById('formEmpNombreOriginal')?.value || '';
+  const esNuevo          = !nombreOriginal;
+  const teniaAccesoAntes = document.getElementById('formEmpTieneAccesoOriginal')?.value === '1';
+
+  const nombre = esNuevo ? (document.getElementById('formEmpNombre')?.value || '').trim() : nombreOriginal;
+  if (esNuevo && !nombre) {
+    _mostrarErrorFormEmpleado('El nombre es obligatorio');
+    return;
+  }
+
+  const fotoUrlRaw = (document.getElementById('formEmpFotoUrl')?.value || '').trim();
+  const driveMatch = fotoUrlRaw.match(/\/d\/([^/]+)/);
+  const fotoUrl = driveMatch ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200` : fotoUrlRaw;
+
+  const empleadoPayload = {
+    nombre,
+    empresa:                document.getElementById('formEmpEmpresa')?.value || '',
+    categoria_id:            document.getElementById('formEmpCategoria')?.value || '',
+    regla_custom:            document.getElementById('formEmpReglaCustom')?.value || '',
+    hs_base:                 parseFloat(document.getElementById('formEmpHsBase')?.value) || 8,
+    foto_url:                fotoUrl,
+    sucursal_id:             document.getElementById('formEmpSucursal')?.value || '',
+    fecha_ingreso:           document.getElementById('formEmpFechaIngreso')?.value || '',
+    celular:                 (document.getElementById('formEmpCelular')?.value || '').trim().replace(/\D/g, ''),
+    numero_vendedor_sysneo:  (document.getElementById('formEmpSysneo')?.value || '').trim(),
+    estado:                  document.getElementById('formEmpEstado')?.value || 'activo',
+  };
+
+  const crearAccesoCheckbox = document.getElementById('formEmpCrearAcceso'); // solo existe si NO tenía acceso
+  const quiereCrearAcceso = !teniaAccesoAntes && !!crearAccesoCheckbox && crearAccesoCheckbox.checked;
+
+  _setGuardandoFormEmpleado(true);
+  try {
+    if (esNuevo) {
+      const usuario = quiereCrearAcceso ? {
+        username: (document.getElementById('formEmpUsername')?.value || '').trim(),
+        pin:      (document.getElementById('formEmpPin')?.value || '').trim(),
+      } : null;
+
+      if (quiereCrearAcceso && (!usuario.username || !usuario.pin)) {
+        _mostrarErrorFormEmpleado('Usuario y PIN son obligatorios para crear el acceso');
+        _switchFormEmpTab('acceso', document.querySelectorAll('#formEmpTabs .admin-tab')[2]);
+        return;
+      }
+
+      const data = await apiEmpleados('', {
+        method: 'POST',
+        body: JSON.stringify({ empleado: empleadoPayload, crear_acceso: quiereCrearAcceso, usuario }),
+      });
+
+      if (data.ok) {
+        showToast('✓ Empleado creado');
+        await _refrescarAdminEmpleados();
+        cerrarFormularioEmpleado();
+      } else if (data.estado === 'empleado_creado_acceso_fallido') {
+        showToast('El empleado fue creado correctamente, pero no se pudo crear el acceso. Podés reintentarlo desde la pestaña Acceso.', 4500);
+        await _refrescarAdminEmpleados();
+        // No se cierra el formulario: se reabre en modo edición sobre el
+        // empleado recién creado, en la pestaña Acceso, para reintentar
+        // solo esa parte — el empleado ya quedó guardado (ver diseño,
+        // resultado parcial "empleado_creado_acceso_fallido").
+        abrirFormularioEmpleado(nombre, 'acceso');
+      } else {
+        _mostrarErrorFormEmpleado(data.error || 'No se pudo crear el empleado');
+      }
+      return;
+    }
+
+    // ── Edición ──
+    const resPerfil = await apiEmpleados(`/${encodeURIComponent(nombre)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ empleado: empleadoPayload }),
+    });
+    if (!resPerfil.ok) {
+      _mostrarErrorFormEmpleado(resPerfil.error || 'No se pudo guardar el empleado');
+      return;
+    }
+
+    if (quiereCrearAcceso) {
+      const usuario = {
+        username: (document.getElementById('formEmpUsername')?.value || '').trim(),
+        pin:      (document.getElementById('formEmpPin')?.value || '').trim(),
+      };
+      if (!usuario.username || !usuario.pin) {
+        showToast('✓ Empleado actualizado (no se creó el acceso: faltó usuario o PIN)', 4000);
+      } else {
+        const resAcceso = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso`, {
+          method: 'POST',
+          body: JSON.stringify({ usuario }),
+        });
+        showToast(resAcceso.ok
+          ? '✓ Empleado actualizado y acceso creado'
+          : ('Empleado actualizado, pero no se pudo crear el acceso: ' + (resAcceso.error || '')), 4000);
+      }
+    } else if (teniaAccesoAntes) {
+      const estadoAcceso = document.getElementById('formEmpAccesoEstado')?.value;
+      const finAcceso     = document.getElementById('formEmpFinAcceso')?.value || null;
+      if (estadoAcceso) {
+        const resEstado = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso/estado`, {
+          method: 'PATCH',
+          body: JSON.stringify({ estado: estadoAcceso, fin_acceso: finAcceso }),
+        });
+        if (!resEstado.ok) showToast('El empleado se guardó, pero no se pudo actualizar el acceso: ' + (resEstado.error || ''), 4500);
+      }
+      const pinField = document.getElementById('formEmpPin');
+      const pinNuevo = pinField && pinField.style.display !== 'none' ? pinField.value.trim() : '';
+      if (pinNuevo) {
+        const resPin = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso/pin`, {
+          method: 'POST',
+          body: JSON.stringify({ pin_nuevo: pinNuevo }),
+        });
+        if (!resPin.ok) showToast('El empleado se guardó, pero no se pudo cambiar el PIN: ' + (resPin.error || ''), 4500);
+      }
+      showToast('✓ Empleado actualizado');
+    } else {
+      showToast('✓ Empleado actualizado');
+    }
+
+    await _refrescarAdminEmpleados();
+    cerrarFormularioEmpleado();
+  } finally {
+    _setGuardandoFormEmpleado(false);
+  }
+}
+
+// ── Acciones rápidas desde la tabla ────────────────────
+function accionDesactivarAcceso(nombre) {
+  mostrarConfirm({
+    titulo: 'Desactivar acceso',
+    mensaje: `¿Desactivar el acceso de <strong>${nombre.replace(/^\d+\s+/, '')}</strong>? El empleado no se toca, solo deja de poder entrar a Croma Horarios.`,
+    textoOk: 'Desactivar',
+    peligro: true,
+    onOk: async () => {
+      const data = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso/estado`, {
+        method: 'PATCH', body: JSON.stringify({ estado: 'inactivo' }),
+      });
+      if (data.ok) { showToast('✓ Acceso desactivado'); await _refrescarAdminEmpleados(); }
+      else showToast('No se pudo desactivar: ' + (data.error || ''));
+    },
+  });
+}
+
+async function accionReactivarAcceso(nombre) {
+  const data = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso/estado`, {
+    method: 'PATCH', body: JSON.stringify({ estado: 'activo' }),
+  });
+  if (data.ok) { showToast('✓ Acceso reactivado'); await _refrescarAdminEmpleados(); }
+  else showToast('No se pudo reactivar: ' + (data.error || ''));
+}
+
+function abrirCambiarPinAdmin(nombre) {
+  const nomEnc = nombre.replace(/'/g, "\\'");
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Cambiar PIN</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        <input type="hidden" id="pinRapidoNombre" value="${nomEnc}" />
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">PIN nuevo</label>
+          <input type="text" class="admin-input" id="pinRapidoValor" placeholder="Ej: 1234" maxlength="8" inputmode="numeric" autocomplete="off" />
+        </div>
+        <p id="pinRapidoError" class="alert alert-danger" style="display:none;margin-top:.5rem"></p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" id="pinRapidoBtn" onclick="_guardarPinRapido()">Guardar PIN</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+}
+
+async function _guardarPinRapido() {
+  const btn = document.getElementById('pinRapidoBtn');
+  if (!btn || btn.disabled) return;
+  const nombre = document.getElementById('pinRapidoNombre')?.value;
+  const pin = (document.getElementById('pinRapidoValor')?.value || '').trim();
+  const errEl = document.getElementById('pinRapidoError');
+  if (errEl) errEl.style.display = 'none';
+  if (!pin || pin.length < 4) {
+    if (errEl) { errEl.textContent = 'El PIN debe tener al menos 4 caracteres'; errEl.style.display = 'block'; }
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const data = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso/pin`, {
+      method: 'POST', body: JSON.stringify({ pin_nuevo: pin }),
+    });
+    if (data.ok) { showToast('✓ PIN actualizado'); cerrarAdmin(); }
+    else if (errEl) { errEl.textContent = data.error || 'No se pudo cambiar el PIN'; errEl.style.display = 'block'; }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar PIN';
+  }
+}
+
+function abrirAsignarSysneo(nombre) {
+  const emp = obtenerEmpleadosAdmin().find(e => e.nombre === nombre) || {};
+  const nomEnc = nombre.replace(/'/g, "\\'");
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Número de vendedor Sysneo</div>
+        <button class="detalle-close" onclick="cerrarAdmin()">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        <input type="hidden" id="sysneoRapidoNombre" value="${nomEnc}" />
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Número</label>
+          <input type="text" class="admin-input" id="sysneoRapidoValor" value="${emp.numero_vendedor_sysneo || ''}" placeholder="Opcional" autocomplete="off" />
+          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            Este número se crea manualmente en Sysneo y acá se guarda únicamente como referencia. Croma Horarios no se conecta ni sincroniza con Sysneo.
+          </span>
+        </div>
+        <p id="sysneoRapidoError" class="alert alert-danger" style="display:none;margin-top:.5rem"></p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" id="sysneoRapidoBtn" onclick="_guardarSysneoRapido()">Guardar</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+}
+
+async function _guardarSysneoRapido() {
+  const btn = document.getElementById('sysneoRapidoBtn');
+  if (!btn || btn.disabled) return;
+  const nombre = document.getElementById('sysneoRapidoNombre')?.value;
+  const numero = (document.getElementById('sysneoRapidoValor')?.value || '').trim();
+  const errEl = document.getElementById('sysneoRapidoError');
+  if (errEl) errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const data = await apiEmpleados(`/${encodeURIComponent(nombre)}/numero-sysneo`, {
+      method: 'POST', body: JSON.stringify({ numero_vendedor_sysneo: numero || null }),
+    });
+    if (data.ok) { showToast('✓ Número Sysneo guardado'); cerrarAdmin(); await _refrescarAdminEmpleados(); }
+    else if (errEl) { errEl.textContent = data.error || 'No se pudo guardar'; errEl.style.display = 'block'; }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+}
+
+// ── LEGACY: modal de empleado sin acceso, reemplazado por
+// abrirFormularioEmpleado. Se deja definido (no borrado) — ya no está
+// linkeado desde ninguna fila ni botón de la tabla.
 function abrirEditarEmpleado(nombre) {
   const perfil = EMPLEADOS_PERFILES[nombre] || { nombre };
   const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
