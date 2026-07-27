@@ -779,6 +779,7 @@
 <script>
 // ── CONFIG ──
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
+const BACKEND_URL = 'https://api.croma-app.com.ar';
 
 const SUCURSALES = [
   { id: '01',      nombre: '01 PASEO',           color: '#2563EB' },
@@ -799,7 +800,12 @@ let sesion = null;         // { nombre, rol, empleadoNombre }
 let sucursalGeo = null;    // sucursal elegida { local, lat, lon, radio_m }
 let sucursalesGeo = [];    // todas las sucursales con coords
 let geoPos = null;         // { lat, lon }
-let _usuarios = [];
+
+// Limpieza única: este flujo cacheaba antes la lista completa de usuarios
+// (PIN en texto plano incluido) en localStorage. Se borra cualquier
+// resabio de eso al cargar la página — ver ADMINISTRACIÓN UNIFICADA /
+// fix de seguridad en Code-Jornada.js y app.js (croma-horarios-main).
+try { localStorage.removeItem('croma_usuarios_cache'); } catch(e) {}
 
 // ── INIT ──
 (async function init() {
@@ -813,38 +819,19 @@ let _usuarios = [];
     document.getElementById('btnBack').style.display = '';
     await arrancarConSesion();
   } else {
-    // Precargar usuarios en background
-    cargarUsuarios();
     mostrarScreen('screenLogin');
     document.getElementById('loginUsuario').focus();
   }
 })();
 
-// ── USUARIOS ──
-async function cargarUsuarios() {
-  try {
-    const cached = localStorage.getItem('croma_usuarios_cache');
-    if (cached) {
-      _usuarios = JSON.parse(cached) || [];
-      fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`)
-        .then(r => r.json()).then(j => {
-          if (j?.ok && j.usuarios?.length) {
-            _usuarios = j.usuarios;
-            localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuarios));
-          }
-        }).catch(() => {});
-      return;
-    }
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=cargar_usuarios`);
-    const json = await resp.json();
-    if (json.ok) {
-      _usuarios = json.usuarios || [];
-      localStorage.setItem('croma_usuarios_cache', JSON.stringify(_usuarios));
-    }
-  } catch(e) {}
-}
-
 // ── LOGIN ──
+// El PIN se valida enteramente en el backend (POST /auth/pin-login,
+// croma-backend) — acá nunca se descarga la lista de usuarios ni se
+// compara el PIN en el cliente. Antes este archivo llamaba directo a GAS
+// (accion=cargar_usuarios) y cacheaba PIN en texto plano en localStorage;
+// eso quedó expuesto sin que ninguno de los commits anteriores de
+// Administración unificada lo tocara, porque fichar.html es un archivo
+// autocontenido aparte de app.js. Corregido acá mismo.
 function togglePin() {
   const inp = document.getElementById('loginPin');
   const on  = document.getElementById('pinEyeOn');
@@ -867,20 +854,38 @@ async function intentarLogin() {
 
   btnEl.disabled = true; btnEl.textContent = 'Verificando...';
 
-  if (!_usuarios.length) await cargarUsuarios();
+  try {
+    // /auth/login (no /auth/pin-login): matchea por nombre de usuario corto
+    // (u.nombre), igual que hacía esta pantalla antes comparando en el
+    // cliente — /auth/pin-login matchea distinto (por empleadoNombre
+    // primero) y hubiera roto el login para quien esté acostumbrado a
+    // tipear su usuario corto acá.
+    const resp = await fetch(`${BACKEND_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, password: pin }),
+    });
+    const data = await resp.json().catch(() => null);
 
-  const match = _usuarios.find(u =>
-    u.nombre.toLowerCase() === usuario.toLowerCase() && String(u.pin) === String(pin)
-  );
+    btnEl.disabled = false; btnEl.textContent = 'Ingresar';
 
-  btnEl.disabled = false; btnEl.textContent = 'Ingresar';
+    if (!resp.ok || !data || !data.usuario) {
+      mostrarError(errEl, (data && data.error) || 'Usuario o PIN incorrecto.');
+      return;
+    }
 
-  if (!match) { mostrarError(errEl, 'Usuario o PIN incorrecto.'); return; }
-
-  sesion = { nombre: match.nombre, rol: match.rol, empleadoNombre: match.empleadoNombre || match.nombre };
-  localStorage.setItem('croma_session', JSON.stringify(sesion));
-  document.getElementById('btnBack').style.display = '';
-  await arrancarConSesion();
+    sesion = {
+      nombre: (data.empleadoData && data.empleadoData.nombre) || data.usuario,
+      rol: data.rol || 'empleado',
+      empleadoNombre: (data.empleadoData && data.empleadoData.empleadoNombre) || data.usuario,
+    };
+    localStorage.setItem('croma_session', JSON.stringify(sesion));
+    document.getElementById('btnBack').style.display = '';
+    await arrancarConSesion();
+  } catch (e) {
+    btnEl.disabled = false; btnEl.textContent = 'Ingresar';
+    mostrarError(errEl, 'Error de conexión. Intentá de nuevo.');
+  }
 }
 
 function mostrarError(el, msg) {

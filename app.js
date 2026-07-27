@@ -769,9 +769,11 @@ function renderEmpleados(datos) {
       ? `<span class="emp-cat-badge">${e.categoria}</span>`
       : '';
 
-    // WhatsApp: buscar celular del usuario vinculado a este empleado
-    const usuarioVinculado = getUsuarios().find(u => u.empleadoNombre === e.nombre);
-    const celular = usuarioVinculado?.celular;
+    // WhatsApp: celular del empleado (EMPLEADOS.CELULAR — fuente prioritaria
+    // desde el Commit 3, ver ADMINISTRACIÓN UNIFICADA). Antes salía de la
+    // lista de usuarios (requería estar logueado como admin); ahora sale de
+    // EMPLEADOS_PERFILES, que ya está cargado para cualquier sesión.
+    const celular = EMPLEADOS_PERFILES[e.nombre]?.celular;
     const waBtn = celular
       ? `<a href="https://wa.me/549${celular}" target="_blank" onclick="event.stopPropagation()"
            class="wa-btn" title="WhatsApp de ${nomMostrar}">
@@ -2680,22 +2682,15 @@ function diaFiltrado(date) {
 }
 
 
-// ── SISTEMA DE USUARIOS (LEGACY / DESHABILITADO) ───────
-// Hasta acá, esto llamaba directo a GAS (accion=cargar_usuarios /
-// guardar_usuarios) y cacheaba la lista completa de usuarios — PIN en
-// texto plano incluido — en localStorage. Reemplazado por el flujo nuevo
-// de Administración unificada (ver más abajo "ADMINISTRACIÓN UNIFICADA:
-// EMPLEADOS + ACCESO"), que usa /api/empleados/usuarios (Node, sin PIN) y
-// nunca cachea nada sensible en el navegador.
-//
-// Se dejan cargarUsuarios/getUsuarios/saveUsuarios definidas (no borradas,
-// por si algo suelto todavía las referencia) pero SIN hacer ninguna
-// llamada real a cargar_usuarios/guardar_usuarios — ya no deben usarse
-// desde el flujo activo. cargar_usuarios además ahora exige
-// BACKEND_SECRET del lado de GAS (fix de seguridad previo a este commit),
-// así que aunque algo las llamara, GAS respondería "No autorizado".
-let _usuariosCache = null;      // ya no se puebla — queda solo por compatibilidad de lectura
-let _usuariosCargando = false;
+// cargarUsuarios/getUsuarios/saveUsuarios (llamada directa a GAS
+// accion=cargar_usuarios/guardar_usuarios, cache de PIN en texto plano en
+// localStorage) se eliminaron en el Commit 4. Reemplazadas por
+// cargarUsuariosAdmin/getUsuariosAdmin (más abajo, "ADMINISTRACIÓN
+// UNIFICADA: EMPLEADOS + ACCESO"), que usan /api/empleados/usuarios
+// (Node, sin PIN) y nunca cachean nada sensible en el navegador.
+// Confirmado sin referencias activas antes de borrar (los 4 call sites que
+// todavía las usaban — WhatsApp en la card de empleado, destinatarios de
+// eventos/anuncios — se migraron a EMPLEADOS_PERFILES / _asegurarUsuariosAdmin()).
 
 // Usuario de sesión activa: { nombre, rol, empleadoNombre }
 // rol: 'admin' | 'empleado'
@@ -2706,22 +2701,6 @@ let sesionActual = null;
 (function _limpiarCacheUsuariosLegado() {
   try { localStorage.removeItem('croma_usuarios_cache'); } catch(e) {}
 })();
-
-// LEGACY — ya no hace fetch. Devuelve [] siempre.
-async function cargarUsuarios() {
-  console.warn('cargarUsuarios() está deshabilitada — usar cargarUsuariosAdmin() (/api/empleados/usuarios).');
-  return [];
-}
-
-// LEGACY — cache siempre vacío ahora (cargarUsuarios ya no la puebla).
-function getUsuarios() {
-  return _usuariosCache || [];
-}
-
-// LEGACY — ya no hace fetch ni toca la hoja USUARIOS.
-async function saveUsuarios(lista) {
-  console.warn('saveUsuarios() está deshabilitada — usar las rutas de /api/empleados desde la ficha del empleado.');
-}
 
 // ── CERTIFICADOS ──────────────────────────────────────
 async function cargarCertificados() {
@@ -3001,149 +2980,15 @@ async function eliminarCertificado(id, nombreEmp, mesAnio) {
   }
 }
 
-// ── Login: carga usuarios del Sheet y verifica ──
-async function verificarCredencialesAsync(usuario, pin) {
-  // Cargar desde Sheet si no está en cache
-  const lista = _usuariosCache !== null ? _usuariosCache : await cargarUsuarios();
-  const u = lista.find(u =>
-    u.nombre.trim().toLowerCase() === usuario.trim().toLowerCase() && u.pin === pin
-  );
-  if (u) return { ok: true, usuario: u };
-  return { ok: false };
-}
-
+// verificarCredencialesAsync, _mostrarLoginAppLegado, togglePinVisibility
+// e intentarLogin (pantalla de login propia con usuario+PIN, comparado
+// client-side) se eliminaron en el Commit 4 — el login real pasa por el
+// Hub (mostrarLoginApp, abajo, redirige a croma-app.com.ar), que valida
+// contra croma-backend. Confirmado sin referencias antes de borrar.
 // ── PANTALLA DE LOGIN ──────────────────────────────────
 function mostrarLoginApp() {
   // Redirigir al login central de Croma App
   location.href = 'https://croma-app.com.ar/';
-}
-
-function _mostrarLoginAppLegado() {
-  document.getElementById('setupScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display     = 'none';
-
-  let loginEl = document.getElementById('loginScreen');
-  if (!loginEl) {
-    loginEl = document.createElement('div');
-    loginEl.id = 'loginScreen';
-    document.body.appendChild(loginEl);
-  }
-
-  // Leer usuario recordado (solo el nombre, nunca el PIN)
-  const usuarioRecordado = localStorage.getItem('croma_remember_user') || '';
-
-  loginEl.style.display = 'flex';
-  loginEl.innerHTML = `
-    <div class="login-card">
-      <div class="login-logo">
-        <img src="tridente_solo.png" alt="Croma" class="login-tridente" onerror="this.style.display='none'" />
-        <span class="login-brand">CROMA</span>
-      </div>
-      <div class="login-subtitle">HORARIOS</div>
-
-      <div class="login-form">
-        <div class="login-grupo">
-          <label class="login-label" for="loginUsuario">Usuario</label>
-          <input type="text" id="loginUsuario" class="login-input"
-            placeholder="Tu nombre de usuario"
-            value="${usuarioRecordado}"
-            autocomplete="off" autocapitalize="off" spellcheck="false"
-            onkeydown="if(event.key==='Enter')document.getElementById('loginPin').focus()" />
-        </div>
-        <div class="login-grupo">
-          <label class="login-label" for="loginPin">PIN</label>
-          <div class="login-pin-wrap">
-            <input type="password" id="loginPin" class="login-input"
-              placeholder="••••" maxlength="8" autocomplete="off"
-              onkeydown="if(event.key==='Enter')intentarLogin()" />
-            <button class="login-pin-toggle" type="button" onclick="togglePinVisibility()" title="Mostrar PIN" aria-label="Mostrar u ocultar PIN">
-              <span id="iconEye">${icon('eye','icon-16')}</span>
-            </button>
-          </div>
-        </div>
-
-        <label class="login-remember-wrap">
-          <input type="checkbox" id="loginRecordar" ${usuarioRecordado ? 'checked' : ''} />
-          <span>Recordar este dispositivo</span>
-        </label>
-
-        <p id="loginError" style="color:#dc2626;font-size:12px;margin:0;display:none;text-align:center">
-          Usuario o PIN incorrecto
-        </p>
-
-        <button class="login-btn" onclick="intentarLogin()">
-          INGRESAR
-        </button>
-      </div>
-
-      <div class="login-footer">Sistema interno · Croma</div>
-    </div>
-  `;
-
-  // Si hay usuario recordado, ir directo al PIN; si no, al usuario
-  setTimeout(() => {
-    if (usuarioRecordado) {
-      document.getElementById('loginPin')?.focus();
-    } else {
-      document.getElementById('loginUsuario')?.focus();
-    }
-  }, 100);
-}
-
-function togglePinVisibility() {
-  const input    = document.getElementById('loginPin');
-  const iconWrap = document.getElementById('iconEye');
-  if (!input) return;
-  if (input.type === 'password') {
-    input.type = 'text';
-    iconWrap.innerHTML = icon('eyeOff','icon-16');
-  } else {
-    input.type = 'password';
-    iconWrap.innerHTML = icon('eye','icon-16');
-  }
-}
-
-async function intentarLogin() {
-  const usuario = document.getElementById('loginUsuario')?.value || '';
-  const pin     = document.getElementById('loginPin')?.value     || '';
-  const errEl   = document.getElementById('loginError');
-  const btnEl   = document.querySelector('#loginScreen .login-btn');
-
-  // Deshabilitar botón mientras verifica
-  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'VERIFICANDO...'; }
-  errEl.style.display = 'none';
-
-  const resultado = await verificarCredencialesAsync(usuario, pin);
-
-  if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'INGRESAR'; }
-
-  if (resultado.ok) {
-    sesionActual = resultado.usuario;
-    errEl.style.display = 'none';
-
-    // Manejar "Recordar este dispositivo"
-    const recordar = document.getElementById('loginRecordar')?.checked;
-    if (recordar) {
-      // Guardar usuario y sesión serializada (sin PIN) en localStorage
-      localStorage.setItem('croma_remember_user', usuario.trim());
-      localStorage.setItem('croma_session', JSON.stringify({
-        usuario: resultado.usuario,
-        ts: Date.now()
-      }));
-    } else {
-      // Si desmarcó, borrar cualquier sesión guardada anterior
-      localStorage.removeItem('croma_remember_user');
-      localStorage.removeItem('croma_session');
-    }
-
-    document.getElementById('loginScreen').style.display = 'none';
-    // Iniciar la app según el rol
-    iniciarAppConSesion();
-  } else {
-    errEl.style.display = 'block';
-    document.getElementById('loginPin').value = '';
-    document.getElementById('loginPin').focus();
-  }
 }
 
 function cerrarSesion() {
@@ -4086,40 +3931,12 @@ async function guardarMiPerfil() {
   }
 }
 
-// ── GESTIÓN DE USUARIOS EN ADMIN ───────────────────────
-// ── TAB "USUARIOS" VIEJA — LEGACY / MODO REPARACIÓN ────
-// Reemplazada por la ficha unificada de empleado (pestaña Acceso, ver
-// ADMINISTRACIÓN UNIFICADA más abajo). Ya no está en la navegación normal
-// (no hay botón de tab que la muestre — ver renderAdminInline/switchAdminTab)
-// y sus funciones quedan deshabilitadas: no llaman a cargar_usuarios ni
-// guardar_usuarios, no leen ni escriben PIN reales. Se dejan definidas
-// (no borradas) únicamente por si algo suelto todavía las referencia.
-function renderAdminUsuariosInner() {
-  return `<div class="alert alert-warning" style="margin:1rem 0">` +
-    icon('alertTriangle', 'icon-16') +
-    ` Esta pantalla fue reemplazada. Gestioná el acceso desde la ficha de cada empleado, pestaña "Acceso".` +
-    `</div>`;
-}
-
-function renderAdminUsuarios() {
-  return `<div id="adminTabUsuarios" class="admin-tab-content" style="display:none">${renderAdminUsuariosInner()}</div>`;
-}
-
-function abrirNuevoUsuario() {
-  showToast('Esta pantalla fue reemplazada — creá el acceso desde la ficha del empleado.');
-}
-
-function abrirEditarUsuario(idx) {
-  showToast('Esta pantalla fue reemplazada — editá el acceso desde la ficha del empleado.');
-}
-
-function guardarUsuarioDesdeForm() {
-  showToast('Esta acción fue deshabilitada.');
-}
-
-function eliminarUsuario(idx) {
-  showToast('Esta acción fue deshabilitada. Usá "Desactivar acceso" desde la ficha del empleado.');
-}
+// La tab "Usuarios" vieja (crear/editar/eliminar usuario suelto, con
+// selector manual de empleado vinculado) se eliminó — reemplazada por la
+// ficha unificada de empleado, pestaña Acceso (ver ADMINISTRACIÓN
+// UNIFICADA más abajo). Confirmado sin referencias antes de borrarla
+// (Commit 4): ni la navegación (renderAdminInline/switchAdminTab) ni
+// ningún otro archivo del proyecto la usaban.
 // ── PANEL ADMIN ────────────────────────────────────────
 // adminAutenticado: true si el JWT tiene rol admin o jefe
 function _isAdminJwt() {
@@ -4723,6 +4540,16 @@ async function cargarUsuariosAdmin() {
 
 function getUsuariosAdmin() { return USUARIOS_ADMIN_CACHE || []; }
 
+// Para pantallas admin que necesitan la lista de usuarios pero pueden
+// abrirse sin haber pasado antes por la vista Administración (p.ej. "Nuevo
+// evento" desde Calendario, "Nuevo anuncio"): asegura que se haya pedido
+// al menos una vez antes de usarla, sin volver a pedirla si ya está en
+// cache. Devuelve la lista saneada (sin PIN).
+async function _asegurarUsuariosAdmin() {
+  if (USUARIOS_ADMIN_CACHE === null) await cargarUsuariosAdmin();
+  return getUsuariosAdmin();
+}
+
 // EMPLEADOS (prioridad) + nombres históricos de DATOS GENERALES
 // (compatibilidad, sin crear nada ahí — ver diseño aprobado). Semana/Mes/
 // Calendario NO usan esta función, siguen leyendo state.datos directo.
@@ -5268,109 +5095,11 @@ async function _guardarSysneoRapido() {
   }
 }
 
-// ── LEGACY: modal de empleado sin acceso, reemplazado por
-// abrirFormularioEmpleado. Se deja definido (no borrado) — ya no está
-// linkeado desde ninguna fila ni botón de la tabla.
-function abrirEditarEmpleado(nombre) {
-  const perfil = EMPLEADOS_PERFILES[nombre] || { nombre };
-  const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
-  const nomMostrar = numMatch ? numMatch[2] : nombre;
-
-  const sucOpts = [
-    `<option value="">Sin asignar</option>`,
-    ...SUCURSALES.map(s =>
-      `<option value="${s.id}" ${perfil.sucursal_id === s.id ? 'selected' : ''}>${s.nombre}</option>`
-    )
-  ].join('');
-
-  const catOpts = [
-    `<option value="">Sin categoría</option>`,
-    ...CATEGORIAS_CONFIG.map(c =>
-      `<option value="${c.id}" ${perfil.categoria_id === c.id ? 'selected' : ''}>${c.nombre}</option>`
-    )
-  ].join('');
-
-  const empOpts = [
-    `<option value="">Sin empresa</option>`,
-    ...EMPRESAS.map(e =>
-      `<option value="${e}" ${perfil.empresa === e ? 'selected' : ''}>${e}</option>`
-    )
-  ].join('');
-
-  const reglaCustomOpts = `
-    <option value="" ${!perfil.regla_custom?'selected':''}>Usar regla de la categoría</option>
-    <option value="lv4" ${perfil.regla_custom==='lv4'?'selected':''}>4h Lun-Vie (excedente = extra)</option>
-    <option value="lv8" ${perfil.regla_custom==='lv8'?'selected':''}>8h Lun-Vie (excedente = extra)</option>
-    <option value="personalizado" ${perfil.regla_custom==='personalizado'?'selected':''}>Personalizado (usar Hs base)</option>
-  `;
-
-  const html = `
-  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
-    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
-      <div class="admin-header">
-        <div class="admin-titulo">Editar — ${nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarAdmin();renderAdmin()">${icon('x','icon-16')}</button>
-      </div>
-      <div class="admin-form">
-        <input type="hidden" id="editNombre" value="${nombre}" />
-
-        <div class="admin-foto-preview" id="adminFotoPreview">
-          ${perfil.foto_url
-            ? `<img src="${perfil.foto_url}" onerror="this.parentElement.innerHTML='Sin foto'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0">`
-            : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;color:#94a3b8">${nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('')}</div>`
-          }
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">URL de foto (Google Drive)</label>
-          <input type="url" class="admin-input" id="editFotoUrl" value="${perfil.foto_url || ''}"
-            placeholder="https://drive.google.com/..." oninput="previewFoto(this.value)" />
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Sucursal principal</label>
-          <select class="admin-input" id="editSucursal">${sucOpts}</select>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se usa para el calendario de vacaciones y detección de conflictos</span>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Fecha de ingreso</label>
-          <input type="date" class="admin-input" id="editFechaIngreso" value="${perfil.fecha_ingreso || ''}" />
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se usa para calcular días de vacaciones según antigüedad</span>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Empresa</label>
-          <select class="admin-input" id="editEmpresa">${empOpts}</select>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Categoría</label>
-          <select class="admin-input" id="editCategoria">${catOpts}</select>
-        </div>
-
-        <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Regla personalizada de horas extra</label>
-          <select class="admin-input" id="editReglaCustom" onchange="toggleHsBase(this.value)">${reglaCustomOpts}</select>
-        </div>
-
-        <div class="admin-form-grupo" id="editHsBaseGrupo" style="${perfil.regla_custom==='personalizado'?'':'display:none'}">
-          <label class="emp-filtro-label">Horas base por día (límite para extra)</label>
-          <input type="number" class="admin-input" id="editHsBase" value="${perfil.hs_base || 8}" min="1" max="12" step="0.5" />
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0" onclick="guardarPerfilDesdeForm()">Guardar cambios</button>
-          <button class="btn-demo" onclick="cerrarAdmin();renderAdmin()">Cancelar</button>
-        </div>
-      </div>
-    </div>
-  </div>`;
-
-  montarOverlayAdmin(html);
-}
-
+// abrirEditarEmpleado (modal de empleado sin acceso) y guardarPerfilDesdeForm
+// se eliminaron en el Commit 4 — reemplazados por abrirFormularioEmpleado.
+// toggleHsBase también se eliminó (solo la usaba ese modal viejo; el
+// formulario nuevo usa _toggleHsBaseFormEmp). Confirmado sin referencias
+// antes de borrar. previewFoto se conserva: la reusa el formulario nuevo.
 function previewFoto(url) {
   const preview = document.getElementById('adminFotoPreview');
   if (!preview) return;
@@ -5379,84 +5108,6 @@ function previewFoto(url) {
   const driveMatch = url.match(/\/d\/([^/]+)/);
   const imgUrl = driveMatch ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200` : url;
   preview.innerHTML = `<img src="${imgUrl}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0" onerror="this.parentElement.innerHTML='URL inválida'">`;
-}
-
-function toggleHsBase(val) {
-  document.getElementById('editHsBaseGrupo').style.display = val === 'personalizado' ? 'block' : 'none';
-}
-
-async function guardarPerfilDesdeForm() {
-  const nombre       = document.getElementById('editNombre')?.value;
-  const fotoUrl      = document.getElementById('editFotoUrl')?.value.trim();
-  const empresa      = document.getElementById('editEmpresa')?.value;
-  const categoriaId  = document.getElementById('editCategoria')?.value;
-  const reglaCustom  = document.getElementById('editReglaCustom')?.value;
-  const hsBase       = parseFloat(document.getElementById('editHsBase')?.value) || 8;
-  const sucursalId   = document.getElementById('editSucursal')?.value || '';
-  const fechaIngreso = document.getElementById('editFechaIngreso')?.value || '';
-
-  let fotoFinal = fotoUrl;
-  const driveMatch = fotoUrl.match(/\/d\/([^/]+)/);
-  if (driveMatch) {
-    fotoFinal = `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200`;
-  }
-
-  const perfil = {
-    nombre,
-    empresa,
-    categoria_id:  categoriaId,
-    regla_custom:  reglaCustom || '',
-    hs_base:       hsBase,
-    foto_url:      fotoFinal,
-    sucursal_id:   sucursalId,
-    fecha_ingreso: fechaIngreso,
-    activo: EMPLEADOS_PERFILES[nombre]?.activo !== false, // preservar estado; no reactivar al editar
-    _editadoLocal: true,  // marca para sobrevivir recargas del Sheet
-  };
-
-  EMPLEADOS_PERFILES[nombre] = perfil;
-  // Persistir en sessionStorage para sobrevivir renderAll() y cargarDatos()
-  try {
-    const saved = JSON.parse(sessionStorage.getItem('croma_perfiles_locales') || '{}');
-    saved[nombre] = perfil;
-    sessionStorage.setItem('croma_perfiles_locales', JSON.stringify(saved));
-  } catch(e) {}
-
-  await guardarPerfil(perfil);
-  cerrarAdmin();
-
-  // Actualizar solo el tbody de la tabla de empleados sin re-renderizar todo el panel
-  const tablaBody = document.querySelector('#adminTablaEmps tbody');
-  if (tablaBody) {
-    const empNombres = [...new Set(state.datos.map(r => r.EMPLEADO))].sort((a, b) => {
-      const na = parseInt(a) || 999, nb = parseInt(b) || 999;
-      return na !== nb ? na - nb : a.localeCompare(b);
-    });
-    // Re-usar renderAdminInline solo para obtener el HTML de filas
-    // Actualizar la fila específica del empleado editado
-    const rows = tablaBody.querySelectorAll('tr');
-    rows.forEach(row => {
-      const btn = row.querySelector('.btn-admin-edit');
-      if (btn && btn.getAttribute('onclick')?.includes(nombre.replace(/'/g,"\\'"))) {
-        const suc = SUCURSALES.find(s => s.id === (sucursalId || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—', colorLight: '#f1f5f9', color: '#475569' };
-        row.querySelector('td:nth-child(2) span').textContent = suc.nombre;
-        const empCell = row.querySelector('td:nth-child(3)');
-        if (empCell) empCell.innerHTML = empresa
-          ? `<span class='emp-empresa-badge ${empresa==='MOSHE SRL'?'badge-moshe':'badge-cromawave'}'>${empresa}</span>`
-          : `<span style='color:#94a3b8;font-size:12px'>—</span>`;
-        const catCell = row.querySelector('td:nth-child(4)');
-        const catNom  = CATEGORIAS_CONFIG.find(c => c.id === categoriaId)?.nombre || '—';
-        if (catCell) catCell.innerHTML = categoriaId
-          ? `<span class='emp-cat-badge'>${catNom}</span>`
-          : `<span style='color:#94a3b8;font-size:12px'>—</span>`;
-      }
-    });
-    // Si no encontró la fila (empleado nuevo), re-renderizar completo
-    if (!tablaBody.innerHTML || !document.querySelector('#adminTablaEmps')) renderAdmin();
-  } else {
-    renderAdmin();
-  }
-  showToast('✓ Perfil guardado');
 }
 
 function abrirNuevaCategoria() { abrirEditarCategoria(null); }
@@ -6890,7 +6541,7 @@ async function abrirNuevoEvento(fechaPreset) {
   if (!_configCache.emails_contactos) {
     try { await cargarConfigAdmin(); } catch(e) {}
   }
-  const usuarios = getUsuarios().filter(function(u) { return u.rol === 'empleado' && u.empleadoNombre; });
+  const usuarios = (await _asegurarUsuariosAdmin()).filter(function(u) { return u.rol === 'empleado' && u.empleadoNombre && u.estado !== 'inactivo'; });
   const hoy = new Date().toISOString().substring(0,10);
   const fechaVal = fechaPreset || hoy;
 
@@ -7105,8 +6756,8 @@ async function guardarEvento() {
         destsAnuncio = JSON.parse(destinatarios);
       } else if (destTipo === 'sucursal') {
         const sucIds = destinatarios.startsWith('[') ? JSON.parse(destinatarios).map(s => s.replace('suc_','')) : [destinatarios.replace('suc_','')];
-        destsAnuncio = getUsuarios().filter(function(u) {
-          if (u.rol !== 'empleado' || !u.empleadoNombre) return false;
+        destsAnuncio = (await _asegurarUsuariosAdmin()).filter(function(u) {
+          if (u.rol !== 'empleado' || !u.empleadoNombre || u.estado === 'inactivo') return false;
           const perfil = EMPLEADOS_PERFILES[u.empleadoNombre] || {};
           const sucId  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === u.empleadoNombre; }) || {}).LOCAL || '';
           return sucIds.indexOf(sucId) !== -1;
@@ -7746,8 +7397,8 @@ function renderListaAnuncios(anuncios) {
 }
 
 // ── ADMIN: modal nuevo anuncio ─────────────────────────
-function abrirNuevoAnuncio() {
-  const usuarios = getUsuarios().filter(u => u.rol === 'empleado' && u.empleadoNombre);
+async function abrirNuevoAnuncio() {
+  const usuarios = (await _asegurarUsuariosAdmin()).filter(u => u.rol === 'empleado' && u.empleadoNombre && u.estado !== 'inactivo');
 
   // Filas de empleados: checkbox destinatario + icono WA si tiene celular
   const empOpts = usuarios.map(u => {
