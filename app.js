@@ -4791,6 +4791,8 @@ function _renderTabAccesoEmpleado(emp, crearAccesoInicial) {
       <label class="emp-filtro-label">Fin de acceso (opcional)</label>
       <input type="date" class="admin-input" id="formEmpFinAcceso" value="${u.fin_acceso || ''}" />
     </div>
+    <input type="hidden" id="formEmpAccesoEstadoOriginal" value="${u.estado !== 'inactivo' ? 'activo' : 'inactivo'}" />
+    <input type="hidden" id="formEmpFinAccesoOriginal" value="${u.fin_acceso || ''}" />
   `;
 }
 
@@ -4944,7 +4946,13 @@ async function guardarFormularioEmpleado() {
     } else if (teniaAccesoAntes) {
       const estadoAcceso = document.getElementById('formEmpAccesoEstado')?.value;
       const finAcceso     = document.getElementById('formEmpFinAcceso')?.value || null;
-      if (estadoAcceso) {
+      const estadoOriginal = document.getElementById('formEmpAccesoEstadoOriginal')?.value;
+      const finAccesoOriginal = document.getElementById('formEmpFinAccesoOriginal')?.value || null;
+      // Solo mandar el PATCH si el admin realmente tocó algo de la pestaña
+      // Acceso — si no, quedaba disparándose en cada edición de cualquier
+      // campo (ej. asignar Sysneo) y registraba ACCESO_ACTIVADO en la
+      // auditoría sin que nada hubiera cambiado de verdad.
+      if (estadoAcceso && (estadoAcceso !== estadoOriginal || finAcceso !== finAccesoOriginal)) {
         const resEstado = await apiEmpleados(`/${encodeURIComponent(nombre)}/acceso/estado`, {
           method: 'PATCH',
           body: JSON.stringify({ estado: estadoAcceso, fin_acceso: finAcceso }),
