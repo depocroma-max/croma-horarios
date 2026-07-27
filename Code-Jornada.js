@@ -483,55 +483,35 @@ function getUsuarios(e) {
   }
 }
 
-// LEGACY — reescribe toda la hoja (clearContents) a partir de la lista
-// completa que manda el cliente. No usar desde el flujo nuevo (ver
-// ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO más abajo, que hace
-// operaciones puntuales por fila con LockService). Se conserva únicamente
-// por si el modal viejo de "Usuarios" del frontend actual todavía la usa
-// hasta que se migre en el Commit 3.
-//
-// RIESGO CONOCIDO mientras conviven ambos flujos: esta función hace
-// clearContents() y reescribe solo NOMBRE|PIN|ROL|EMPLEADO_NOMBRE|CELULAR,
-// así que si se usa después de que existan las columnas ESTADO/FIN_ACCESO,
-// borra esos valores para todos los usuarios. No se corrige acá porque
-// cambiar su comportamiento interno para preservarlas iría en contra de
-// "no cambiar el contrato de las acciones viejas" — queda documentado como
-// motivo para migrar el frontend (Commit 3) cuanto antes después de este
-// despliegue, no para reescribir esta función legada.
+// BLOQUEADA (Commit 4, fix de seguridad) — ya no acepta escrituras
+// públicas. Hasta acá reescribía toda la hoja (clearContents()) a partir
+// de la lista completa que mandaba el cliente por GET, sin
+// BACKEND_SECRET ni ningún control de acceso. Confirmado por grep y
+// pruebas (suite GAS + smoke test Node) que ningún flujo activo del
+// frontend ni del backend depende de esta acción — la administración de
+// usuarios real vive en ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO
+// (más abajo), protegida por BACKEND_SECRET + LockService + operaciones
+// puntuales por fila. Se mantiene la función definida (no se borra la
+// acción del router de doGet) únicamente por compatibilidad nominal —
+// para que `accion=guardar_usuarios` siga siendo una acción reconocida en
+// vez de caer en "Acción no reconocida", pero nunca vuelve a tocar la
+// hoja USUARIOS. No se sanea/preserva nada del payload recibido: se
+// ignora por completo, ni siquiera se parsea.
 function guardarUsuarios(e) {
   try {
-    const raw  = e.parameter.datos || '[]';
-    const lista = JSON.parse(decodeURIComponent(raw));
-    const ss   = SpreadsheetApp.getActiveSpreadsheet();
-    let hoja   = ss.getSheetByName('USUARIOS');
-
-    if (!hoja) {
-      hoja = ss.insertSheet('USUARIOS');
-    }
-
-    hoja.clearContents();
-    hoja.getRange(1, 1, 1, 5).setValues([['NOMBRE','PIN','ROL','EMPLEADO_NOMBRE','CELULAR']]);
-
-    if (lista.length > 0) {
-      const filas = lista.map(u => [
-        u.nombre         || '',
-        u.pin            || '',
-        u.rol            || 'empleado',
-        u.empleadoNombre || '',
-        u.celular        || '',
-      ]);
-      hoja.getRange(2, 1, filas.length, 5).setValues(filas);
-    }
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch(err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    // Nunca se registra el valor de "datos" (ahí viajaba la lista con PIN
+    // en texto plano) — solo si el intento traía ese parámetro o no.
+    const traiaDatos = !!(e && e.parameter && e.parameter.datos);
+    registrarAuditoria(
+      'anonimo', 'INTENTO_BLOQUEADO_GUARDAR_USUARIOS', 'USUARIO', 'guardar_usuarios',
+      null, { traia_parametro_datos: traiaDatos }
+    );
+  } catch (auditErr) {
+    Logger.log('Error registrando intento bloqueado de guardar_usuarios: ' + auditErr.message);
   }
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: false, error: 'Acción obsoleta. Utilice la API protegida.' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 // =====================================================
 //  ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO
