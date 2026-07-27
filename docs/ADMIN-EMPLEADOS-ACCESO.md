@@ -1,6 +1,6 @@
 # Administración unificada: Empleados + Acceso · Croma Horarios
 
-> **Versión:** 1.1.0 · **Creado:** 2026-07-27 · **Última actualización:** 2026-07-27
+> **Versión:** 1.2.0 · **Creado:** 2026-07-27 · **Última actualización:** 2026-07-27
 > Documenta el trabajo de los Commits 1-5 (backend Node, GAS, frontend, pruebas,
 > retiro del guardado legado de usuarios).
 >
@@ -155,7 +155,7 @@ GAS rechaza con `{ ok:false, error:"No autorizado" }` si el secreto:
 
 | Acción | Estado | Riesgo residual |
 |---|---|---|
-| `cargar_usuarios` (GAS, GET) | Bloqueada sin `BACKEND_SECRET` desde el Commit 3. Con secreto válido sigue devolviendo la lista completa (con PIN) — la usa `cargarUsuariosInterno()` en Node. | Bajo — ya no alcanzable sin el secreto, que nunca sale de los `.env`/Script Properties. |
+| `cargar_usuarios` (GAS, GET) | **Sigue existiendo por compatibilidad interna** — no se retiró, a diferencia de `guardar_usuarios`. **Node puede seguir usándola** (y la usa: `cargarUsuariosInterno()` la llama con `clave_backend` para el login por PIN, con secreto válido devuelve la lista completa incluido el PIN, que Node nunca reenvía tal cual al navegador). **Desde el navegador queda bloqueada**: sin `BACKEND_SECRET` responde `{ ok:false, error:"No autorizado" }`, sin lista ni PIN. | Bajo — el único cliente autorizado (Node) nunca expone el secreto; sin él, cualquier otro llamador queda bloqueado. |
 | `guardar_usuarios` (GAS) | **Retirada en el Commit 5** (`fix(seguridad): retirar guardado legado de usuarios`). Ya no parsea el payload ni toca la hoja `USUARIOS` bajo ninguna circunstancia — responde siempre `{ ok:false, error:"Acción obsoleta. Utilice la API protegida." }` y audita el intento (sin datos sensibles). Se conserva la acción reconocida en el router por compatibilidad nominal únicamente. | Resuelto. `clearContents()` ya no es alcanzable desde ninguna acción del archivo (verificado por test que barre el archivo completo). |
 | PIN en texto plano en la hoja `USUARIOS` | Sin cambios — **fuera de alcance explícito** de este trabajo (ver [Fuera de alcance](#fuera-de-alcance-pendiente-no-implementado)). | Medio-alto, preexistente. Requiere una migración a `PIN_HASH` coordinada aparte. |
 
@@ -255,10 +255,14 @@ Orden verificado contra la compatibilidad real del código (no es el orden
 
 ### Por qué este orden y no otro
 
-- Node **no puede** enviar `GAS_BACKEND_SECRET` a un GAS que todavía no lo pide
-  (no rompe nada, GAS viejo ignora el campo extra).
-- GAS, una vez desplegado, empieza a exigir el secreto — si Node no lo manda
-  todavía, el login por PIN se corta. Por eso los pasos 4-5 van pegados.
+- Node **sí puede** enviar `GAS_BACKEND_SECRET` a un GAS que todavía no lo pide —
+  es compatible: el GAS viejo simplemente ignora ese campo extra en el body, sin
+  romper nada. Por eso Node puede desplegarse (o arrancar con el secreto ya
+  configurado) antes que GAS sin ningún efecto adverso.
+- GAS, una vez desplegado, empieza a **exigir** el secreto — recién ahí importa
+  que Node ya lo esté mandando. Si Node no lo manda todavía en ese momento, el
+  login por PIN se corta. Por eso los pasos 4-5 van pegados: no porque Node no
+  pueda mandarlo antes, sino porque GAS es el que activa la exigencia.
 - El frontend va último porque depende de que las rutas Node (`/api/empleados/*`)
   ya respondan con datos reales, no con 502 (que es lo que devuelven hoy, contra
   el GAS todavía no desplegado — comportamiento esperado y ya verificado).
