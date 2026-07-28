@@ -3951,66 +3951,82 @@ let adminAutenticado = _isAdminJwt();
 
 function abrirAdmin() { setView('administracion'); }
 
+// Estado combinado de fila para el filtro "Estado" (empleado + acceso) —
+// un solo valor por fila para que el <select> tenga una sola dimensión.
+function _estadoFiltroFila(emp) {
+  if (emp.estado === 'inactivo') return 'inactivo';
+  if (!emp._usuario) return 'sin_acceso';
+  if (emp._usuario.estado === 'inactivo') return 'desactivado';
+  if (emp._usuario.fin_acceso) {
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const fin = new Date(emp._usuario.fin_acceso + 'T00:00:00');
+    if (!isNaN(fin.getTime()) && fin < hoy) return 'vencido';
+  }
+  return 'con_acceso';
+}
+
 function renderAdminInline() {
   const container = document.getElementById('adminContainer');
   if (!container) return;
 
   const empleadosAdmin = obtenerEmpleadosAdmin();
+  const conAcceso = empleadosAdmin.filter(e => e._usuario && e._usuario.estado !== 'inactivo').length;
+  const sinAcceso = empleadosAdmin.length - conAcceso;
 
   const filasEmps = empleadosAdmin.map(emp => {
     const nombre    = emp.nombre;
-    const suc       = SUCURSALES.find(s => s.id === (emp.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { nombre: '—' };
+    const suc       = SUCURSALES.find(s => s.id === (emp.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { id: '', nombre: '—', color: 'var(--gray-400)' };
     const numMatch  = nombre.match(/^(\d+)\s+(.+)$/);
     const nomMostrar= numMatch ? numMatch[2] : nombre;
     const avatarUrl = emp.foto_url || '';
     const iniciales = nomMostrar.split(' ').slice(0,2).map(p=>p[0]?.toUpperCase()).join('');
     const nomEnc    = nombre.replace(/'/g, "\\'");
-    let avatarInner;
-    if (avatarUrl) {
-      avatarInner = "<img src='" + avatarUrl + "' onerror=\"this.parentElement.innerHTML='" + iniciales + "'\" style='width:32px;height:32px;border-radius:50%;object-fit:cover'>";
-    } else {
-      avatarInner = "<span style='font-size:11px;font-weight:600;color:#64748b'>" + iniciales + "</span>";
-    }
-    const empresaHTML = emp.empresa
-      ? "<span class='emp-empresa-badge " + (emp.empresa === 'MOSHE SRL' ? 'badge-moshe' : 'badge-cromawave') + "'>" + emp.empresa + "</span>"
-      : "<span style='color:#94a3b8;font-size:12px'>—</span>";
-    const catNom  = CATEGORIAS_CONFIG.find(c => c.id === emp.categoria_id)?.nombre || '—';
-    const catHTML = emp.categoria_id
-      ? "<span class='emp-cat-badge'>" + catNom + "</span>"
-      : "<span style='color:#94a3b8;font-size:12px'>—</span>";
+    const avatarInner = avatarUrl
+      ? "<img class='dt-avatar' src='" + avatarUrl + "' onerror=\"this.outerHTML='<span class=&quot;dt-avatar-initials&quot;>" + iniciales + "</span>'\">"
+      : "<span class='dt-avatar-initials'>" + iniciales + "</span>";
+
+    const catNom = CATEGORIAS_CONFIG.find(c => c.id === emp.categoria_id)?.nombre || '';
+    const metaPlain = [emp.empresa, catNom].filter(Boolean).join(" <span style='color:var(--border-neutral)'>·</span> ") || '<span style="color:var(--text-muted)">—</span>';
 
     const sysneo = _infoSysneoAdmin(emp);
     const acceso = _infoAccesoAdmin(emp);
-    const usuarioLabel = emp._usuario ? emp._usuario.nombre : '<span style="color:#94a3b8">—</span>';
-    const inactivoBadge = emp.estado === 'inactivo'
-      ? " <span class='badge badge-neutral' style='margin-left:6px'>Inactivo</span>" : '';
+    const usuarioHTML = emp._usuario
+      ? "<span style='font-size:12.5px;font-weight:600;color:var(--croma-black)'>" + emp._usuario.nombre + "</span>"
+      : "<span style='font-size:12px;color:var(--text-muted)'>—</span>";
+    const subLinea = emp.estado === 'inactivo'
+      ? "<span style='color:var(--danger)'>Empleado inactivo</span>"
+      : (catNom || '&nbsp;');
 
     const botones = [
-      "<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "')\">Editar</button>",
+      "<button class='dt-btn-icon' title='Editar' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "')\">" + icon('edit','icon-16') + "</button>",
     ];
     if (!emp._usuario) {
-      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "','acceso')\">Crear acceso</button>");
+      botones.push("<button class='dt-btn-icon' title='Crear acceso' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "','acceso')\">" + icon('userPlus','icon-16') + "</button>");
     } else if (emp._usuario.estado === 'inactivo') {
-      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();accionReactivarAcceso('" + nomEnc + "')\">Reactivar</button>");
+      botones.push("<button class='dt-btn-icon' title='Reactivar acceso' onclick=\"event.stopPropagation();accionReactivarAcceso('" + nomEnc + "')\">" + icon('refresh','icon-16') + "</button>");
     } else {
-      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();accionDesactivarAcceso('" + nomEnc + "')\">Desactivar</button>");
-      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirCambiarPinAdmin('" + nomEnc + "')\">Cambiar PIN</button>");
+      botones.push("<button class='dt-btn-icon' title='Cambiar PIN' onclick=\"event.stopPropagation();abrirCambiarPinAdmin('" + nomEnc + "')\">" + icon('key','icon-16') + "</button>");
     }
-    if (!emp.numero_vendedor_sysneo) {
-      botones.push("<button class='btn-admin-edit' onclick=\"event.stopPropagation();abrirAsignarSysneo('" + nomEnc + "')\">Asignar Sysneo</button>");
-    }
+    botones.push("<button class='dt-btn-icon' title='Más acciones' onclick=\"event.stopPropagation();abrirMasAccionesEmpleado(event,'" + nomEnc + "')\">" + icon('moreVertical','icon-16') + "</button>");
 
-    return "<tr class='admin-emp-row' onclick=\"abrirFormularioEmpleado('" + nomEnc + "')\">" +
-      "<td><div style='display:flex;align-items:center;gap:10px'>" +
-        "<div class='admin-avatar-mini' style='background:" + (avatarUrl ? 'transparent' : '#f1f5f9') + "'>" + avatarInner + "</div>" +
-        "<span>" + nomMostrar + "</span>" + inactivoBadge +
+    const dataAttrs = "data-sucursal='" + (suc.id || '') + "' data-empresa='" + (emp.empresa || '') + "' data-categoria='" + (emp.categoria_id || '') + "' data-estado='" + _estadoFiltroFila(emp) + "'";
+
+    return "<tr class='dt-clickable" + (emp.estado === 'inactivo' ? ' dt-inactive' : '') + "' " + dataAttrs + " onclick=\"abrirFormularioEmpleado('" + nomEnc + "')\">" +
+      "<td><div class='dt-identity'>" +
+        "<div class='dt-avatar-wrap'>" + avatarInner + "<span class='dt-avatar-dot dot-" + acceso.tono + "'></span></div>" +
+        "<div class='dt-identity-text'>" +
+          "<div class='dt-identity-name'>" + nomMostrar + " <span style='font-size:10.5px;font-weight:600;color:var(--text-muted)'>#" + (numMatch ? numMatch[1] : '—') + "</span></div>" +
+          "<div class='dt-identity-sub'>" + subLinea + "</div>" +
+        "</div>" +
       "</div></td>" +
-      "<td><span class='suc-badge-mini' style='background:#f1f5f9;color:#475569'>" + suc.nombre + "</span></td>" +
-      "<td>" + empresaHTML + catHTML + "</td>" +
-      "<td><span class='" + sysneo.clase + "'>" + sysneo.label + "</span></td>" +
-      "<td>" + usuarioLabel + "</td>" +
-      "<td><span class='" + acceso.clase + "'>" + acceso.label + "</span></td>" +
-      "<td><div style='display:flex;gap:6px;flex-wrap:wrap'>" + botones.join('') + "</div></td>" +
+      "<td class='col-suc'><span style='display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)'><span style='width:6px;height:6px;border-radius:50%;flex-shrink:0;background:" + suc.color + "'></span>" + suc.nombre + "</span></td>" +
+      "<td><span style='font-size:12.5px;color:var(--text-secondary)'>" + metaPlain + "</span></td>" +
+      "<td class='col-sysneo'>" + (sysneo.asignado
+        ? "<span style='font-size:12.5px;color:var(--croma-black)'>#" + sysneo.label + "</span>"
+        : "<span style='font-size:12.5px;color:var(--text-muted)'>Pendiente</span>") + "</td>" +
+      "<td class='col-usuario'>" + usuarioHTML + "</td>" +
+      "<td><span class='" + acceso.clase + "'><span class='badge-dot'></span>" + acceso.label + "</span></td>" +
+      "<td class='al-c'><div class='dt-row-actions'>" + botones.join('') + "</div></td>" +
       "</tr>";
   }).join('');
 
@@ -4026,32 +4042,60 @@ function renderAdminInline() {
       "</tr>";
   }).join('');
 
+  const sucOptsFiltro = SUCURSALES.map(s => "<option value='" + s.id + "'>" + s.nombre + "</option>").join('');
+  const empOptsFiltro = EMPRESAS.map(e => "<option value='" + e + "'>" + e + "</option>").join('');
+  const catOptsFiltro = CATEGORIAS_CONFIG.map(c => "<option value='" + c.id + "'>" + c.nombre + "</option>").join('');
+
   container.innerHTML =
     "<div class='admin-inline-wrap'>" +
-    "<div class='admin-inline-header'>" +
-      "<div>" +
-        "<div class='admin-titulo'>Administración</div>" +
-        "<span style='font-size:12px;color:#94a3b8;font-family:var(--font-body)'>" + empleadosAdmin.length + " empleados · " + SUCURSALES.length + " sucursales</span>" +
-      "</div>" +
-      "<button class='btn-admin-edit' style='font-size:12px' onclick='cerrarSesionAdmin()'>Cerrar sesión</button>" +
-    "</div>" +
-    "<div class='admin-tabs' id='adminTabs'>" +
-      "<button class='admin-tab active' onclick=\"switchAdminTab('empleados',this)\">Empleados <span style='font-size:11px;background:#e2e8f0;color:#475569;border-radius:10px;padding:1px 7px;margin-left:4px'>" + empleadosAdmin.length + "</span></button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('categorias',this)\">Categorías</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('configuracion',this)\">Configuración</button>" +
-      "<button class='admin-tab' onclick=\"switchAdminTab('ajusteJornada',this)\">Ajuste de jornada</button>" +
-    "</div>" +
+    "<div class='admin-shell-v2'>" +
+    "<nav class='rail-nav' id='adminRail'>" +
+      "<div class='rail-label'>Administración</div>" +
+      "<button class='rail-item active' onclick=\"switchAdminTab('empleados',this)\">" + icon('users','icon-16') + "<span>Empleados</span><span class='rail-count'>" + empleadosAdmin.length + "</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('categorias',this)\">" + icon('fileText','icon-16') + "<span>Categorías</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('configuracion',this)\">" + icon('settings','icon-16') + "<span>Configuración</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('ajusteJornada',this)\">" + icon('clock','icon-16') + "<span>Ajuste de jornada</span></button>" +
+    "</nav>" +
+    "<main class='admin-main-v2'>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
-      "<div class='admin-toolbar'>" +
-        "<input type='text' class='admin-search' id='adminBuscarEmp' placeholder='Buscar empleado...' oninput='filtrarTablaAdmin(this.value)' />" +
-        "<span style='font-size:12px;color:#94a3b8'>" + empleadosAdmin.length + " empleados en el sistema</span>" +
-        "<button class='btn-connect' style='width:auto;padding:8px 16px;font-size:13px;margin:0' onclick=\"abrirFormularioEmpleado(null)\">+ Nuevo empleado</button>" +
+      "<div class='admin-head-row'>" +
+        "<div class='admin-head'>" +
+          "<h1>Empleados</h1>" +
+          "<p>Alta, ficha y acceso a Croma Horarios de cada persona. El acceso es opcional.</p>" +
+          "<div class='stat-strip'>" +
+            "<div class='stat-item'><span class='stat-num'>" + empleadosAdmin.length + "</span><span class='stat-label'>empleados</span></div>" +
+            "<span class='stat-sep'></span>" +
+            "<div class='stat-item'><span class='stat-num'>" + conAcceso + "</span><span class='stat-label'>con acceso</span></div>" +
+            "<span class='stat-sep'></span>" +
+            "<div class='stat-item'><span class='stat-num'>" + sinAcceso + "</span><span class='stat-label'>sin acceso</span></div>" +
+            "<span class='stat-sep'></span>" +
+            "<div class='stat-item'><span class='stat-num'>" + SUCURSALES.length + "</span><span class='stat-label'>sucursales</span></div>" +
+          "</div>" +
+        "</div>" +
+        "<button class='btn-connect' style='width:auto;padding:0 16px;height:38px;margin:0;display:inline-flex;align-items:center;gap:7px' onclick=\"abrirFormularioEmpleado(null)\">" + icon('plus','icon-16') + " Nuevo empleado</button>" +
       "</div>" +
-      "<div class='admin-table-wrap'>" +
-        "<table class='admin-tabla' id='adminTablaEmps'>" +
-          "<thead><tr><th>Empleado</th><th>Sucursal</th><th>Empresa / Categoría</th><th>Número Sysneo</th><th>Usuario</th><th>Acceso</th><th></th></tr></thead>" +
-          "<tbody>" + (filasEmps || "<tr><td colspan='7' style='text-align:center;padding:2.5rem;color:#94a3b8;font-size:13px'>Sin datos cargados</td></tr>") + "</tbody>" +
+      "<div class='filters-bar'>" +
+        "<div class='f-search-wrap'>" + icon('search','icon-16') + "<input type='text' class='f-search' id='adminBuscarEmp' placeholder='Buscar empleado…' oninput='_filtrarTablaAdminCombinado()' /></div>" +
+        "<select class='f-select' id='filtroAdminSucursal' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las sucursales</option>" + sucOptsFiltro + "</select>" +
+        "<select class='f-select' id='filtroAdminEmpresa' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las empresas</option>" + empOptsFiltro + "</select>" +
+        "<select class='f-select' id='filtroAdminCategoria' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las categorías</option>" + catOptsFiltro + "</select>" +
+        "<select class='f-select' id='filtroAdminEstado' onchange='_filtrarTablaAdminCombinado()'>" +
+          "<option value=''>Cualquier estado</option>" +
+          "<option value='con_acceso'>Con acceso</option>" +
+          "<option value='sin_acceso'>Sin acceso</option>" +
+          "<option value='desactivado'>Acceso desactivado</option>" +
+          "<option value='vencido'>Acceso vencido</option>" +
+          "<option value='inactivo'>Empleado inactivo</option>" +
+        "</select>" +
+        "<button class='f-clear' onclick='_limpiarFiltrosAdmin()'>Limpiar</button>" +
+      "</div>" +
+      "<div class='dt-wrap'>" +
+        "<div class='dt-scroll'>" +
+        "<table class='dt-table' id='adminTablaEmps'>" +
+          "<thead><tr><th>Empleado</th><th class='col-suc'>Sucursal</th><th>Empresa / Categoría</th><th class='col-sysneo'>Sysneo</th><th class='col-usuario'>Usuario</th><th>Acceso</th><th class='al-c'></th></tr></thead>" +
+          "<tbody>" + (filasEmps || "<tr><td colspan='7' style='text-align:center;padding:2.5rem;color:var(--text-muted);font-size:13px'>Sin datos cargados</td></tr>") + "</tbody>" +
         "</table>" +
+        "</div>" +
       "</div>" +
     "</div>" +
     "<div id='adminTabCategorias' class='admin-tab-content' style='display:none'>" +
@@ -4104,19 +4148,15 @@ function renderAdminInline() {
       "</div>" +
     "</div>" +
     "<div id='adminTabAjusteJornada' class='admin-tab-content' style='display:none'></div>" +
+    "</main>" +
+    "</div>" +
     "</div>";
 }
 
 function renderAdmin() { renderAdminInline(); }
 
-function cerrarSesionAdmin() {
-  adminAutenticado = false;
-  sessionStorage.removeItem('croma_admin_auth');
-  setView('empleados');
-}
-
 function switchAdminTab(tab, btn) {
-  document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#adminRail .rail-item').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('adminTabEmpleados').style.display    = tab === 'empleados'     ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
@@ -4126,12 +4166,33 @@ function switchAdminTab(tab, btn) {
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
 }
 
-function filtrarTablaAdmin(q) {
-  const rows = document.querySelectorAll('#adminTablaEmps tbody tr');
-  const ql = q.toLowerCase();
-  rows.forEach(row => {
-    row.style.display = row.textContent.toLowerCase().includes(ql) ? '' : 'none';
+// Filtra la tabla de empleados ya cargada (búsqueda de texto + Sucursal +
+// Empresa + Categoría + Estado combinados). Todo client-side, sobre las
+// filas que ya arma renderAdminInline — no vuelve a pedir datos.
+function _filtrarTablaAdminCombinado() {
+  const q      = (document.getElementById('adminBuscarEmp')?.value || '').trim().toLowerCase();
+  const fSuc   = document.getElementById('filtroAdminSucursal')?.value || '';
+  const fEmp   = document.getElementById('filtroAdminEmpresa')?.value || '';
+  const fCat   = document.getElementById('filtroAdminCategoria')?.value || '';
+  const fEstado= document.getElementById('filtroAdminEstado')?.value || '';
+
+  document.querySelectorAll('#adminTablaEmps tbody tr').forEach(row => {
+    if (!row.dataset || row.dataset.sucursal === undefined) return; // fila de "sin datos"
+    const okQ      = !q || row.textContent.toLowerCase().includes(q);
+    const okSuc    = !fSuc    || row.dataset.sucursal === fSuc;
+    const okEmp    = !fEmp    || row.dataset.empresa === fEmp;
+    const okCat    = !fCat    || row.dataset.categoria === fCat;
+    const okEstado = !fEstado || row.dataset.estado === fEstado;
+    row.style.display = (okQ && okSuc && okEmp && okCat && okEstado) ? '' : 'none';
   });
+}
+
+function _limpiarFiltrosAdmin() {
+  const buscar = document.getElementById('adminBuscarEmp'); if (buscar) buscar.value = '';
+  ['filtroAdminSucursal','filtroAdminEmpresa','filtroAdminCategoria','filtroAdminEstado'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  _filtrarTablaAdminCombinado();
 }
 
 // ══════════════════════════════════════════════════════
@@ -4584,20 +4645,20 @@ function obtenerEmpleadosAdmin() {
 
 function _infoSysneoAdmin(emp) {
   return emp.numero_vendedor_sysneo
-    ? { label: emp.numero_vendedor_sysneo, clase: 'badge badge-info' }
-    : { label: 'Pendiente', clase: 'badge badge-neutral' };
+    ? { label: emp.numero_vendedor_sysneo, clase: 'badge badge-info', tono: 'info', asignado: true }
+    : { label: 'Pendiente', clase: 'badge badge-neutral', tono: 'neutral', asignado: false };
 }
 
 function _infoAccesoAdmin(emp) {
   const u = emp._usuario;
-  if (!u) return { label: 'Sin acceso', clase: 'badge badge-neutral' };
-  if (u.estado === 'inactivo') return { label: 'Acceso desactivado', clase: 'badge badge-warning' };
+  if (!u) return { label: 'Sin acceso', clase: 'badge badge-neutral', tono: 'neutral' };
+  if (u.estado === 'inactivo') return { label: 'Acceso desactivado', clase: 'badge badge-warning', tono: 'warning' };
   if (u.fin_acceso) {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const fin = new Date(u.fin_acceso + 'T00:00:00');
-    if (!isNaN(fin.getTime()) && fin < hoy) return { label: 'Acceso vencido', clase: 'badge badge-danger' };
+    if (!isNaN(fin.getTime()) && fin < hoy) return { label: 'Acceso vencido', clase: 'badge badge-danger', tono: 'danger' };
   }
-  return { label: 'Con acceso', clase: 'badge badge-success' };
+  return { label: 'Con acceso', clase: 'badge badge-success', tono: 'success' };
 }
 
 async function _refrescarAdminEmpleados() {
@@ -4978,6 +5039,47 @@ async function guardarFormularioEmpleado() {
   } finally {
     _setGuardandoFormEmpleado(false);
   }
+}
+
+// ── Menú "Más acciones" (kebab) de la tabla premium ────
+// Agrupa acciones contextuales que no entran como ícono compacto directo
+// en la fila (Editar / Cambiar PIN o Crear acceso ya están siempre
+// visibles — ver renderAdminInline). Popover simple, se cierra al
+// clickear afuera.
+function abrirMasAccionesEmpleado(event, nombre) {
+  event.stopPropagation();
+  document.getElementById('dtMenuPopover')?.remove();
+  const emp = obtenerEmpleadosAdmin().find(e => e.nombre === nombre);
+  if (!emp) return;
+  const nomEnc = nombre.replace(/'/g, "\\'");
+  const btn = event.currentTarget;
+  const rect = btn.getBoundingClientRect();
+
+  const items = [];
+  if (emp._usuario && emp._usuario.estado !== 'inactivo') {
+    items.push({ label: 'Desactivar acceso', accion: `accionDesactivarAcceso('${nomEnc}')`, peligro: true });
+  }
+  items.push({
+    label: emp.numero_vendedor_sysneo ? 'Editar número Sysneo' : 'Asignar número Sysneo',
+    accion: `abrirAsignarSysneo('${nomEnc}')`,
+  });
+
+  const menu = document.createElement('div');
+  menu.id = 'dtMenuPopover';
+  menu.className = 'dt-menu';
+  menu.style.position = 'fixed';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.left = Math.max(8, rect.right - 200) + 'px';
+  menu.innerHTML = items.map(it =>
+    `<button class="dt-menu-item${it.peligro ? ' dt-menu-item--peligro' : ''}" onclick="document.getElementById('dtMenuPopover')?.remove();${it.accion}">${it.label}</button>`
+  ).join('');
+  document.body.appendChild(menu);
+
+  setTimeout(() => {
+    document.addEventListener('click', function _cerrarDtMenu(e2) {
+      if (!menu.contains(e2.target)) { menu.remove(); document.removeEventListener('click', _cerrarDtMenu); }
+    });
+  }, 0);
 }
 
 // ── Acciones rápidas desde la tabla ────────────────────

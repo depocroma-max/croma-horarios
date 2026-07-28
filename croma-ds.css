@@ -77,6 +77,15 @@
   /* ── Transiciones ── */
   --transition-fast: .12s ease;
   --transition-base: .2s ease;
+
+  /* ── Superficie/borde neutro para paneles administrativos ──
+     Formaliza como token el gris frío (#e2e8f0 / #f8fafc) que
+     Administración ya usa hace tiempo (admin-tabla, admin-search,
+     btn-admin-edit) — distinto de la escala --gray-* (cálida, de
+     marca). No reemplaza --gray-*, es un token aparte para no
+     desprender esas pantallas del look que ya tienen. */
+  --border-neutral:  #e2e8f0;
+  --surface-sunken:  #f8fafc;
 }
 
 /* ============================================================
@@ -226,6 +235,11 @@
 .badge-info    { background: var(--info-bg);     color: var(--info); }
 .badge-neutral { background: var(--gray-100);    color: var(--gray-600); }
 
+/* Modificador: punto de estado dentro del badge (además del texto/color,
+   nunca en su lugar — ver DEVELOPMENT_GUIDE, el estado siempre se codifica
+   dos veces). Uso: <span class="badge badge-success"><span class="badge-dot"></span>Con acceso</span> */
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: currentColor; }
+
 /* ============================================================
    ALERTS
    ============================================================ */
@@ -282,3 +296,129 @@
   background: var(--sucursal-light, var(--gray-100));
 }
 .sucursal-icon svg { width: 21px; height: 21px; }
+
+/* ============================================================
+   RAIL NAV — submenú lateral de una sección (no navegación
+   global de la app). Deliberadamente más chico/liviano que el
+   drawer principal: rótulo propio arriba, estado activo con
+   borde lateral + fondo sutil (no relleno sólido).
+   Uso: <nav class="rail-nav"><div class="rail-label">Sección</div>
+        <button class="rail-item active">{icon}<span>Item</span>
+        <span class="rail-count">N</span></button>…</nav>
+   ============================================================ */
+.rail-nav { padding: 18px 10px; }
+.rail-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
+  color: var(--text-muted); padding: 0 10px; margin-bottom: 8px;
+}
+.rail-item {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 10px;
+  margin-bottom: 1px; border: none; border-left: 2px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-secondary);
+  font-family: var(--font-body); font-size: 13px; font-weight: 500; text-align: left; cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.rail-item svg { color: var(--text-muted); width: 15px; height: 15px; flex-shrink: 0; }
+.rail-item:hover { background: var(--gray-100); color: var(--croma-black); }
+.rail-item.active {
+  background: var(--white); color: var(--croma-black); font-weight: 600;
+  border-left-color: var(--croma-black); box-shadow: var(--shadow-sm);
+}
+.rail-item.active svg { color: var(--croma-black); }
+.rail-count { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
+.rail-item.active .rail-count { color: var(--text-secondary); }
+
+/* ============================================================
+   STAT STRIP — resumen discreto en línea, para acompañar un
+   título sin competir con el contenido principal (a diferencia
+   de una tarjeta KPI con borde/ícono/sombra). Números en
+   font-display, igual que .admin-titulo.
+   Uso: <div class="stat-strip"><div class="stat-item">
+        <span class="stat-num">31</span><span class="stat-label">empleados</span>
+        </div><span class="stat-sep"></span>…</div>
+   ============================================================ */
+.stat-strip { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.stat-item { display: flex; align-items: baseline; gap: 5px; }
+.stat-num { font-family: var(--font-display); font-size: 17px; letter-spacing: .3px; color: var(--croma-black); font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 11.5px; color: var(--text-muted); }
+.stat-sep { width: 1px; height: 12px; background: var(--border-neutral); }
+
+/* ============================================================
+   DT-TABLE — "tabla premium": sigue siendo <table>, no cards.
+   Más aire que .admin-tabla, celda de identidad con avatar
+   protagonista, hover con barra de acento + acciones que
+   aparecen recién al pasar el mouse (para no competir en reposo
+   con el escaneo rápido de muchas filas).
+   ============================================================ */
+.dt-wrap { border: 1px solid var(--border-neutral); border-radius: var(--radius-lg); overflow: hidden; background: var(--white); }
+.dt-scroll { overflow-x: auto; }
+.dt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dt-table thead th {
+  padding: 11px 18px; background: var(--surface-sunken);
+  font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+  color: var(--text-muted); border-bottom: 1px solid var(--border-neutral); text-align: left; white-space: nowrap;
+}
+.dt-table th.al-c, .dt-table td.al-c { text-align: center; }
+.dt-table tbody tr { border-bottom: 1px solid var(--gray-100); position: relative; transition: background var(--transition-fast); }
+.dt-table tbody tr:last-child { border-bottom: none; }
+.dt-table tbody tr.dt-clickable { cursor: pointer; }
+.dt-table tbody tr::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2.5px; background: var(--croma-black);
+  transform: scaleY(0); transition: transform var(--transition-base);
+}
+.dt-table tbody tr:hover { background: var(--surface-sunken); }
+.dt-table tbody tr:hover::before { transform: scaleY(1); }
+.dt-table tbody tr.dt-inactive { opacity: .55; }
+.dt-table td { padding: 13px 18px; vertical-align: top; color: var(--croma-black); line-height: 1.4; }
+.dt-table td:has(.dt-identity),
+.dt-table td.al-c { vertical-align: middle; }
+
+.dt-row-actions {
+  display: flex; gap: 2px; justify-content: flex-end;
+  opacity: 0; transform: translateX(4px); transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+.dt-table tbody tr:hover .dt-row-actions,
+.dt-row-actions:focus-within { opacity: 1; transform: none; }
+@media (hover: none) { .dt-row-actions { opacity: 1; transform: none; } }
+
+.dt-identity { display: flex; align-items: center; gap: 12px; }
+.dt-avatar-wrap { position: relative; flex-shrink: 0; }
+.dt-avatar, .dt-avatar-initials {
+  width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--gray-100); color: var(--text-secondary); font-size: 13px; font-weight: 700;
+  border: 1px solid var(--border-neutral); object-fit: cover;
+}
+.dt-avatar-dot { position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--white); }
+.dt-table tbody tr:hover .dt-avatar-dot { border-color: var(--surface-sunken); }
+/* Tono del punto de estado — mismo vocabulario que .badge-* (success/warning/danger/info/neutral) */
+.dot-success { background: var(--success); }
+.dot-warning { background: var(--warning); }
+.dot-danger  { background: var(--danger); }
+.dot-info    { background: var(--info); }
+.dot-neutral { background: var(--gray-400); }
+.dt-identity-text { min-width: 0; }
+.dt-identity-name { font-size: 13.5px; font-weight: 600; color: var(--croma-black); display: flex; align-items: baseline; gap: 6px; }
+.dt-identity-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+
+.dt-btn-icon {
+  width: 30px; height: 30px; border-radius: var(--radius-sm); border: none; background: transparent;
+  color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.dt-btn-icon svg { width: 15px; height: 15px; }
+.dt-btn-icon:hover { background: var(--gray-200); color: var(--croma-black); }
+
+/* Menú contextual chico (kebab / "más acciones") */
+.dt-menu {
+  z-index: 700; min-width: 180px; padding: 4px;
+  background: var(--white); border: 1px solid var(--border-neutral); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 1px;
+}
+.dt-menu-item {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; border: none; background: transparent;
+  border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
+  color: var(--croma-black); cursor: pointer; transition: background var(--transition-fast);
+}
+.dt-menu-item:hover { background: var(--gray-100); }
+.dt-menu-item--peligro { color: var(--danger); }
+.dt-menu-item--peligro:hover { background: var(--danger-bg); }
