@@ -359,15 +359,14 @@
   color: var(--text-muted); border-bottom: 1px solid var(--border-neutral); text-align: left; white-space: nowrap;
 }
 .dt-table th.al-c, .dt-table td.al-c { text-align: center; }
-.dt-table tbody tr { border-bottom: 1px solid var(--gray-100); position: relative; transition: background var(--transition-fast); }
+.dt-table tbody tr {
+  border-bottom: 1px solid var(--gray-100);
+  box-shadow: inset 2.5px 0 0 transparent;
+  transition: background var(--transition-fast), box-shadow var(--transition-base);
+}
 .dt-table tbody tr:last-child { border-bottom: none; }
 .dt-table tbody tr.dt-clickable { cursor: pointer; }
-.dt-table tbody tr::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2.5px; background: var(--croma-black);
-  transform: scaleY(0); transition: transform var(--transition-base);
-}
-.dt-table tbody tr:hover { background: var(--surface-sunken); }
-.dt-table tbody tr:hover::before { transform: scaleY(1); }
+.dt-table tbody tr:hover { background: var(--surface-sunken); box-shadow: inset 2.5px 0 0 var(--croma-black); }
 .dt-table tbody tr.dt-inactive { opacity: .55; }
 .dt-table td { padding: 13px 18px; vertical-align: top; color: var(--croma-black); line-height: 1.4; }
 .dt-table td:has(.dt-identity),
