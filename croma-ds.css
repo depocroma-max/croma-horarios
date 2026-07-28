@@ -406,6 +406,7 @@
 }
 .dt-btn-icon svg { width: 15px; height: 15px; }
 .dt-btn-icon:hover { background: var(--gray-200); color: var(--croma-black); }
+.dt-btn-icon--danger:hover { background: var(--danger-bg); color: var(--danger); }
 
 /* Menú contextual chico (kebab / "más acciones") */
 .dt-menu {

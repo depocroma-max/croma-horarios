@@ -60,6 +60,7 @@ let CATEGORIAS_CONFIG = [
 // Formato: { nombre, empresa, categoria_id, hs_base, dias_base, foto_url, activo, regla_custom }
 let EMPLEADOS_PERFILES = {};   // clave: nombre exacto del empleado
 let CERTIFICADOS_CACHE = [];   // lista de certificados cargados del Sheet
+let _certFlujoDesdeAdmin = false; // true si abrirFormCertificado se abrió desde Administración > Certificados
 let _verInactivos = false;     // panel Empleados: mostrar u ocultar la sección de ex-empleados
 
 const TIPOS_CERTIFICADO = [
@@ -2760,7 +2761,8 @@ async function borrarCertificado(id) {
   } catch(e) { return false; }
 }
 
-function abrirFormCertificado(nombreEmp) {
+function abrirFormCertificado(nombreEmp, desdeAdmin) {
+  _certFlujoDesdeAdmin = !!desdeAdmin;
   const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
   const cat    = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
   // Determinar horas por defecto según categoría
@@ -2959,9 +2961,16 @@ async function confirmarCertificado(nombreEmp) {
     showToast(fail
       ? `Guardados ${okCount} · fallaron ${fail}`
       : `✓ ${okCount} certificado${okCount > 1 ? 's' : ''} guardado${okCount > 1 ? 's' : ''}`);
-    // Reabrir la ficha del empleado para ver los certificados
-    const suc = state.datos.find(r => r.EMPLEADO === nombreEmp);
-    if (suc) abrirDetalleEmpleado(nombreEmp, suc.LOCAL);
+    if (_certFlujoDesdeAdmin) {
+      _certFlujoDesdeAdmin = false;
+      renderAdminInline();
+      const railBtn = document.querySelector("#adminRail .rail-item[onclick*=\"'certificados'\"]");
+      if (railBtn) switchAdminTab('certificados', railBtn);
+    } else {
+      // Reabrir la ficha del empleado para ver los certificados
+      const suc = state.datos.find(r => r.EMPLEADO === nombreEmp);
+      if (suc) abrirDetalleEmpleado(nombreEmp, suc.LOCAL);
+    }
   } else {
     if (btn) { btn.disabled = false; btn.textContent = 'Guardar certificado'; }
     errEl.textContent = 'Error al guardar. Revisá la conexión.'; errEl.style.display='block';
@@ -4046,6 +4055,25 @@ function renderAdminInline() {
   const empOptsFiltro = EMPRESAS.map(e => "<option value='" + e + "'>" + e + "</option>").join('');
   const catOptsFiltro = CATEGORIAS_CONFIG.map(c => "<option value='" + c.id + "'>" + c.nombre + "</option>").join('');
 
+  const certsOrdenados  = CERTIFICADOS_CACHE.slice().sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const empleadosConCert = new Set(CERTIFICADOS_CACHE.map(c => c.empleado)).size;
+  const _hoyCert = new Date();
+  const certsEsteMes = CERTIFICADOS_CACHE.filter(c => {
+    const [y, m] = c.fecha.split('-').map(Number);
+    return y === _hoyCert.getFullYear() && m === _hoyCert.getMonth() + 1;
+  }).length;
+  const filasCerts = certsOrdenados.map(c => {
+    return "<tr data-tipo='" + (c.tipo || '').replace(/'/g, '&#39;') + "'>" +
+      "<td><span style='font-size:13px;font-weight:600;color:var(--croma-black)'>" + c.empleado + "</span></td>" +
+      "<td><span style='font-size:12.5px;color:var(--text-secondary)'>" + _fechaDisplay(c.fecha) + "</span></td>" +
+      "<td><span class='badge badge-info'>" + c.tipo + "</span></td>" +
+      "<td class='al-c'><span style='font-size:12.5px;color:var(--text-secondary)'>" + c.hs + "h</span></td>" +
+      "<td><span style='font-size:12.5px;color:var(--text-secondary)'>" + (c.nota || '—') + "</span></td>" +
+      "<td class='al-c'><div class='dt-row-actions' style='justify-content:center'><button class='dt-btn-icon dt-btn-icon--danger' title='Borrar certificado' onclick=\"eliminarCertificadoAdmin('" + c.id + "')\">" + icon('trash', 'icon-16') + "</button></div></td>" +
+      "</tr>";
+  }).join('');
+  const tiposOptsFiltro = TIPOS_CERTIFICADO.map(t => "<option value='" + t + "'>" + t + "</option>").join('');
+
   container.innerHTML =
     "<div class='admin-inline-wrap'>" +
     "<div class='admin-shell-v2'>" +
@@ -4053,6 +4081,7 @@ function renderAdminInline() {
       "<div class='rail-label'>Administración</div>" +
       "<button class='rail-item active' onclick=\"switchAdminTab('empleados',this)\">" + icon('users','icon-16') + "<span>Empleados</span><span class='rail-count'>" + empleadosAdmin.length + "</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('categorias',this)\">" + icon('fileText','icon-16') + "<span>Categorías</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('certificados',this)\">" + icon('shieldCheck','icon-16') + "<span>Certificados</span><span class='rail-count'>" + CERTIFICADOS_CACHE.length + "</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('configuracion',this)\">" + icon('settings','icon-16') + "<span>Configuración</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('ajusteJornada',this)\">" + icon('clock','icon-16') + "<span>Ajuste de jornada</span></button>" +
     "</nav>" +
@@ -4105,6 +4134,35 @@ function renderAdminInline() {
       "<div class='admin-table-wrap'>" +
         "<table class='admin-tabla'><thead><tr><th>Nombre</th><th>Descripción</th><th>Percibe extra</th><th></th></tr></thead>" +
         "<tbody>" + filasCats + "</tbody></table>" +
+      "</div>" +
+    "</div>" +
+    "<div id='adminTabCertificados' class='admin-tab-content' style='display:none'>" +
+      "<div class='admin-head-row'>" +
+        "<div class='admin-head'>" +
+          "<h1>Certificados</h1>" +
+          "<p>Certificados médicos y otras justificaciones cargadas por empleado.</p>" +
+          "<div class='stat-strip'>" +
+            "<div class='stat-item'><span class='stat-num'>" + CERTIFICADOS_CACHE.length + "</span><span class='stat-label'>certificados</span></div>" +
+            "<span class='stat-sep'></span>" +
+            "<div class='stat-item'><span class='stat-num'>" + empleadosConCert + "</span><span class='stat-label'>empleados</span></div>" +
+            "<span class='stat-sep'></span>" +
+            "<div class='stat-item'><span class='stat-num'>" + certsEsteMes + "</span><span class='stat-label'>este mes</span></div>" +
+          "</div>" +
+        "</div>" +
+        "<button class='btn-connect' style='width:auto;padding:0 16px;height:38px;margin:0;display:inline-flex;align-items:center;gap:7px' onclick='abrirSelectorEmpleadoCertificado()'>" + icon('plus','icon-16') + " Nuevo certificado</button>" +
+      "</div>" +
+      "<div class='filters-bar'>" +
+        "<div class='f-search-wrap'>" + icon('search','icon-16') + "<input type='text' class='f-search' id='adminBuscarCert' placeholder='Buscar empleado o nota…' oninput='_filtrarTablaCertAdmin()' /></div>" +
+        "<select class='f-select' id='filtroCertTipo' onchange='_filtrarTablaCertAdmin()'><option value=''>Todos los tipos</option>" + tiposOptsFiltro + "</select>" +
+        "<button class='f-clear' onclick='_limpiarFiltrosCertAdmin()'>Limpiar</button>" +
+      "</div>" +
+      "<div class='dt-wrap'>" +
+        "<div class='dt-scroll'>" +
+        "<table class='dt-table' id='adminTablaCerts'>" +
+          "<thead><tr><th>Empleado</th><th>Fecha</th><th>Tipo</th><th class='al-c'>Horas</th><th>Nota</th><th class='al-c'></th></tr></thead>" +
+          "<tbody>" + (filasCerts || "<tr><td colspan='6' style=\"text-align:center;padding:2.5rem;color:var(--text-muted);font-size:13px\">Sin certificados cargados</td></tr>") + "</tbody>" +
+        "</table>" +
+        "</div>" +
       "</div>" +
     "</div>" +
     "<div id='adminTabConfiguracion' class='admin-tab-content' style='display:none'>" +
@@ -4160,10 +4218,79 @@ function switchAdminTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('adminTabEmpleados').style.display    = tab === 'empleados'     ? 'block' : 'none';
   document.getElementById('adminTabCategorias').style.display   = tab === 'categorias'    ? 'block' : 'none';
+  document.getElementById('adminTabCertificados').style.display = tab === 'certificados'  ? 'block' : 'none';
   document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
   document.getElementById('adminTabAjusteJornada').style.display= tab === 'ajusteJornada'  ? 'block' : 'none';
   if (tab === 'configuracion') cargarConfigAdmin();
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
+}
+
+function _filtrarTablaCertAdmin() {
+  const q     = (document.getElementById('adminBuscarCert')?.value || '').trim().toLowerCase();
+  const fTipo = document.getElementById('filtroCertTipo')?.value || '';
+  document.querySelectorAll('#adminTablaCerts tbody tr').forEach(row => {
+    if (!row.dataset || row.dataset.tipo === undefined) return;
+    const okQ    = !q || row.textContent.toLowerCase().includes(q);
+    const okTipo = !fTipo || row.dataset.tipo === fTipo;
+    row.style.display = (okQ && okTipo) ? '' : 'none';
+  });
+}
+function _limpiarFiltrosCertAdmin() {
+  const buscar = document.getElementById('adminBuscarCert'); if (buscar) buscar.value = '';
+  const tipo = document.getElementById('filtroCertTipo'); if (tipo) tipo.value = '';
+  _filtrarTablaCertAdmin();
+}
+
+function abrirSelectorEmpleadoCertificado() {
+  const nomMostrarDe = n => { const m = n.match(/^(\d+)\s+(.+)$/); return m ? m[2] : n; };
+  const opts = obtenerEmpleadosAdmin()
+    .filter(e => e.estado !== 'inactivo')
+    .slice()
+    .sort((a, b) => nomMostrarDe(a.nombre).localeCompare(nomMostrarDe(b.nombre)))
+    .map(e => "<option value=\"" + e.nombre.replace(/"/g, '&quot;') + "\">" + nomMostrarDe(e.nombre) + "</option>")
+    .join('');
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Nuevo certificado</div>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Empleado</label>
+          <select class="admin-input" id="certSelectorEmpleado">
+            <option value="">Elegí un empleado…</option>
+            ${opts}
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1rem">
+          <button class="btn-connect" style="margin:0" onclick="continuarNuevoCertificadoAdmin()">Continuar</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+}
+
+function continuarNuevoCertificadoAdmin() {
+  const nombre = document.getElementById('certSelectorEmpleado')?.value;
+  if (!nombre) { showToast('Elegí un empleado'); return; }
+  abrirFormCertificado(nombre, true);
+}
+
+async function eliminarCertificadoAdmin(id) {
+  if (!confirm('¿Borrar este certificado?')) return;
+  const ok = await borrarCertificado(id);
+  if (ok) {
+    showToast('✓ Certificado eliminado');
+    renderAdminInline();
+    const railBtn = document.querySelector("#adminRail .rail-item[onclick*=\"'certificados'\"]");
+    if (railBtn) switchAdminTab('certificados', railBtn);
+  } else {
+    showToast('Error al eliminar');
+  }
 }
 
 // Filtra la tabla de empleados ya cargada (búsqueda de texto + Sucursal +
