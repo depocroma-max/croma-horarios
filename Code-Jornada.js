@@ -1132,6 +1132,8 @@ function despacharAccionSegura(envelope) {
   if (accion === 'cambiar_pin')               return accionCambiarPin(datos);
   if (accion === 'cambiar_pin_propio')        return accionCambiarPinPropio(datos);
   if (accion === 'asignar_numero_sysneo')     return accionAsignarNumeroSysneo(datos);
+  if (accion === 'exportar_fichadas')         return accionExportarFichadas(datos);
+  if (accion === 'diagnostico_fichadas')      return accionDiagnosticoFichadas();
 
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
@@ -3128,4 +3130,255 @@ function getFichadasEmpleado(e) {
       .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  EXPORTACIÓN DE FICHADAS — accion=exportar_fichadas (Node → GAS, POST,
+//  vía despacharAccionSegura). Administración › Fichadas (Fase 1).
+//  Sin caps de fila (a diferencia de getFichadasEmpleado), sin escribir en
+//  ninguna hoja. Empresa se resuelve por join en memoria contra EMPLEADOS
+//  (nombre normalizado) porque FICHADAS no tiene columna EMPRESA propia.
+// ══════════════════════════════════════════════════════
+
+// Mapeo LOCAL → sucursal oficial. IMPORTANTE (verificado contra producción
+// con accionDiagnosticoFichadas el 2026-08-03): FICHADAS.LOCAL guarda el
+// NOMBRE OFICIAL completo ("01 PASEO", "05 WAVE"...), tal como lo manda
+// guardarFichada(datos.local) desde el frontend — NO el código corto "hoja"
+// que usa la hoja SUCURSALES_GEO/el resto de la UI. Por eso la clave de
+// búsqueda acá es `nombre`, no `hoja`. Se conserva `hoja` en la tabla por si
+// aparece algún registro histórico con el código corto, pero la clave
+// primaria de match es el nombre oficial. Espejo de SUCURSALES en app.js —
+// mantener sincronizados si se agrega o renombra una sucursal.
+const SUCURSALES_EXPORT = [
+  { id: '01',      hoja: 'PASEO',   nombre: '01 PASEO'           },
+  { id: '05',      hoja: 'WAVE',    nombre: '05 WAVE'            },
+  { id: '09',      hoja: 'CIPO',    nombre: '09 CIPO SAN MARTIN' },
+  { id: '10',      hoja: 'PERITO',  nombre: '10 PERITO MORENO'   },
+  { id: '12',      hoja: 'CENTE',   nombre: '12 CENTENARIO'      },
+  { id: '14',      hoja: 'ROCA180', nombre: '14 ROCA'            },
+  { id: 'DEPO',    hoja: 'DEPO',    nombre: 'DEPO'               },
+  { id: 'OFICINA', hoja: 'OFICINA', nombre: 'OFICINA'            },
+];
+const _SUC_EXPORT_POR_LOCAL = {}; // clave real de match: LOCAL tal como se guarda en FICHADAS
+const _SUC_EXPORT_POR_ID    = {};
+SUCURSALES_EXPORT.forEach(function(s) {
+  _SUC_EXPORT_POR_LOCAL[s.nombre] = s; // clave primaria (nombre oficial, lo que guarda FICHADAS hoy)
+  if (!_SUC_EXPORT_POR_LOCAL[s.hoja]) _SUC_EXPORT_POR_LOCAL[s.hoja] = s; // fallback por si hay históricos con código corto
+  _SUC_EXPORT_POR_ID[s.id] = s;
+});
+
+function accionExportarFichadas(datos) {
+  datos = datos || {};
+  const anio          = String(datos.anio || '').trim();
+  const mesNum         = datos.mes !== undefined && datos.mes !== null && String(datos.mes).trim() !== ''
+    ? Number(datos.mes) : null;
+  const empresa        = String(datos.empresa || '').trim();
+  const sucursal       = String(datos.sucursal || '').trim(); // id oficial: '01'..'14','DEPO','OFICINA'
+  const colaborador    = String(datos.empleado || '').trim();
+
+  if (empresa && empresa !== 'MOSHE SRL' && empresa !== 'CROMAWAVE SRL') {
+    return _resp({ ok: false, error: 'Empresa inválida' });
+  }
+  if (sucursal && !_SUC_EXPORT_POR_ID[sucursal]) {
+    return _resp({ ok: false, error: 'Sucursal inválida' });
+  }
+  if (mesNum !== null && (isNaN(mesNum) || mesNum < 1 || mesNum > 12)) {
+    return _resp({ ok: false, error: 'Mes inválido' });
+  }
+  if (anio && (isNaN(Number(anio)) || String(Number(anio)).length !== 4)) {
+    return _resp({ ok: false, error: 'Año inválido' });
+  }
+  const mesTextoFiltro = mesNum !== null ? MESES_ES_FICHADAS[mesNum - 1] : '';
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Mapa NOMBRE normalizado → empresa, leído una sola vez desde EMPLEADOS.
+  const mapaEmpresa = {};
+  const hEmp = ss.getSheetByName('EMPLEADOS');
+  if (hEmp) {
+    const valsEmp = hEmp.getDataRange().getValues();
+    if (valsEmp.length > 1) {
+      const hdrsEmp   = valsEmp[0].map(function(h) { return String(h).trim().toUpperCase(); });
+      const iNom      = hdrsEmp.indexOf('NOMBRE');
+      const iEmpresa  = hdrsEmp.indexOf('EMPRESA');
+      for (let i = 1; i < valsEmp.length; i++) {
+        const nombreNorm = _normalizarNombreEmpleado(valsEmp[i][iNom]);
+        if (!nombreNorm) continue;
+        mapaEmpresa[nombreNorm] = iEmpresa >= 0 ? String(valsEmp[i][iEmpresa] || '') : '';
+      }
+    }
+  }
+
+  const hFich = ss.getSheetByName('FICHADAS');
+  const vacio = { ok: true, fichadas: [], total: 0, colaboradores: 0, sin_empresa: 0, sin_match_empleado: 0, locales_no_mapeados: [] };
+  if (!hFich) return _resp(vacio);
+  const vals = hFich.getDataRange().getValues();
+  if (vals.length < 2) return _resp(vacio);
+
+  const hdrs    = vals[0].map(function(h) { return String(h).trim(); });
+  const ci      = function(name) { return hdrs.indexOf(name); };
+  const iLocal  = ci('LOCAL');
+  const iAnio   = ci('AÑO');
+  const iMes    = ci('MES');
+  const iDia    = ci('DIA');
+  const iEmp    = ci('EMPLEADO/A');
+  const iEntr   = ci('HORA ENTRADA');
+  const iSal    = ci('HORA SALIDA');
+  const iTotal  = ci('TOTAL en hs');
+  const iFecha  = ci('FECHA');
+  const iTipo   = ci('TIPO_REGISTRO');
+  const iModo   = ci('MODO_CARGA');
+  const iNota   = hdrs.findIndex(function(h) { return h.indexOf('Nota adicional') === 0; });
+  const iIdFich = ci('ID_FICHADA');
+  const iEstado = ci('ESTADO');
+
+  const tz = Session.getScriptTimeZone();
+  const fmtFechaCelda = function(v) {
+    return v instanceof Date
+      ? Utilities.formatDate(v, tz, 'yyyy-MM-dd')
+      : String(v || '').substring(0, 10);
+  };
+
+  const colaboradorNorm   = colaborador ? _normalizarNombreEmpleado(colaborador) : '';
+  const localesNoMapeados = {};
+  let sinEmpresa       = 0;
+  let sinMatchEmpleado = 0;
+  const colaboradoresSet = {};
+  const salida = [];
+
+  for (let i = 1; i < vals.length; i++) {
+    const row    = vals[i];
+    const estado = iEstado >= 0 ? (String(row[iEstado] || '').trim() || 'ACTIVA') : 'ACTIVA';
+    if (estado === 'ANULADA') continue; // excluidas por defecto — sin override en esta fase
+
+    const anioFila = String(row[iAnio] || '').trim();
+    const mesFila  = String(row[iMes]  || '').trim();
+    if (anio && anioFila !== anio) continue;
+    if (mesTextoFiltro && mesFila !== mesTextoFiltro) continue;
+
+    const empleadoRaw  = row[iEmp];
+    const empleadoNorm = _normalizarNombreEmpleado(empleadoRaw);
+    if (colaboradorNorm && empleadoNorm !== colaboradorNorm) continue;
+
+    const localRaw = String(row[iLocal] || '').trim();
+    const sucInfo   = _SUC_EXPORT_POR_LOCAL[localRaw];
+    if (sucursal && (!sucInfo || sucInfo.id !== sucursal)) continue;
+    if (localRaw && !sucInfo) localesNoMapeados[localRaw] = (localesNoMapeados[localRaw] || 0) + 1;
+
+    const tieneMatch  = Object.prototype.hasOwnProperty.call(mapaEmpresa, empleadoNorm);
+    const empresaFila = tieneMatch ? mapaEmpresa[empleadoNorm] : '';
+    if (empresa && empresaFila !== empresa) continue;
+    if (!empresaFila) sinEmpresa++;
+    if (!tieneMatch) sinMatchEmpleado++;
+
+    colaboradoresSet[empleadoNorm] = true;
+
+    salida.push({
+      empresa:    empresaFila,
+      sucursal:   sucInfo ? sucInfo.nombre : localRaw,
+      empleado:   String(empleadoRaw || ''),
+      anio:       anioFila,
+      mes:        mesFila,
+      dia:        String(row[iDia] || ''), // día de la semana (así se guarda en FICHADAS, no día del mes)
+      fecha:      fmtFechaCelda(row[iFecha]),
+      entrada:    formatearHora(row[iEntr]),
+      salida_hs:  formatearHora(row[iSal]),
+      total:      parseFloat(row[iTotal]) || 0,
+      tipo:       String(row[iTipo] || 'NORMAL'),
+      modo_carga: String(row[iModo] || ''),
+      nota:       iNota >= 0 ? String(row[iNota] || '') : '',
+      estado:     estado,
+      id_fichada: iIdFich >= 0 ? String(row[iIdFich] || '') : '',
+    });
+  }
+
+  return _resp({
+    ok: true,
+    fichadas: salida,
+    total: salida.length,
+    colaboradores: Object.keys(colaboradoresSet).length,
+    sin_empresa: sinEmpresa,
+    sin_match_empleado: sinMatchEmpleado,
+    locales_no_mapeados: Object.keys(localesNoMapeados),
+  });
+}
+
+// Variante de solo diagnóstico (sin filtros, sin devolver filas) para medir
+// volumen real antes de habilitar la exportación en producción. Misma
+// lectura que accionExportarFichadas, agregada por año/mes para no exponer
+// datos individuales de más al pedir la medición. Solo lectura, no escribe.
+function accionDiagnosticoFichadas() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const t0    = new Date().getTime();
+  const hFich = ss.getSheetByName('FICHADAS');
+  if (!hFich) return _resp({ ok: true, total_filas: 0 });
+  const vals = hFich.getDataRange().getValues();
+  const tLectura = new Date().getTime() - t0;
+  if (vals.length < 2) return _resp({ ok: true, total_filas: 0, ms_lectura: tLectura });
+
+  const hdrs    = vals[0].map(function(h) { return String(h).trim(); });
+  const ci      = function(name) { return hdrs.indexOf(name); };
+  const iLocal  = ci('LOCAL');
+  const iAnio   = ci('AÑO');
+  const iMes    = ci('MES');
+  const iEmp    = ci('EMPLEADO/A');
+  const iEstado = ci('ESTADO');
+
+  const mapaEmpresa = {};
+  const hEmp = ss.getSheetByName('EMPLEADOS');
+  if (hEmp) {
+    const valsEmp = hEmp.getDataRange().getValues();
+    if (valsEmp.length > 1) {
+      const hdrsEmp = valsEmp[0].map(function(h) { return String(h).trim().toUpperCase(); });
+      const iNom    = hdrsEmp.indexOf('NOMBRE');
+      for (let i = 1; i < valsEmp.length; i++) {
+        const n = _normalizarNombreEmpleado(valsEmp[i][iNom]);
+        if (n) mapaEmpresa[n] = true;
+      }
+    }
+  }
+
+  const t1 = new Date().getTime();
+  const porAnioMes = {};
+  const localesVistos = {};
+  let anuladas = 0;
+  let sinMatch = 0;
+  const empleadosSinMatch = {};
+
+  for (let i = 1; i < vals.length; i++) {
+    const row = vals[i];
+    const estado = iEstado >= 0 ? (String(row[iEstado] || '').trim() || 'ACTIVA') : 'ACTIVA';
+    if (estado === 'ANULADA') anuladas++;
+
+    const clave = String(row[iAnio] || '') + '-' + String(row[iMes] || '');
+    porAnioMes[clave] = (porAnioMes[clave] || 0) + 1;
+
+    const localRaw = String(row[iLocal] || '').trim();
+    if (localRaw) localesVistos[localRaw] = (localesVistos[localRaw] || 0) + 1;
+
+    const empleadoNorm = _normalizarNombreEmpleado(row[iEmp]);
+    if (empleadoNorm && !mapaEmpresa[empleadoNorm]) {
+      sinMatch++;
+      empleadosSinMatch[row[iEmp]] = (empleadosSinMatch[row[iEmp]] || 0) + 1;
+    }
+  }
+  const tFiltrado = new Date().getTime() - t1;
+
+  const maxMes = Object.keys(porAnioMes).reduce(function(max, k) {
+    return porAnioMes[k] > (porAnioMes[max] || 0) ? k : max;
+  }, '');
+
+  return _resp({
+    ok: true,
+    total_filas: vals.length - 1,
+    ms_lectura: tLectura,
+    ms_filtrado_y_join: tFiltrado,
+    anuladas: anuladas,
+    por_anio_mes: porAnioMes,
+    mes_con_mas_filas: { clave: maxMes, filas: porAnioMes[maxMes] || 0 },
+    locales_vistos: localesVistos,
+    locales_no_oficiales: Object.keys(localesVistos).filter(function(l) { return !_SUC_EXPORT_POR_LOCAL[l]; }),
+    fichadas_sin_match_empleado: sinMatch,
+    empleados_sin_match_muestra: Object.keys(empleadosSinMatch).slice(0, 20),
+  });
 }
