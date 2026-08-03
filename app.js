@@ -4005,6 +4005,9 @@ function renderAdminInline() {
     const subLinea = emp.estado === 'inactivo'
       ? "<span style='color:var(--danger)'>Empleado inactivo</span>"
       : (catNom || '&nbsp;');
+    const nombreLegalHTML = emp.nombre_legal
+      ? "<span style='font-size:11px;color:var(--text-muted)'>" + emp.nombre_legal + "</span>"
+      : "<span class='badge badge-neutral' style='font-size:10px;padding:1px 6px'>Nombre legal pendiente</span>";
 
     const botones = [
       "<button class='dt-btn-icon' title='Editar' onclick=\"event.stopPropagation();abrirFormularioEmpleado('" + nomEnc + "')\">" + icon('edit','icon-16') + "</button>",
@@ -4024,8 +4027,9 @@ function renderAdminInline() {
       "<td><div class='dt-identity'>" +
         "<div class='dt-avatar-wrap'>" + avatarInner + "<span class='dt-avatar-dot dot-" + acceso.tono + "'></span></div>" +
         "<div class='dt-identity-text'>" +
-          "<div class='dt-identity-name'>" + nomMostrar + " <span style='font-size:10.5px;font-weight:600;color:var(--text-muted)'>#" + (numMatch ? numMatch[1] : '—') + "</span></div>" +
+          "<div class='dt-identity-name'>" + nomMostrar + " <span style='font-size:10.5px;font-weight:600;color:var(--text-muted)'>#" + (emp.numero_vendedor_sysneo || '—') + "</span></div>" +
           "<div class='dt-identity-sub'>" + subLinea + "</div>" +
+          "<div class='dt-identity-legal' style='margin-top:2px'>" + nombreLegalHTML + "</div>" +
         "</div>" +
       "</div></td>" +
       "<td class='col-suc'><span style='display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)'><span style='width:6px;height:6px;border-radius:50%;flex-shrink:0;background:" + suc.color + "'></span>" + suc.nombre + "</span></td>" +
@@ -4941,6 +4945,27 @@ async function cargarUsuariosAdmin() {
 
 function getUsuariosAdmin() { return USUARIOS_ADMIN_CACHE || []; }
 
+// NOMBRE_LEGAL (Fase 2) — viaja únicamente por el canal admin seguro
+// (GET /api/empleados/nombres-legales, JWT admin/jefe), nunca por
+// getPerfiles(). Mismo patrón de cache que USUARIOS_ADMIN_CACHE.
+let NOMBRES_LEGALES_CACHE = null;
+
+async function cargarNombresLegalesAdmin() {
+  const data = await apiEmpleados('/nombres-legales');
+  if (!data.ok) {
+    console.warn('No se pudo cargar nombres legales:', data.error);
+    if (!NOMBRES_LEGALES_CACHE) NOMBRES_LEGALES_CACHE = {};
+    return NOMBRES_LEGALES_CACHE;
+  }
+  NOMBRES_LEGALES_CACHE = {};
+  (data.nombres || []).forEach(n => {
+    NOMBRES_LEGALES_CACHE[_normalizarNombreEmpleadoJS(n.nombre)] = n.nombre_legal || '';
+  });
+  return NOMBRES_LEGALES_CACHE;
+}
+
+function getNombresLegalesAdmin() { return NOMBRES_LEGALES_CACHE || {}; }
+
 // Para pantallas admin que necesitan la lista de usuarios pero pueden
 // abrirse sin haber pasado antes por la vista Administración (p.ej. "Nuevo
 // evento" desde Calendario, "Nuevo anuncio"): asegura que se haya pedido
@@ -4975,8 +5000,13 @@ function obtenerEmpleadosAdmin() {
     if (u.empleadoNombre) usuarioPorNorm[_normalizarNombreEmpleadoJS(u.empleadoNombre)] = u;
   });
 
+  const nombresLegales = getNombresLegalesAdmin();
+
   return Object.keys(porNorm).map(norm => {
-    return Object.assign({}, porNorm[norm], { _usuario: usuarioPorNorm[norm] || null });
+    return Object.assign({}, porNorm[norm], {
+      _usuario: usuarioPorNorm[norm] || null,
+      nombre_legal: nombresLegales[norm] || '',
+    });
   }).sort((a, b) => {
     const na = parseInt(a.nombre) || 999, nb = parseInt(b.nombre) || 999;
     return na !== nb ? na - nb : a.nombre.localeCompare(b.nombre);
@@ -5002,7 +5032,7 @@ function _infoAccesoAdmin(emp) {
 }
 
 async function _refrescarAdminEmpleados() {
-  await Promise.all([cargarPerfiles(), cargarUsuariosAdmin()]);
+  await Promise.all([cargarPerfiles(), cargarUsuariosAdmin(), cargarNombresLegalesAdmin()]);
   renderAdminInline();
 }
 
@@ -5054,8 +5084,21 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
 
         <div id="formEmpTabPerfil" class="admin-tab-content">
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Nombre</label>
+            <label class="emp-filtro-label">Nombre operativo</label>
             ${nombreCampoHtml}
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Nombre legal completo${esNuevo ? ' *' : ''}</label>
+            <input type="text" class="admin-input" id="formEmpNombreLegal" value="${emp.nombre_legal || ''}"
+              placeholder="Ej: Aixa Rojas Fernández" autocomplete="off" ${esNuevo ? 'required' : ''} />
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+              Se utiliza para recibos de sueldo y documentación formal. No modifica el nombre usado en fichadas e historial.
+            </span>
+          </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Número de vendedor Sysneo</label>
+            <span class="${_infoSysneoAdmin(emp).clase}">${_infoSysneoAdmin(emp).label}</span>
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se edita desde la pestaña Datos laborales.</span>
           </div>
           <div class="admin-foto-preview" id="adminFotoPreview">
             ${emp.foto_url
@@ -5260,12 +5303,22 @@ async function guardarFormularioEmpleado() {
     return;
   }
 
+  const nombreLegal = (document.getElementById('formEmpNombreLegal')?.value || '').trim();
+  // Obligatorio solo al crear — igual que en Node y GAS, no confiar
+  // únicamente en esta validación del navegador (se repite en las dos
+  // capas del backend).
+  if (esNuevo && !nombreLegal) {
+    _mostrarErrorFormEmpleado('El nombre legal completo es obligatorio');
+    return;
+  }
+
   const fotoUrlRaw = (document.getElementById('formEmpFotoUrl')?.value || '').trim();
   const driveMatch = fotoUrlRaw.match(/\/d\/([^/]+)/);
   const fotoUrl = driveMatch ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200` : fotoUrlRaw;
 
   const empleadoPayload = {
     nombre,
+    nombre_legal:            nombreLegal,
     empresa:                document.getElementById('formEmpEmpresa')?.value || '',
     categoria_id:            document.getElementById('formEmpCategoria')?.value || '',
     regla_custom:            document.getElementById('formEmpReglaCustom')?.value || '',
