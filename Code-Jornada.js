@@ -654,6 +654,7 @@ function _filaEmpleadoAObjeto(headers, fila) {
   const val = function(name) { const c = col(name); return c >= 0 ? fila[c] : ''; };
   return {
     nombre:                  fila[0],
+    nombre_legal:             val('NOMBRE_LEGAL') || '',
     empresa:                 val('EMPRESA') || '',
     categoria_id:             val('CATEGORIA') || '',
     hs_base:                 val('HS_BASE') || 0,
@@ -688,6 +689,7 @@ function _upsertEmpleado(perfil) {
   _asegurarColumna(hoja, 'NUMERO_VENDEDOR_SYSNEO');
   _asegurarColumna(hoja, 'CELULAR');
   _asegurarColumna(hoja, 'ESTADO');
+  _asegurarColumna(hoja, 'NOMBRE_LEGAL'); // Fase 2 — campo permanente, independiente de NOMBRE
 
   const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(h => String(h).trim().toUpperCase());
   const col = function(name) { return headers.indexOf(name); };
@@ -716,6 +718,10 @@ function _upsertEmpleado(perfil) {
   if (col('CELULAR') >= 0 && perfil.celular !== undefined)             fila[col('CELULAR')]        = perfil.celular || '';
   if (col('NUMERO_VENDEDOR_SYSNEO') >= 0 && perfil.numero_vendedor_sysneo !== undefined) {
     fila[col('NUMERO_VENDEDOR_SYSNEO')] = perfil.numero_vendedor_sysneo || '';
+  }
+  // NOMBRE_LEGAL: independiente de NOMBRE, nunca lo pisa ni se deriva de él.
+  if (col('NOMBRE_LEGAL') >= 0 && perfil.nombre_legal !== undefined) {
+    fila[col('NOMBRE_LEGAL')] = perfil.nombre_legal || '';
   }
 
   const estadoPrevio = antes ? antes.estado : null;
@@ -871,6 +877,12 @@ function accionCrearEmpleadoConAcceso(datos) {
     const nombre = String(empleado.nombre || '').trim();
     if (!nombre) return _resp({ ok: false, error: 'El nombre del empleado es obligatorio' });
 
+    // NOMBRE_LEGAL es obligatorio solo al CREAR — empleados existentes
+    // pueden tenerlo vacío durante la transición (ver diseño Fase 2).
+    // Nunca confiar solo en la validación del navegador: se repite acá.
+    const nombreLegal = String(empleado.nombre_legal || '').trim();
+    if (!nombreLegal) return _resp({ ok: false, error: 'El nombre legal completo es obligatorio' });
+
     const nombreNorm = _normalizarNombreEmpleado(nombre);
     if (!_numeroSysneoDisponible(empleado.numero_vendedor_sysneo, nombreNorm)) {
       return _resp({ ok: false, error: 'Ese número de vendedor Sysneo ya está asignado a otro empleado' });
@@ -954,6 +966,33 @@ function accionEditarEmpleado(datos) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Lectura admin-only de NOMBRE_LEGAL — Fase 2. Deliberadamente NO se agrega
+// este campo a getPerfiles() (acción pública, sin autenticación, ver
+// diseño Fase 2 punto 5): en vez de eso, la Administración pide este par
+// nombre→nombre_legal por separado, por el canal seguro (Node JWT admin/jefe
+// → GAS BACKEND_SECRET), y lo cruza en el cliente con lo que ya trae
+// getPerfiles(). Mínima superficie: solo nombre + nombre_legal, nada más.
+function accionListarNombresLegales() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('EMPLEADOS');
+  if (!hoja) return _resp({ ok: true, nombres: [] });
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return _resp({ ok: true, nombres: [] });
+
+  const headers = vals[0].map(function(h) { return String(h).trim().toUpperCase(); });
+  const iNom   = headers.indexOf('NOMBRE');
+  const iLegal = headers.indexOf('NOMBRE_LEGAL');
+  if (iNom < 0) return _resp({ ok: true, nombres: [] });
+
+  const nombres = [];
+  for (let i = 1; i < vals.length; i++) {
+    const nombre = String(vals[i][iNom] || '').trim();
+    if (!nombre) continue;
+    nombres.push({ nombre: nombre, nombre_legal: iLegal >= 0 ? String(vals[i][iLegal] || '') : '' });
+  }
+  return _resp({ ok: true, nombres: nombres });
 }
 
 function accionCrearOActivarAcceso(datos) {
@@ -1133,6 +1172,7 @@ function despacharAccionSegura(envelope) {
   if (accion === 'cambiar_pin_propio')        return accionCambiarPinPropio(datos);
   if (accion === 'asignar_numero_sysneo')     return accionAsignarNumeroSysneo(datos);
   if (accion === 'exportar_fichadas')         return accionExportarFichadas(datos);
+  if (accion === 'listar_nombres_legales')    return accionListarNombresLegales();
 
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
