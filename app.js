@@ -4084,6 +4084,7 @@ function renderAdminInline() {
       "<button class='rail-item' onclick=\"switchAdminTab('certificados',this)\">" + icon('shieldCheck','icon-16') + "<span>Certificados</span><span class='rail-count'>" + CERTIFICADOS_CACHE.length + "</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('configuracion',this)\">" + icon('settings','icon-16') + "<span>Configuración</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('ajusteJornada',this)\">" + icon('clock','icon-16') + "<span>Ajuste de jornada</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('fichadas',this)\">" + icon('download','icon-16') + "<span>Fichadas</span></button>" +
     "</nav>" +
     "<main class='admin-main-v2'>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
@@ -4206,6 +4207,7 @@ function renderAdminInline() {
       "</div>" +
     "</div>" +
     "<div id='adminTabAjusteJornada' class='admin-tab-content' style='display:none'></div>" +
+    "<div id='adminTabFichadas' class='admin-tab-content' style='display:none'></div>" +
     "</main>" +
     "</div>" +
     "</div>";
@@ -4221,8 +4223,10 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabCertificados').style.display = tab === 'certificados'  ? 'block' : 'none';
   document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
   document.getElementById('adminTabAjusteJornada').style.display= tab === 'ajusteJornada'  ? 'block' : 'none';
+  document.getElementById('adminTabFichadas').style.display     = tab === 'fichadas'       ? 'block' : 'none';
   if (tab === 'configuracion') cargarConfigAdmin();
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
+  if (tab === 'fichadas') renderFichadasTab();
 }
 
 function _filtrarTablaCertAdmin() {
@@ -4396,6 +4400,214 @@ function renderAjusteJornadaTab() {
     "<div id='ajusteResultados' style='margin-top:1rem'>" +
       "<div class='ajuste-empty-state'>" + icon('fileText', 'icon-48') + "<p class='text-secondary'>Buscá un empleado y un período para ver sus jornadas.</p></div>" +
     "</div>";
+}
+
+// ── FICHADAS — Administración › Fichadas (Fase 1) ──────
+// Consulta + descarga vía croma-backend (JWT admin/jefe) → GAS
+// (accion=exportar_fichadas, protegida por BACKEND_SECRET). Nunca llama a
+// GAS directo desde acá — mismo patrón que el resto de Administración.
+let _fichadasUltimaConsulta = null; // { total, colaboradores, sin_empresa, preview }
+let _fichadasCargando = false;
+let _fichadasDebounceTimer = null;
+
+function renderFichadasTab() {
+  const cont = document.getElementById('adminTabFichadas');
+  if (!cont) return;
+
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const MESES_LBL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const empNombres = obtenerEmpleadosAdmin().map(e => e.nombre).sort();
+
+  cont.innerHTML =
+    "<div class='admin-head'>" +
+      "<h1>Fichadas</h1>" +
+      "<p>Consultá y descargá fichadas filtradas por período, empresa, sucursal o colaborador.</p>" +
+    "</div>" +
+    "<div class='filters-bar' style='flex-wrap:wrap'>" +
+      "<select class='f-select' id='fichAnio' onchange='_fichadasConsultar()'>" +
+        "<option value=''>Todos los años</option>" +
+        [anioActual, anioActual - 1, anioActual - 2].map(a => `<option value="${a}" ${a === anioActual ? 'selected' : ''}>${a}</option>`).join('') +
+      "</select>" +
+      "<select class='f-select' id='fichMes' onchange='_fichadasConsultar()'>" +
+        "<option value=''>Todos los meses</option>" +
+        MESES_LBL.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('') +
+      "</select>" +
+      "<select class='f-select' id='fichEmpresa' onchange='_fichadasConsultar()'>" +
+        "<option value=''>Todas las empresas</option>" +
+        EMPRESAS.map(e => `<option value="${e}">${e}</option>`).join('') +
+      "</select>" +
+      "<select class='f-select' id='fichSucursal' onchange='_fichadasConsultar()'>" +
+        "<option value=''>Todas las sucursales</option>" +
+        SUCURSALES.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('') +
+      "</select>" +
+      "<input type='text' class='f-select' id='fichColaborador' list='fichColaboradorList' placeholder='Todos los colaboradores (nómina completa)' oninput='_fichadasConsultarDebounced()' style='min-width:220px' />" +
+      "<datalist id='fichColaboradorList'>" + empNombres.map(n => `<option value="${n}">`).join('') + "</datalist>" +
+      "<button class='f-clear' onclick='_fichadasLimpiarFiltros()'>Limpiar</button>" +
+    "</div>" +
+    "<div class='card' id='fichAlcanceCard' style='padding:14px 16px;margin:14px 0'>" +
+      "<div id='fichAlcanceResumen' style='font-size:13px;color:var(--text-secondary);line-height:1.7'></div>" +
+      "<div class='stat-strip' id='fichStats' style='margin-top:10px'></div>" +
+    "</div>" +
+    "<div class='dt-wrap'>" +
+      "<div class='dt-scroll'>" +
+      "<table class='dt-table' id='fichTablaPreview'>" +
+        "<thead><tr><th>Empresa</th><th>Sucursal</th><th>Empleado</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Total hs</th><th>Estado</th></tr></thead>" +
+        "<tbody id='fichTablaPreviewBody'></tbody>" +
+      "</table>" +
+      "</div>" +
+    "</div>" +
+    "<div style='margin-top:14px;display:flex;justify-content:flex-end'>" +
+      "<button class='btn-connect' id='fichBtnDescargar' style='width:auto;padding:0 18px;height:38px;display:inline-flex;align-items:center;gap:7px' disabled onclick='_fichadasDescargar()'>" + icon('download','icon-16') + " Descargar CSV</button>" +
+    "</div>";
+
+  _fichadasConsultar();
+}
+
+function _fichadasConsultarDebounced() {
+  clearTimeout(_fichadasDebounceTimer);
+  _fichadasDebounceTimer = setTimeout(_fichadasConsultar, 400);
+}
+
+function _fichadasFiltrosActuales() {
+  return {
+    anio:        document.getElementById('fichAnio')?.value || '',
+    mes:         document.getElementById('fichMes')?.value || '',
+    empresa:     document.getElementById('fichEmpresa')?.value || '',
+    sucursal:    document.getElementById('fichSucursal')?.value || '',
+    colaborador: document.getElementById('fichColaborador')?.value.trim() || '',
+  };
+}
+
+function _fichadasLimpiarFiltros() {
+  ['fichAnio', 'fichMes', 'fichEmpresa', 'fichSucursal', 'fichColaborador'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  _fichadasConsultar();
+}
+
+function _fichadasQueryString(filtros) {
+  const qs = new URLSearchParams();
+  if (filtros.anio) qs.set('anio', filtros.anio);
+  if (filtros.mes) qs.set('mes', filtros.mes);
+  if (filtros.empresa) qs.set('empresa', filtros.empresa);
+  if (filtros.sucursal) qs.set('sucursal', filtros.sucursal);
+  if (filtros.colaborador) qs.set('colaborador', filtros.colaborador);
+  return qs.toString();
+}
+
+function _fichadasDescribirAlcance(f) {
+  const MESES_LBL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let periodo;
+  if (f.anio && f.mes)      periodo = `${MESES_LBL[Number(f.mes) - 1]} ${f.anio}`;
+  else if (f.anio)          periodo = `Año ${f.anio} (todos los meses)`;
+  else if (f.mes)           periodo = `${MESES_LBL[Number(f.mes) - 1]} (todos los años)`;
+  else                      periodo = 'Todo el historial';
+
+  const sucNombre = f.sucursal ? (SUCURSALES.find(s => s.id === f.sucursal)?.nombre || f.sucursal) : 'Todas';
+
+  return {
+    periodo,
+    empresa:     f.empresa || 'Todas',
+    sucursal:    sucNombre,
+    colaborador: f.colaborador || 'Nómina completa',
+  };
+}
+
+async function _fichadasConsultar() {
+  const cont = document.getElementById('adminTabFichadas');
+  if (!cont) return;
+  const filtros = _fichadasFiltrosActuales();
+  const alcance = _fichadasDescribirAlcance(filtros);
+  const btn = document.getElementById('fichBtnDescargar');
+
+  _fichadasCargando = true;
+  if (btn) btn.disabled = true;
+
+  const resumenEl = document.getElementById('fichAlcanceResumen');
+  const statsEl   = document.getElementById('fichStats');
+  if (resumenEl) {
+    resumenEl.innerHTML =
+      `<strong>Período:</strong> ${alcance.periodo} &nbsp;·&nbsp; ` +
+      `<strong>Empresa:</strong> ${alcance.empresa} &nbsp;·&nbsp; ` +
+      `<strong>Sucursal:</strong> ${alcance.sucursal} &nbsp;·&nbsp; ` +
+      `<strong>Colaborador:</strong> ${alcance.colaborador}`;
+  }
+  if (statsEl) statsEl.innerHTML = `<div class='stat-item'><span class='stat-num'>…</span><span class='stat-label'>consultando</span></div>`;
+
+  const data = await apiFichadas(`/exportar?${_fichadasQueryString(filtros)}`, { method: 'GET' });
+  _fichadasCargando = false;
+
+  const tbody = document.getElementById('fichTablaPreviewBody');
+
+  if (!data.ok) {
+    if (statsEl) statsEl.innerHTML = `<div class='alert alert-danger' style='margin:0'>${icon('alertTriangle','icon-16')} ${data.error || 'No se pudo consultar las fichadas.'}</div>`;
+    if (tbody) tbody.innerHTML = "<tr><td colspan='8' style='text-align:center;padding:2rem;color:var(--text-muted)'>—</td></tr>";
+    _fichadasUltimaConsulta = null;
+    if (btn) btn.disabled = true;
+    return;
+  }
+
+  _fichadasUltimaConsulta = data;
+
+  if (statsEl) {
+    statsEl.innerHTML =
+      `<div class='stat-item'><span class='stat-num'>${data.total}</span><span class='stat-label'>fichadas encontradas</span></div>` +
+      `<span class='stat-sep'></span>` +
+      `<div class='stat-item'><span class='stat-num'>${data.colaboradores}</span><span class='stat-label'>colaboradores</span></div>` +
+      `<span class='stat-sep'></span>` +
+      `<div class='stat-item'><span class='stat-num' style='${data.sin_empresa > 0 ? 'color:var(--warning)' : ''}'>${data.sin_empresa}</span><span class='stat-label'>sin empresa asociada</span></div>`;
+  }
+
+  if (tbody) {
+    if (!data.preview.length) {
+      tbody.innerHTML = "<tr><td colspan='8' style='text-align:center;padding:2.5rem;color:var(--text-muted);font-size:13px'>Sin fichadas para este filtro.</td></tr>";
+    } else {
+      tbody.innerHTML = data.preview.map(f =>
+        `<tr><td>${f.empresa || '—'}</td><td>${f.sucursal}</td><td>${f.empleado}</td><td>${f.fecha}</td><td>${f.entrada}</td><td>${f.salida_hs}</td><td>${f.total}</td><td>${f.estado}</td></tr>`
+      ).join('');
+      if (data.total > data.preview.length) {
+        tbody.innerHTML += `<tr><td colspan='8' style='text-align:center;padding:10px;color:var(--text-muted);font-size:12px'>… y ${data.total - data.preview.length} fichadas más (vista previa limitada a ${data.preview.length})</td></tr>`;
+      }
+    }
+  }
+
+  if (btn) btn.disabled = data.total === 0;
+}
+
+async function _fichadasDescargar() {
+  if (_fichadasCargando || !_fichadasUltimaConsulta || _fichadasUltimaConsulta.total === 0) return;
+  const btn = document.getElementById('fichBtnDescargar');
+  if (btn) btn.disabled = true;
+
+  const filtros = _fichadasFiltrosActuales();
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/fichadas/exportar.csv?${_fichadasQueryString(filtros)}`, {
+      headers: { 'Authorization': `Bearer ${_getToken()}` },
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.error || 'No se pudo descargar el archivo');
+      return;
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const nombreArchivo = (cd.match(/filename="(.+)"/) || [])[1] || 'fichadas.csv';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast('Error de conexión al descargar');
+  } finally {
+    if (btn) btn.disabled = !_fichadasUltimaConsulta || _fichadasUltimaConsulta.total === 0;
+  }
 }
 
 async function buscarJornadasAjuste() {
@@ -4711,6 +4923,7 @@ async function _apiFetch(base, path, opciones) {
 }
 const apiEmpleados = (path, opciones) => _apiFetch('/api/empleados', path, opciones);
 const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opciones);
+const apiFichadas  = (path, opciones) => _apiFetch('/api/fichadas', path, opciones);
 
 // ── Fuente del listado administrativo ─────────────────
 let USUARIOS_ADMIN_CACHE = null; // lista saneada (sin PIN) desde GET /api/empleados/usuarios
