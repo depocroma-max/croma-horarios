@@ -1133,7 +1133,6 @@ function despacharAccionSegura(envelope) {
   if (accion === 'cambiar_pin_propio')        return accionCambiarPinPropio(datos);
   if (accion === 'asignar_numero_sysneo')     return accionAsignarNumeroSysneo(datos);
   if (accion === 'exportar_fichadas')         return accionExportarFichadas(datos);
-  if (accion === 'diagnostico_fichadas')      return accionDiagnosticoFichadas();
 
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
@@ -3292,6 +3291,31 @@ function accionExportarFichadas(datos) {
     });
   }
 
+  // Auditoría mínima — solo cuando Node confirma que esto es una descarga
+  // real (no cada consulta de vista previa mientras el admin toca filtros).
+  // Actor viene de datos.actor, que Node completa desde el JWT verificado
+  // server-side (req.user.usuario) — nunca de un campo mandado por el
+  // navegador. No se guarda contenido del CSV ni fichadas individuales,
+  // solo el resumen del filtro usado y la cantidad de registros.
+  if (datos.confirmar_auditoria === true) {
+    registrarAuditoria(
+      datos.actor,
+      'EXPORTACION_FICHADAS',
+      'FICHADAS',
+      (anio || 'todos') + '-' + (mesTextoFiltro || 'todos'),
+      null,
+      {
+        fecha: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'),
+        anio: anio || 'todos',
+        mes: mesTextoFiltro || 'todos',
+        empresa: empresa || 'todas',
+        sucursal: sucursal ? (_SUC_EXPORT_POR_ID[sucursal].nombre) : 'todas',
+        colaborador: colaborador || 'NOMINA_COMPLETA',
+        cantidad: salida.length,
+      }
+    );
+  }
+
   return _resp({
     ok: true,
     fichadas: salida,
@@ -3303,10 +3327,15 @@ function accionExportarFichadas(datos) {
   });
 }
 
-// Variante de solo diagnóstico (sin filtros, sin devolver filas) para medir
-// volumen real antes de habilitar la exportación en producción. Misma
-// lectura que accionExportarFichadas, agregada por año/mes para no exponer
-// datos individuales de más al pedir la medición. Solo lectura, no escribe.
+// HERRAMIENTA INTERNA — NO desplegada como acción del dispatcher (retirada
+// de despacharAccionSegura tras usarla para medir FICHADAS antes de la
+// Fase 1, 2026-08-03). Se conserva en el archivo como referencia/documentación
+// y para volver a usarla manualmente si hace falta re-medir: ejecutarla desde
+// el editor de Apps Script ("Ejecutar" → accionDiagnosticoFichadas → ver
+// Registro de ejecución), nunca vía HTTP. Si se necesita de nuevo como
+// endpoint, hay que agregarla explícitamente al dispatcher otra vez.
+// Solo lectura, no escribe. Agrega por año/mes para no exponer datos
+// individuales de más al pedir la medición.
 function accionDiagnosticoFichadas() {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   const t0    = new Date().getTime();
