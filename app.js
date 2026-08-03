@@ -4459,8 +4459,13 @@ function renderFichadasTab() {
       "<button class='f-clear' onclick='_fichadasLimpiarFiltros()'>Limpiar</button>" +
     "</div>" +
     "<div class='card' id='fichAlcanceCard' style='padding:14px 16px;margin:14px 0'>" +
-      "<div id='fichAlcanceResumen' style='font-size:13px;color:var(--text-secondary);line-height:1.7'></div>" +
-      "<div class='stat-strip' id='fichStats' style='margin-top:10px'></div>" +
+      "<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap'>" +
+        "<div style='flex:1;min-width:220px'>" +
+          "<div id='fichAlcanceResumen' style='font-size:13px;color:var(--text-secondary);line-height:1.7'></div>" +
+          "<div class='stat-strip' id='fichStats' style='margin-top:10px'></div>" +
+        "</div>" +
+        "<button class='btn-connect' id='fichBtnDescargar' style='width:auto;padding:0 18px;height:38px;margin:0;display:inline-flex;align-items:center;gap:7px;white-space:nowrap' disabled onclick='_fichadasDescargar()'>" + icon('download','icon-16') + " Descargar CSV</button>" +
+      "</div>" +
     "</div>" +
     "<div class='dt-wrap'>" +
       "<div class='dt-scroll'>" +
@@ -4469,9 +4474,6 @@ function renderFichadasTab() {
         "<tbody id='fichTablaPreviewBody'></tbody>" +
       "</table>" +
       "</div>" +
-    "</div>" +
-    "<div style='margin-top:14px;display:flex;justify-content:flex-end'>" +
-      "<button class='btn-connect' id='fichBtnDescargar' style='width:auto;padding:0 18px;height:38px;display:inline-flex;align-items:center;gap:7px' disabled onclick='_fichadasDescargar()'>" + icon('download','icon-16') + " Descargar CSV</button>" +
     "</div>";
 
   _fichadasConsultar();
