@@ -1020,6 +1020,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
   const numMatch   = nombreEmp.match(/^(\d+)\s+(.+)$/);
   const numVend    = numMatch ? numMatch[1] : '';
   const nomMostrar = numMatch ? numMatch[2] : nombreEmp;
+  const nombreLegalDetalle = getNombresLegales()[_normalizarNombreEmpleadoJS(nombreEmp)] || '';
 
   // Obtener períodos disponibles ordenados cronológicamente
   const ORDEN_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
@@ -1240,6 +1241,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                   ${numVend ? `<span class="detalle-num" style="background:${suc.colorLight};color:${suc.color}">#${numVend}</span>` : ''}
                   ${nomMostrar}
                 </div>
+                ${nombreLegalDetalle ? `<div style="font-size:12px;color:var(--text-muted)">${nombreLegalDetalle}</div>` : ''}
                 <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
                 ${(empresaEmp || jornadaEmp) ? `<div class="detalle-chips">
                   ${empresaEmp ? `<span class="detalle-chip detalle-chip-empresa">${icon('building','icon-12')}${empresaEmp}</span>` : ''}
@@ -3353,6 +3355,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     : (numVend ? `<span style="font-size:18px;font-weight:700;color:${suc.color}">#${numVend}</span>` : `<span style="font-size:18px;font-weight:700;color:${suc.color}">${iniciales}</span>`);
 
   const primerNombre = (nomMostrar || '').split(' ')[0] || nomMostrar;
+  const nombreLegalPortal = getNombresLegales()[_normalizarNombreEmpleadoJS(nombreEmp)] || '';
 
   function normalizarLibreTxt(txt) {
     const v = String(txt || '').trim();
@@ -3551,6 +3554,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <div class="portal-profile-info">
             <span class="portal-kicker">Portal empleado</span>
             <h1 class="portal-greeting">Hola ${primerNombre}</h1>
+            ${nombreLegalPortal ? `<p style="font-size:12px;color:var(--text-muted);margin-top:-4px">${nombreLegalPortal}</p>` : ''}
             <p>${suc.nombre}</p>
             <div class="emp-badges-row">${empresaBadge}${catBadge}</div>
           </div>
