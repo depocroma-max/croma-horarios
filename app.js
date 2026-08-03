@@ -753,12 +753,16 @@ function renderEmpleados(datos) {
     const numMatch = e.nombre.match(/^(\d+)\s+(.+)$/);
     const numVend  = numMatch ? numMatch[1] : '';
     const nomMostrar = numMatch ? numMatch[2] : e.nombre;
-    const nombrePartes = nomMostrar.split(' ');
+    // Nombre legal si ya está cargado; si no, el operativo de siempre —
+    // la tarjeta nunca se queda sin nombre.
+    const nombreLegal = getNombresLegales()[_normalizarNombreEmpleadoJS(e.nombre)] || '';
+    const nombreParaMostrar = nombreLegal || nomMostrar;
+    const nombrePartes = nombreParaMostrar.split(' ');
     const iniciales = nombrePartes.slice(0,2).map(p => p[0]?.toUpperCase()).join('');
 
     // Avatar: foto o iniciales
     const avatarInner = e.foto_url
-      ? `<img src="${e.foto_url}" alt="${nomMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.parentElement.innerHTML='${iniciales}'">`
+      ? `<img src="${e.foto_url}" alt="${nombreParaMostrar}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.parentElement.innerHTML='${iniciales}'">`
       : (numVend ? `<span class="emp-num-vend">${numVend}</span>` : iniciales);
 
     // Badge empresa
@@ -777,7 +781,7 @@ function renderEmpleados(datos) {
     const celular = EMPLEADOS_PERFILES[e.nombre]?.celular;
     const waBtn = celular
       ? `<a href="https://wa.me/549${celular}" target="_blank" onclick="event.stopPropagation()"
-           class="wa-btn" title="WhatsApp de ${nomMostrar}">
+           class="wa-btn" title="WhatsApp de ${nombreParaMostrar}">
            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.855L.057 23.07a.75.75 0 0 0 .918.908l5.339-1.453A11.944 11.944 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.896 0-3.67-.52-5.188-1.428l-.372-.22-3.867 1.052 1.081-3.775-.242-.389A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
@@ -797,7 +801,7 @@ function renderEmpleados(datos) {
             ${avatarInner}
           </div>
           <div style="flex:1;min-width:0">
-            <div class="emp-nombre">${nomMostrar}</div>
+            <div class="emp-nombre">${nombreParaMostrar}</div>
             <div class="emp-suc" style="color:${s.color}">${s.nombre}${numVend ? ` · #${numVend}` : ''}</div>
             <div class="emp-badges-row">${inactivoBadge}${empresaBadge}${catBadge}</div>
           </div>
@@ -2307,6 +2311,7 @@ async function cargarDatos(urls) {
   // acá, para no pedirla de arriba para todos los empleados.
   cargarPerfiles();
   cargarCertificados();
+  cargarNombresLegales(); // visible para cualquier rol logueado (ver diseño)
 
   const urlUnica = urls['unica'] || null;
   if (!urlUnica) {
@@ -4945,13 +4950,15 @@ async function cargarUsuariosAdmin() {
 
 function getUsuariosAdmin() { return USUARIOS_ADMIN_CACHE || []; }
 
-// NOMBRE_LEGAL (Fase 2) — viaja únicamente por el canal admin seguro
-// (GET /api/empleados/nombres-legales, JWT admin/jefe), nunca por
-// getPerfiles(). Mismo patrón de cache que USUARIOS_ADMIN_CACHE.
+// NOMBRE_LEGAL (Fase 2) — viaja por un canal autenticado pero SIN
+// restricción de rol (GET /api/nombres-legales, cualquier sesión con JWT
+// válido), nunca por getPerfiles() (público, sin auth). Visible para todo
+// el staff logueado a propósito — decisión confirmada explícitamente,
+// ver conversación de diseño — no solo admin/jefe como al principio.
 let NOMBRES_LEGALES_CACHE = null;
 
-async function cargarNombresLegalesAdmin() {
-  const data = await apiEmpleados('/nombres-legales');
+async function cargarNombresLegales() {
+  const data = await _apiFetch('/api/nombres-legales', '', { method: 'GET' });
   if (!data.ok) {
     console.warn('No se pudo cargar nombres legales:', data.error);
     if (!NOMBRES_LEGALES_CACHE) NOMBRES_LEGALES_CACHE = {};
@@ -4964,7 +4971,7 @@ async function cargarNombresLegalesAdmin() {
   return NOMBRES_LEGALES_CACHE;
 }
 
-function getNombresLegalesAdmin() { return NOMBRES_LEGALES_CACHE || {}; }
+function getNombresLegales() { return NOMBRES_LEGALES_CACHE || {}; }
 
 // Para pantallas admin que necesitan la lista de usuarios pero pueden
 // abrirse sin haber pasado antes por la vista Administración (p.ej. "Nuevo
@@ -5000,7 +5007,7 @@ function obtenerEmpleadosAdmin() {
     if (u.empleadoNombre) usuarioPorNorm[_normalizarNombreEmpleadoJS(u.empleadoNombre)] = u;
   });
 
-  const nombresLegales = getNombresLegalesAdmin();
+  const nombresLegales = getNombresLegales();
 
   return Object.keys(porNorm).map(norm => {
     return Object.assign({}, porNorm[norm], {
@@ -5032,7 +5039,7 @@ function _infoAccesoAdmin(emp) {
 }
 
 async function _refrescarAdminEmpleados() {
-  await Promise.all([cargarPerfiles(), cargarUsuariosAdmin(), cargarNombresLegalesAdmin()]);
+  await Promise.all([cargarPerfiles(), cargarUsuariosAdmin(), cargarNombresLegales()]);
   renderAdminInline();
 }
 
