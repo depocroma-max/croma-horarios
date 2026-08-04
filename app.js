@@ -5138,7 +5138,8 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
   <div class="admin-overlay" id="adminOverlay" onclick="cerrarFormularioEmpleado(event)">
     <div class="admin-panel" onclick="event.stopPropagation()">
       ${headerHtml}
-      <div class="admin-form" style="overflow:auto">
+      <div class="admin-form admin-form-sticky-footer">
+        <div class="admin-form-body">
         <input type="hidden" id="formEmpNombreOriginal" value="${nomEnc}" />
         <input type="hidden" id="formEmpTieneAccesoOriginal" value="${tieneAcceso ? '1' : ''}" />
         <div class="admin-tabs" id="formEmpTabs">
@@ -5247,12 +5248,13 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
         </div>` : ''}
 
         <p id="formEmpError" class="alert alert-danger" style="display:none;margin-top:1rem"></p>
+        </div>
 
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+        <div class="admin-form-footer">
           <button class="btn-connect" style="margin:0" id="formEmpBtnGuardar" onclick="guardarFormularioEmpleado()">
             ${esNuevo ? 'Crear empleado' : 'Guardar cambios'}
           </button>
-          <button class="btn-demo" onclick="cerrarFormularioEmpleado()">Cancelar</button>
+          <button class="btn-demo" id="formEmpBtnCancelar" onclick="cerrarFormularioEmpleado()">Cancelar</button>
         </div>
       </div>
     </div>
@@ -5343,6 +5345,20 @@ function _switchFormEmpTab(tab, btn) {
     tabRecibos.style.display = tab === 'recibos' ? '' : 'none';
     if (tab === 'recibos') _cargarRecibosEmpleado();
   }
+  _actualizarFooterFormEmp(tab);
+}
+
+// El footer es consciente de la pestaña activa: en Recibos no hay "Guardar
+// cambios" porque no es un formulario que se guarda — cada acción (subir,
+// reemplazar) ya tiene su propio flujo. Mismo botón "Cancelar", solo
+// cambia de texto a "Cerrar" para no sumar un botón nuevo.
+function _actualizarFooterFormEmp(tab) {
+  const btnGuardar = document.getElementById('formEmpBtnGuardar');
+  const btnCancelar = document.getElementById('formEmpBtnCancelar');
+  if (!btnGuardar || !btnCancelar) return;
+  const esRecibos = tab === 'recibos';
+  btnGuardar.style.display = esRecibos ? 'none' : '';
+  btnCancelar.textContent = esRecibos ? 'Cerrar' : 'Cancelar';
 }
 
 function cerrarFormularioEmpleado(event) {
