@@ -3274,6 +3274,11 @@ function mostrarVistaEmpleadoError() {
 }
 
 function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
+  // Estado de la pestaña Recibos del Portal — se reinicia en cada render
+  // del Portal (login, refresh manual), nunca reutiliza datos de una
+  // sesión/empleado anterior. Independiente de _recibosFicha (admin).
+  _recibosPortal = { cargado: false, lista: [] };
+
   const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
   const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
   const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
@@ -3629,6 +3634,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Historial</button>
         <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">${icon('palmtree','icon-14')} Vacaciones</button>
         <button class="detalle-tab" onclick="switchEvTab('bancoHoras',this)">${icon('timer','icon-14')} Banco de horas</button>
+        <button class="detalle-tab" onclick="switchEvTab('recibos',this)">${icon('fileText','icon-14')} Recibos</button>
       </div>
 
       <!-- CONTENIDO JORNADA -->
@@ -3694,6 +3700,20 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- CONTENIDO BANCO DE HORAS EMPLEADO -->
       <div id="evTabBancoHoras" style="display:none;padding:1.5rem">
         <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+      </div>
+
+      <!-- CONTENIDO RECIBOS EMPLEADO (Fase 3, Commit 6 — Portal Empleado) -->
+      <div id="evTabRecibos" style="display:none;padding:1.5rem">
+        <div class="emp-vista-toolbar">
+          <div>
+            <h2 style="font-family:var(--font-display);font-size:18px;letter-spacing:.5px;color:#0d0d0d;margin:0">Mis recibos</h2>
+            <p style="font-size:12px;color:#94a3b8;margin:2px 0 0">Tus recibos de sueldo publicados van a aparecer acá.</p>
+          </div>
+          <button class="detalle-footer-refresh" onclick="_recargarRecibosPortal()" title="Actualizar" aria-label="Actualizar">${icon('refresh','icon-14')}</button>
+        </div>
+        <div id="portalRecibosContenido">
+          <div class="ajuste-empty-state"><div class="spinner" role="status" aria-label="Cargando"></div><p class="text-secondary">Cargando tus recibos…</p></div>
+        </div>
       </div>
 
     </div>
@@ -7094,11 +7114,155 @@ function switchEvTab(tab, btn) {
   const jornada    = document.getElementById('evTabJornada');
   const vacaciones = document.getElementById('evTabVacaciones');
   const bancoHoras = document.getElementById('evTabBancoHoras');
+  const recibos    = document.getElementById('evTabRecibos');
   if (jornada)    jornada.style.display    = tab === 'jornada'    ? 'block' : 'none';
   if (vacaciones) vacaciones.style.display = tab === 'vacaciones' ? 'block' : 'none';
   if (bancoHoras) bancoHoras.style.display = tab === 'bancoHoras' ? 'block' : 'none';
+  if (recibos) {
+    recibos.style.display = tab === 'recibos' ? 'block' : 'none';
+    if (tab === 'recibos') _cargarRecibosPortal();
+  }
 }
 
+// ══════════════════════════════════════════════════════
+//  RECIBOS — PORTAL EMPLEADO (Fase 3, Commit 6)
+//  Autoservicio: solo lo propio. La identidad SIEMPRE la resuelve el
+//  backend vía resolverEmpleadoAutenticado() a partir del JWT — este
+//  código nunca manda nombre/empresa/usuario, solo pide GET /mi-perfil
+//  (sin parámetros) y, para descargar, el ID del recibo. Estado propio
+//  (_recibosPortal), separado a propósito de _recibosFicha (admin): son
+//  contextos y permisos distintos, no deben compartir caché.
+// ══════════════════════════════════════════════════════
+let _recibosPortal = null;   // { cargado: boolean, lista: [] } — se recrea en cada render del Portal
+let _recibosPortalGen = 0;   // token de la consulta en vuelo — descarta respuestas obsoletas
+
+function _cargarRecibosPortal(forzar) {
+  if (!_recibosPortal) return;
+  if (_recibosPortal.cargado && !forzar) return;
+  _recibosPortal.cargado = true;
+  _fetchRecibosPortal();
+}
+
+// Mensajes fijos por código HTTP — nunca se muestra el mensaje crudo del
+// backend ni un código interno. _msgApi() (compatibilidad ya documentada
+// en app.js) no se usa acá porque necesitamos el status HTTP, que ese
+// shim no expone.
+function _mensajeErrorRecibosPortal(status) {
+  const MAPA = {
+    401: 'Tu sesión venció. Volvé a iniciar sesión.',
+    403: 'No tenés permiso para acceder a esta sección.',
+    404: 'El recibo no está disponible.',
+    409: 'No se pudo validar tu identidad. Volvé a iniciar sesión.',
+    503: 'El servicio está temporalmente no disponible. Probá nuevamente.',
+  };
+  return MAPA[status] || 'No pudimos cargar tus recibos.';
+}
+
+// fetch crudo (no _apiFetch) porque necesitamos el status HTTP para el
+// mapeo de mensajes — mismo motivo por el que _fichadasDescargar()/
+// _recibosDescargarAdmin() ya evitan _apiFetch.
+async function _fetchRecibosPortalRaw() {
+  const resp = await fetch(`${BACKEND_URL}/api/recibos/mi-perfil`, {
+    headers: { 'Authorization': `Bearer ${_getToken()}` },
+  });
+  let data = null;
+  try { data = await resp.json(); } catch (e) {}
+  return { status: resp.status, ok: resp.ok, data };
+}
+
+async function _fetchRecibosPortal() {
+  const cont = document.getElementById('portalRecibosContenido');
+  if (!cont || !_recibosPortal) return;
+  cont.innerHTML = "<div class='ajuste-empty-state'><div class='spinner' role='status' aria-label='Cargando'></div><p class='text-secondary'>Cargando tus recibos…</p></div>";
+
+  const gen = ++_recibosPortalGen;
+  const sesionAlPedir = sesionActual;
+  let resultado;
+  try {
+    resultado = await _fetchRecibosPortalRaw();
+  } catch (e) {
+    resultado = { status: 0, ok: false, data: null };
+  }
+
+  // Descartar si mientras esperábamos: se cerró sesión o se inició otra
+  // (sesionActual se reemplaza siempre por un objeto nuevo, nunca se
+  // muta — comparar por referencia alcanza), o si una consulta más nueva
+  // (recarga manual repetida) ya actualizó el token de generación.
+  if (gen !== _recibosPortalGen) return;
+  if (sesionActual !== sesionAlPedir || !_recibosPortal) return;
+  if (!document.getElementById('portalRecibosContenido')) return;
+
+  if (!resultado.ok || !resultado.data || resultado.data.ok !== true) {
+    _mostrarErrorRecibosPortal(_mensajeErrorRecibosPortal(resultado.status));
+    return;
+  }
+  _recibosPortal.lista = resultado.data.recibos || [];
+  _renderListadoRecibosPortal();
+}
+
+function _mostrarErrorRecibosPortal(mensaje) {
+  const cont = document.getElementById('portalRecibosContenido');
+  if (!cont) return;
+  cont.innerHTML = `<div class="alert alert-danger" style="font-size:12.5px">${icon('alertTriangle','icon-16')} ${mensaje}</div>`;
+}
+
+// El backend ya filtra solo ACTIVO y nunca incluye historial de
+// reemplazados para este endpoint (ver GET /recibos/mi-perfil en
+// croma-backend) — acá solo se ordena por prolijidad/defensa adicional.
+function _renderListadoRecibosPortal() {
+  const cont = document.getElementById('portalRecibosContenido');
+  if (!cont || !_recibosPortal) return;
+
+  const lista = (_recibosPortal.lista || []).slice().sort((a, b) => {
+    if (a.periodo !== b.periodo) return a.periodo < b.periodo ? 1 : -1;
+    return (b.version || 0) - (a.version || 0);
+  });
+
+  if (lista.length === 0) {
+    cont.innerHTML = `<div class="ajuste-empty-state">${icon('fileText','icon-48')}<p class="text-secondary" style="font-weight:600;color:#1e293b;margin:0">Todavía no tenés recibos disponibles</p><p class="text-secondary" style="margin:0">Cuando se publique un recibo de sueldo, vas a poder verlo y descargarlo desde acá.</p></div>`;
+    return;
+  }
+
+  const filasDesktop = lista.map(r => {
+    const idEnc = String(r.id).replace(/'/g, "\\'");
+    const archivoEsc = String(r.nombre_archivo || '').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const versionTxt = r.version > 1 ? `<div style="font-size:11px;color:#94a3b8">v${r.version}</div>` : '';
+    return `<tr>
+      <td>${_formatearPeriodoRecibo(r.periodo)}${versionTxt}</td>
+      <td>${r.empresa || '—'}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${archivoEsc}">${archivoEsc}</td>
+      <td>${_formatearFechaRecibo(r.fecha_subida)}</td>
+      <td style="text-align:center"><button class="btn-detalle-accion" type="button" onclick="_recibosPortalDescargar('${idEnc}', this)">${icon('download','icon-14')} Descargar</button></td>
+    </tr>`;
+  }).join('');
+
+  const cardsMobile = lista.map(r => {
+    const idEnc = String(r.id).replace(/'/g, "\\'");
+    const archivoEsc = String(r.nombre_archivo || '').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const versionTxt = r.version > 1 ? ` · v${r.version}` : '';
+    return `<div class="ev-card">
+      <div class="ev-card-top">
+        <div class="ev-card-fecha">
+          <span class="ev-card-dia-sem">${r.empresa || ''}</span>
+          <span class="ev-card-fecha-str">${_formatearPeriodoRecibo(r.periodo)}${versionTxt}</span>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#666660;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${archivoEsc}">${archivoEsc}</div>
+      <div style="font-size:11px;color:#a0a09a;margin-top:2px">Publicado ${_formatearFechaRecibo(r.fecha_subida)}</div>
+      <button class="btn-detalle-accion" type="button" style="width:100%;justify-content:center;margin-top:8px" onclick="_recibosPortalDescargar('${idEnc}', this)">${icon('download','icon-14')} Descargar</button>
+    </div>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="detalle-tabla-wrap ev-tabla-desktop">
+      <table class="detalle-tabla">
+        <thead><tr><th>Período</th><th>Empresa</th><th>Archivo</th><th>Publicado</th><th style="text-align:center">Acción</th></tr></thead>
+        <tbody>${filasDesktop}</tbody>
+      </table>
+    </div>
+    <div class="ev-cards-mobile">${cardsMobile}</div>
+  `;
+}
 
 // ══════════════════════════════════════════════════════
 //  CAMPANA DE NOTIFICACIONES
