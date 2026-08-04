@@ -3554,3 +3554,284 @@ function accionDiagnosticoDrive(datos) {
 
   return _resp(resultado);
 }
+
+// ══════════════════════════════════════════════════════
+//  RECIBOS — Fase 3, Commit 2: modelo de datos (hoja RECIBOS) y helpers
+//  internos. SIN acciones nuevas en despacharAccionSegura todavía (eso es
+//  el Commit 3) — nada de este bloque es alcanzable por HTTP en este
+//  commit. No escribe archivos reales ni crea carpetas de producto: los
+//  helpers de Drive existen pero nadie los llama todavía.
+// ══════════════════════════════════════════════════════
+
+const RECIBOS_HEADERS = [
+  'ID', 'EMPLEADO', 'NOMBRE_LEGAL', 'EMPRESA', 'PERIODO', 'TIPO',
+  'NOMBRE_ARCHIVO', 'MIME_TYPE', 'TAMANO_BYTES', 'DRIVE_FILE_ID',
+  'ESTADO', 'VERSION', 'SUBIDO_POR', 'FECHA_SUBIDA', 'REEMPLAZA_A',
+  'FECHA_DESCARGA_EMPLEADO',
+];
+
+const RECIBOS_ESTADOS_VALIDOS  = ['ACTIVO', 'REEMPLAZADO'];
+const RECIBOS_EMPRESAS_VALIDAS = ['MOSHE SRL', 'CROMAWAVE SRL'];
+const RECIBOS_MIME_VALIDO      = 'application/pdf';
+
+// ── Hoja: creación/actualización idempotente ───────────────────────────
+function _asegurarHojaRecibos() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('RECIBOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('RECIBOS');
+    hoja.getRange(1, 1, 1, RECIBOS_HEADERS.length).setValues([RECIBOS_HEADERS]);
+    hoja.setFrozenRows(1);
+    return hoja;
+  }
+  // Ya existía (ej. re-ejecución de esta función) — asegura cada columna
+  // sin reordenar ni tocar las que ya estén. Mismo patrón que _upsertEmpleado.
+  RECIBOS_HEADERS.forEach(function(h) { _asegurarColumna(hoja, h); });
+  return hoja;
+}
+
+// ── ID único — mismo patrón atómico ya probado en generarNuevoIdFichada() ──
+function _formatearIdRecibo(n) { return 'REC' + String(n).padStart(6, '0'); }
+
+function generarNuevoIdRecibo() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const props  = PropertiesService.getScriptProperties();
+    const actual = parseInt(props.getProperty('NEXT_RECIBO_ID'), 10) || 1;
+    props.setProperty('NEXT_RECIBO_ID', String(actual + 1));
+    return _formatearIdRecibo(actual);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Validaciones puras ──────────────────────────────────────────────────
+function _validarPeriodoRecibo(periodo) {
+  const p = String(periodo || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(p)) return false;
+  const anio = parseInt(p.slice(0, 4), 10);
+  return anio >= 2020 && anio <= 2100;
+}
+
+function _validarEmpresaRecibo(empresa) {
+  return RECIBOS_EMPRESAS_VALIDAS.indexOf(empresa) >= 0;
+}
+
+function _validarEstadoRecibo(estado) {
+  return RECIBOS_ESTADOS_VALIDOS.indexOf(estado) >= 0;
+}
+
+// Saca separadores de ruta, caracteres de control y colapsa "..", recorta
+// longitud — nunca confía en el nombre que venga del cliente para usarlo
+// como nombre de archivo real en Drive.
+function _sanearNombreArchivoRecibo(nombre) {
+  let n = String(nombre || '').trim();
+  n = n.replace(/[\/\\]/g, '_');
+  n = n.replace(/[\x00-\x1f\x7f]/g, '');
+  n = n.replace(/\.\.+/g, '.');
+  if (n.length > 150) n = n.slice(0, 150);
+  return n || 'recibo.pdf';
+}
+
+function _slugEmpresaRecibo(empresa) {
+  return String(empresa || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// ── Resolución de empleado — nunca confía en NOMBRE_LEGAL/EMPRESA que
+// mande el cliente, siempre los deriva de EMPLEADOS en este momento. ────
+function _resolverEmpleadoRecibo(nombreOperativo) {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('EMPLEADOS');
+  if (!hoja) return null;
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return null;
+  const headers    = vals[0].map(function(h) { return String(h).trim().toUpperCase(); });
+  const nombreNorm = _normalizarNombreEmpleado(nombreOperativo);
+  for (let i = 1; i < vals.length; i++) {
+    if (_normalizarNombreEmpleado(vals[i][0]) === nombreNorm) {
+      return _filaEmpleadoAObjeto(headers, vals[i]);
+    }
+  }
+  return null;
+}
+
+// Snapshot listo para grabar en RECIBOS. Falla explícito (mensajes usados
+// como código de error por el llamador) si falta cualquiera de las tres
+// cosas que el registro necesita para poder existir.
+function _obtenerSnapshotReciboEmpleado(nombreOperativo) {
+  const empleado = _resolverEmpleadoRecibo(nombreOperativo);
+  if (!empleado) throw new Error('EMPLEADO_NO_ENCONTRADO');
+
+  const nombreLegal = String(empleado.nombre_legal || '').trim();
+  if (!nombreLegal) throw new Error('NOMBRE_LEGAL_VACIO');
+
+  const empresa = String(empleado.empresa || '').trim();
+  if (!empresa) throw new Error('EMPRESA_VACIA');
+  if (!_validarEmpresaRecibo(empresa)) throw new Error('EMPRESA_INVALIDA');
+
+  return { nombre: empleado.nombre, nombre_legal: nombreLegal, empresa: empresa };
+}
+
+// ── Carpetas de Drive — privadas por defecto, nunca "cualquiera con el
+// enlace". No se llaman desde ningún lado todavía en este commit. ───────
+function _obtenerOCrearCarpetaRaizRecibos() {
+  const NOMBRE_RAIZ = 'CROMA_HORARIOS_RECIBOS';
+  const existentes = DriveApp.getFoldersByName(NOMBRE_RAIZ);
+  return existentes.hasNext() ? existentes.next() : DriveApp.createFolder(NOMBRE_RAIZ);
+}
+
+function _obtenerOCrearCarpetaRecibo(empresa, periodo) {
+  if (!_validarEmpresaRecibo(empresa)) throw new Error('EMPRESA_INVALIDA');
+  if (!_validarPeriodoRecibo(periodo)) throw new Error('PERIODO_INVALIDO');
+  const raiz = _obtenerOCrearCarpetaRaizRecibos();
+  const slugEmpresa = _slugEmpresaRecibo(empresa);
+  const itEmpresa = raiz.getFoldersByName(slugEmpresa);
+  const carpetaEmpresa = itEmpresa.hasNext() ? itEmpresa.next() : raiz.createFolder(slugEmpresa);
+  const itPeriodo = carpetaEmpresa.getFoldersByName(periodo);
+  return itPeriodo.hasNext() ? itPeriodo.next() : carpetaEmpresa.createFolder(periodo);
+  // Nunca se toca el sharing acá — Drive crea las carpetas privadas por
+  // defecto y este helper no llama a setSharing en ningún caso.
+}
+
+// ── Metadata: crear, mapear, buscar ─────────────────────────────────────
+// datos: { empleado, nombre_legal, empresa, periodo, tipo, nombre_archivo,
+//          mime_type, tamano_bytes, drive_file_id, version, subido_por,
+//          reemplaza_a }
+function _crearMetadataRecibo(datos) {
+  datos = datos || {};
+  if (!datos.empleado || !datos.nombre_legal) throw new Error('DATOS_INCOMPLETOS');
+  if (!_validarPeriodoRecibo(datos.periodo)) throw new Error('PERIODO_INVALIDO');
+  if (!_validarEmpresaRecibo(datos.empresa)) throw new Error('EMPRESA_INVALIDA');
+  if (datos.mime_type !== RECIBOS_MIME_VALIDO) throw new Error('MIME_TYPE_INVALIDO');
+  if (!Number.isInteger(datos.version) || datos.version < 1) throw new Error('VERSION_INVALIDA');
+  if (!Number.isFinite(datos.tamano_bytes) || datos.tamano_bytes < 0) throw new Error('TAMANO_INVALIDO');
+
+  const hoja = _asegurarHojaRecibos();
+  const id = generarNuevoIdRecibo();
+  const nombreArchivo = _sanearNombreArchivoRecibo(datos.nombre_archivo);
+
+  hoja.appendRow([
+    id,
+    datos.empleado,
+    datos.nombre_legal,
+    datos.empresa,
+    datos.periodo,
+    datos.tipo || 'RECIBO_SUELDO',
+    nombreArchivo,
+    datos.mime_type,
+    datos.tamano_bytes,
+    datos.drive_file_id || '',
+    'ACTIVO',
+    datos.version,
+    datos.subido_por || 'desconocido',
+    new Date(),
+    datos.reemplaza_a || '',
+    '', // FECHA_DESCARGA_EMPLEADO — vacía al crear
+  ]);
+
+  return id;
+}
+
+// DRIVE_FILE_ID deliberadamente NO se incluye acá — es el objeto que
+// eventualmente puede viajar hacia afuera de GAS (listados, etc.).
+function _filaReciboAObjeto(headers, fila) {
+  const col = function(name) { return headers.indexOf(name); };
+  const val = function(name) { const c = col(name); return c >= 0 ? fila[c] : ''; };
+  return {
+    id:                       val('ID'),
+    empleado:                 val('EMPLEADO'),
+    nombre_legal:             val('NOMBRE_LEGAL'),
+    empresa:                  val('EMPRESA'),
+    periodo:                  val('PERIODO'),
+    tipo:                     val('TIPO'),
+    nombre_archivo:           val('NOMBRE_ARCHIVO'),
+    mime_type:                val('MIME_TYPE'),
+    tamano_bytes:             val('TAMANO_BYTES'),
+    estado:                   val('ESTADO'),
+    version:                  val('VERSION'),
+    subido_por:               val('SUBIDO_POR'),
+    fecha_subida:             val('FECHA_SUBIDA'),
+    reemplaza_a:              val('REEMPLAZA_A'),
+    fecha_descarga_empleado:  val('FECHA_DESCARGA_EMPLEADO'),
+  };
+}
+
+// Único punto interno que expone DRIVE_FILE_ID — reservado para la futura
+// acción de descarga (Commit 3). Nunca usar en listados ni en cualquier
+// respuesta que pueda llegar tal cual al frontend.
+function _driveFileIdDeRecibo(headers, fila) {
+  const c = headers.indexOf('DRIVE_FILE_ID');
+  return c >= 0 ? fila[c] : '';
+}
+
+function _listarRecibosPorEmpleado(nombreOperativo) {
+  const hoja = _asegurarHojaRecibos();
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return [];
+  const headers    = vals[0].map(function(h) { return String(h).trim().toUpperCase(); });
+  const nombreNorm = _normalizarNombreEmpleado(nombreOperativo);
+  const iEmp = headers.indexOf('EMPLEADO');
+  const resultado = [];
+  for (let i = 1; i < vals.length; i++) {
+    if (_normalizarNombreEmpleado(vals[i][iEmp]) === nombreNorm) {
+      resultado.push(_filaReciboAObjeto(headers, vals[i]));
+    }
+  }
+  return resultado;
+}
+
+function _buscarReciboPorId(id) {
+  const idBuscado = String(id || '').trim();
+  if (!idBuscado) return null;
+  const hoja = _asegurarHojaRecibos();
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return null;
+  const headers = vals[0].map(function(h) { return String(h).trim().toUpperCase(); });
+  const iId = headers.indexOf('ID');
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][iId]).trim() === idBuscado) {
+      return { objeto: _filaReciboAObjeto(headers, vals[i]), fila: i + 1, headers: headers };
+    }
+  }
+  return null;
+}
+
+// Última versión ACTIVA para un empleado+período. Invariante esperada: a
+// lo sumo una fila ACTIVA por combinación — si aparece más de una, es una
+// inconsistencia de datos y se falla en vez de adivinar cuál devolver.
+function _obtenerUltimaVersionActiva(nombreOperativo, periodo) {
+  const recibos = _listarRecibosPorEmpleado(nombreOperativo)
+    .filter(function(r) { return r.periodo === periodo && r.estado === 'ACTIVO'; });
+  if (recibos.length === 0) return null;
+  if (recibos.length > 1) throw new Error('INCONSISTENCIA_MULTIPLES_ACTIVOS');
+  return recibos[0];
+}
+
+function _calcularSiguienteVersion(nombreOperativo, periodo) {
+  const recibos = _listarRecibosPorEmpleado(nombreOperativo)
+    .filter(function(r) { return r.periodo === periodo; });
+  if (recibos.length === 0) return 1;
+  const maxVersion = recibos.reduce(function(max, r) {
+    const v = parseInt(r.version, 10) || 0;
+    return v > max ? v : max;
+  }, 0);
+  return maxVersion + 1;
+}
+
+// ── Transiciones de estado ───────────────────────────────────────────────
+function _marcarReciboReemplazado(id) {
+  const encontrado = _buscarReciboPorId(id);
+  if (!encontrado) throw new Error('RECIBO_NO_ENCONTRADO');
+  const hoja = _asegurarHojaRecibos();
+  const cEstado = encontrado.headers.indexOf('ESTADO');
+  hoja.getRange(encontrado.fila, cEstado + 1).setValue('REEMPLAZADO');
+}
+
+function _actualizarFechaDescargaEmpleado(id) {
+  const encontrado = _buscarReciboPorId(id);
+  if (!encontrado) throw new Error('RECIBO_NO_ENCONTRADO');
+  const hoja = _asegurarHojaRecibos();
+  const cFecha = encontrado.headers.indexOf('FECHA_DESCARGA_EMPLEADO');
+  hoja.getRange(encontrado.fila, cFecha + 1).setValue(new Date());
+}
