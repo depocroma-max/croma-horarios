@@ -3013,6 +3013,7 @@ function cerrarSesion() {
   }
   const vieneDeCromaApp = sesionActual?.fromCromaApp;
   sesionActual = null;
+  _recibosPortal = null; // limpia cache del Portal — nunca sobrevive a un logout
   adminAutenticado = false;
   sessionStorage.removeItem('croma_admin_auth');
   localStorage.removeItem('croma_session');
@@ -7143,6 +7144,10 @@ function _cargarRecibosPortal(forzar) {
   _fetchRecibosPortal();
 }
 
+function _recargarRecibosPortal() {
+  if (_recibosPortal) _cargarRecibosPortal(true);
+}
+
 // Mensajes fijos por código HTTP — nunca se muestra el mensaje crudo del
 // backend ni un código interno. _msgApi() (compatibilidad ya documentada
 // en app.js) no se usa acá porque necesitamos el status HTTP, que ese
@@ -7262,6 +7267,48 @@ function _renderListadoRecibosPortal() {
     </div>
     <div class="ev-cards-mobile">${cardsMobile}</div>
   `;
+}
+
+// Bloquea solo el botón clickeado (evita doble descarga concurrente del
+// mismo archivo); nunca guarda base64/blob en estado ni en storage; no
+// loguea contenido ni URLs; nunca expone el ID en el mensaje de error.
+async function _recibosPortalDescargar(id, btn) {
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/recibos/mi-perfil/${encodeURIComponent(id)}/descargar`, {
+      headers: { 'Authorization': `Bearer ${_getToken()}` },
+    });
+    if (!resp.ok) {
+      showToast(_mensajeErrorRecibosPortal(resp.status));
+      return;
+    }
+    const contentType = resp.headers.get('Content-Type') || '';
+    if (!contentType.includes('application/pdf')) {
+      showToast('El recibo no está disponible.');
+      return;
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const esAdjunto = /attachment/i.test(cd);
+    const nombreArchivo = (cd.match(/filename="(.+)"/) || [])[1] || 'recibo.pdf';
+    const url = URL.createObjectURL(blob);
+    if (esAdjunto) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } else {
+      window.open(url, '_blank');
+    }
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast('No pudimos cargar tus recibos.');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ══════════════════════════════════════════════════════
