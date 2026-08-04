@@ -4081,44 +4081,62 @@ function accionObtenerReciboArchivo(datos) {
   // resuelto por resolverEmpleadoAutenticado() cuando el contexto es empleado.
   const contexto  = datos.contexto === 'empleado' ? 'empleado' : 'admin';
   const empleadoResuelto = String(datos.empleado_resuelto || '').trim();
+  const esEmpleado = contexto === 'empleado';
 
-  if (!reciboId) return _resp({ ok: false, error: 'RECIBO_ID_REQUERIDO' });
+  // En contexto empleado, "no existe", "es de otro" y "no está disponible"
+  // (metadata inválida, archivo faltante en Drive, MIME corrupto) tienen
+  // que verse EXACTAMENTE igual desde afuera — mismo código, misma forma,
+  // sin ningún dato técnico. Nunca confirma si un ID existe. admin/jefe sí
+  // recibe el motivo específico, porque tiene permiso de consulta global.
+  function _reciboNoDisponibleParaEmpleado() {
+    return _resp({ ok: false, error: 'RECIBO_NO_DISPONIBLE' });
+  }
+
+  if (!reciboId) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'RECIBO_ID_REQUERIDO' });
+  }
+  if (esEmpleado && !empleadoResuelto) {
+    return _reciboNoDisponibleParaEmpleado();
+  }
 
   const encontrado = _buscarReciboPorId(reciboId);
-  if (!encontrado) return _resp({ ok: false, error: 'RECIBO_NO_ENCONTRADO' });
+  if (!encontrado) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'RECIBO_NO_ENCONTRADO' });
+  }
   const recibo = encontrado.objeto;
 
   if (!recibo.empleado || !recibo.periodo || !recibo.mime_type) {
-    return _resp({ ok: false, error: 'METADATA_INVALIDA' });
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'METADATA_INVALIDA' });
   }
 
-  if (contexto === 'empleado') {
-    // Mismo mensaje genérico tanto si no hay empleadoResuelto como si no
-    // coincide — nunca se le confirma a un empleado que un ID ajeno existe.
-    if (!empleadoResuelto || _normalizarNombreEmpleado(empleadoResuelto) !== _normalizarNombreEmpleado(recibo.empleado)) {
-      return _resp({ ok: false, error: 'NO_AUTORIZADO' });
-    }
+  if (esEmpleado && _normalizarNombreEmpleado(empleadoResuelto) !== _normalizarNombreEmpleado(recibo.empleado)) {
+    return _reciboNoDisponibleParaEmpleado();
   }
 
   const driveFileId = _driveFileIdDeRecibo(encontrado.headers, encontrado.valoresFila);
-  if (!driveFileId) return _resp({ ok: false, error: 'METADATA_INVALIDA' });
+  if (!driveFileId) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'METADATA_INVALIDA' });
+  }
 
   let archivoDrive;
   try {
     archivoDrive = DriveApp.getFileById(driveFileId);
   } catch (e) {
-    return _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' }); // metadata existe, archivo falta en Drive
+    // metadata existe, archivo falta en Drive
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' });
   }
 
   let blob;
   try {
     blob = archivoDrive.getBlob();
   } catch (e) {
-    return _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' });
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' });
   }
 
   const mimeReal = blob.getContentType();
-  if (mimeReal !== RECIBOS_MIME_VALIDO) return _resp({ ok: false, error: 'MIME_TYPE_INVALIDO' });
+  if (mimeReal !== RECIBOS_MIME_VALIDO) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'MIME_TYPE_INVALIDO' });
+  }
 
   const bytes  = blob.getBytes();
   const base64 = Utilities.base64Encode(bytes);
@@ -4128,11 +4146,11 @@ function accionObtenerReciboArchivo(datos) {
   // navegador confirma haber terminado de recibirlo — GAS no tiene forma
   // de saber eso. Solo aplica a descargas del propio empleado, nunca
   // cuando un admin descarga en gestión de otra persona.
-  if (contexto === 'empleado') {
+  if (esEmpleado) {
     try { _actualizarFechaDescargaEmpleado(reciboId); } catch (eFecha) { /* no bloquea la respuesta */ }
   }
 
-  const accionAuditoria = contexto === 'empleado' ? 'RECIBO_DESCARGADO_EMPLEADO' : 'RECIBO_DESCARGADO_ADMIN';
+  const accionAuditoria = esEmpleado ? 'RECIBO_DESCARGADO_EMPLEADO' : 'RECIBO_DESCARGADO_ADMIN';
   registrarAuditoria(actor, accionAuditoria, 'RECIBO', reciboId, null, {
     empleado: recibo.empleado, periodo: recibo.periodo, empresa: recibo.empresa,
   });
