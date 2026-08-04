@@ -1490,6 +1490,31 @@ body {
   font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; color: #0d0d0d;
 }
 
+/* Encabezado enriquecido de la ficha de empleado — identidad + estado.
+   Reutiliza detalle-chip (neutro, sin variante de color) y badge/badge-*
+   (único elemento con color semántico: estado de acceso). Solo se usa
+   cuando ya existe un empleado — "Nuevo empleado" sigue con .admin-header
+   simple, sin nada que resumir todavía. */
+.admin-header-rich { align-items: flex-start; gap: 16px; }
+.admin-ficha-identidad { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.admin-ficha-avatar {
+  width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; overflow: hidden;
+  background: var(--gray-100); color: var(--gray-600);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 18px;
+}
+.admin-ficha-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.admin-ficha-nombre {
+  font-family: var(--font-display); font-size: 19px; letter-spacing: .5px; color: #0d0d0d; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.admin-ficha-legal {
+  font-size: 12px; color: #94a3b8; margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.admin-ficha-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; }
+.admin-ficha-close { flex-shrink: 0; margin-top: 2px; }
+
 /* ── TABS como pills ───────────────────────────────── */
 .admin-tabs {
   display: flex;
@@ -1630,6 +1655,15 @@ body {
 }
 .admin-form-grupo {
   display: flex; flex-direction: column; gap: 6px; margin-bottom: 1rem;
+}
+
+/* Grid de 2 columnas para Perfil/Datos laborales en desktop — colapsa a 1
+   columna en mobile. Selector compuesto: .admin-form-grid-full solo tiene
+   efecto dentro de .admin-form-grid, no toca nada fuera de la ficha. */
+.admin-form-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; }
+.admin-form-grid .admin-form-grid-full { grid-column: 1 / -1; }
+@media (max-width: 700px) {
+  .admin-form-grid { grid-template-columns: 1fr; }
 }
 .admin-input {
   height: 40px; padding: 0 12px;

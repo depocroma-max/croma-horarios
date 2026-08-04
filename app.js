@@ -5101,13 +5101,43 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
     ? { nombre: emp.nombre, nombreLegal: emp.nombre_legal || '', empresa: emp.empresa || '', historial: false, cargado: false, lista: [] }
     : null;
 
+  // Encabezado enriquecido — solo para un empleado que ya existe (para
+  // "Nuevo empleado" no hay nada todavía que resumir). Reutiliza datos que
+  // ya están disponibles en `emp` (Perfil/Laboral/Acceso), no agrega
+  // ningún dato ni lógica nueva — es un resumen de lectura.
+  const infoAcceso = _infoAccesoAdmin(emp);
+  const sucNombreEmp = emp.sucursal_id ? (SUCURSALES.find(s => s.id === emp.sucursal_id)?.nombre || '') : '';
+  const inicialAvatar = (nomMostrar || '?').charAt(0).toUpperCase();
+  const avatarHtml = emp.foto_url
+    ? `<img src="${emp.foto_url}" alt="" onerror="this.parentElement.textContent='${inicialAvatar}'" />`
+    : inicialAvatar;
+
+  const headerHtml = esNuevo ? `
+      <div class="admin-header">
+        <div class="admin-titulo">Nuevo empleado</div>
+        <button class="detalle-close" onclick="cerrarFormularioEmpleado()">${icon('x','icon-16')}</button>
+      </div>` : `
+      <div class="admin-header admin-header-rich">
+        <div class="admin-ficha-identidad">
+          <div class="admin-ficha-avatar">${avatarHtml}</div>
+          <div style="min-width:0">
+            <div class="admin-ficha-nombre">${nomMostrar}</div>
+            ${emp.nombre_legal ? `<div class="admin-ficha-legal">${emp.nombre_legal}</div>` : ''}
+            <div class="admin-ficha-chips">
+              ${emp.empresa ? `<span class="detalle-chip">${icon('building','icon-12')}${emp.empresa}</span>` : ''}
+              ${sucNombreEmp ? `<span class="detalle-chip">${icon('mapPin','icon-12')}${sucNombreEmp}</span>` : ''}
+              ${emp.numero_vendedor_sysneo ? `<span class="detalle-chip">#${emp.numero_vendedor_sysneo}</span>` : ''}
+              <span class="${infoAcceso.clase}">${infoAcceso.label}</span>
+            </div>
+          </div>
+        </div>
+        <button class="detalle-close admin-ficha-close" onclick="cerrarFormularioEmpleado()">${icon('x','icon-16')}</button>
+      </div>`;
+
   const html = `
   <div class="admin-overlay" id="adminOverlay" onclick="cerrarFormularioEmpleado(event)">
     <div class="admin-panel" onclick="event.stopPropagation()">
-      <div class="admin-header">
-        <div class="admin-titulo">${esNuevo ? 'Nuevo empleado' : 'Editar — ' + nomMostrar}</div>
-        <button class="detalle-close" onclick="cerrarFormularioEmpleado()">${icon('x','icon-16')}</button>
-      </div>
+      ${headerHtml}
       <div class="admin-form" style="overflow:auto">
         <input type="hidden" id="formEmpNombreOriginal" value="${nomEnc}" />
         <input type="hidden" id="formEmpTieneAccesoOriginal" value="${tieneAcceso ? '1' : ''}" />
@@ -5119,6 +5149,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
         </div>
 
         <div id="formEmpTabPerfil" class="admin-tab-content">
+          <div class="admin-form-grid">
           <div class="admin-form-grupo">
             <label class="emp-filtro-label">Nombre operativo</label>
             ${nombreCampoHtml}
@@ -5131,12 +5162,12 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
               Se utiliza para recibos de sueldo y documentación formal. No modifica el nombre usado en fichadas e historial.
             </span>
           </div>
-          <div class="admin-form-grupo">
+          <div class="admin-form-grupo admin-form-grid-full">
             <label class="emp-filtro-label">Número de vendedor Sysneo</label>
             <span class="${_infoSysneoAdmin(emp).clase}">${_infoSysneoAdmin(emp).label}</span>
             <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se edita desde la pestaña Datos laborales.</span>
           </div>
-          <div class="admin-foto-preview" id="adminFotoPreview">
+          <div class="admin-foto-preview admin-form-grid-full" id="adminFotoPreview">
             ${emp.foto_url
               ? `<img src="${emp.foto_url}" onerror="this.parentElement.innerHTML='Sin foto'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0">`
               : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8">Sin foto</div>`}
@@ -5156,9 +5187,11 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
             </div>
             <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Sin el 0 ni el 15 — solo los 10 dígitos</span>
           </div>
+          </div>
         </div>
 
         <div id="formEmpTabLaboral" class="admin-tab-content" style="display:none">
+          <div class="admin-form-grid">
           <div class="admin-form-grupo">
             <label class="emp-filtro-label">Sucursal principal</label>
             <select class="admin-input" id="formEmpSucursal">${sucOpts}</select>
@@ -5200,6 +5233,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
               <option value="activo" ${emp.estado !== 'inactivo' ? 'selected' : ''}>Activo</option>
               <option value="inactivo" ${emp.estado === 'inactivo' ? 'selected' : ''}>Inactivo</option>
             </select>
+          </div>
           </div>
         </div>
 
