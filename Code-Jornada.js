@@ -3685,10 +3685,17 @@ function _obtenerSnapshotReciboEmpleado(nombreOperativo) {
 
 // ── Carpetas de Drive — privadas por defecto, nunca "cualquiera con el
 // enlace". No se llaman desde ningún lado todavía en este commit. ───────
+// La carpeta raíz vive en una cuenta de Drive distinta a la que ejecuta
+// este script (separación de espacio de almacenamiento — ver decisión de
+// diseño). No se busca/crea por nombre en el Drive del script: es un ID
+// fijo, configurado en Script Properties (mismo lugar que BACKEND_SECRET),
+// de una carpeta ya creada y compartida como Editor con esta cuenta.
+// Falla explícito si no está configurada — nunca crea una carpeta de
+// respaldo en el lugar equivocado.
 function _obtenerOCrearCarpetaRaizRecibos() {
-  const NOMBRE_RAIZ = 'CROMA_HORARIOS_RECIBOS';
-  const existentes = DriveApp.getFoldersByName(NOMBRE_RAIZ);
-  return existentes.hasNext() ? existentes.next() : DriveApp.createFolder(NOMBRE_RAIZ);
+  const id = PropertiesService.getScriptProperties().getProperty('RECIBOS_CARPETA_RAIZ_ID');
+  if (!id) throw new Error('RECIBOS_CARPETA_RAIZ_ID no configurado en Script Properties');
+  return DriveApp.getFolderById(id);
 }
 
 function _obtenerOCrearCarpetaRecibo(empresa, periodo) {
