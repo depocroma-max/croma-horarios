@@ -4939,6 +4939,18 @@ async function _apiFetch(base, path, opciones) {
 const apiEmpleados = (path, opciones) => _apiFetch('/api/empleados', path, opciones);
 const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opciones);
 const apiFichadas  = (path, opciones) => _apiFetch('/api/fichadas', path, opciones);
+const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opciones);
+// Mensaje seguro de una respuesta {ok:false,...} — las rutas de Recibos usan
+// "mensaje", los middlewares de auth (401/403) usan "error", _apiFetch usa
+// "error" para sus propios fallos de red/parseo. Un solo lugar para no
+// tener que recordar cuál es cuál en cada handler.
+// DEUDA TÉCNICA (registrada, no bloquea Fase 3): unificar todo el backend
+// (auth, empleados, fichadas, recibos, etc.) a un único contrato de error
+// {code, message} y borrar este shim. Tocaría middlewares/auth.js y varias
+// rutas a la vez — fuera de alcance de un commit de frontend.
+function _msgApi(data, fallback) {
+  return (data && (data.mensaje || data.error)) || fallback;
+}
 
 // ── Fuente del listado administrativo ─────────────────
 let USUARIOS_ADMIN_CACHE = null; // lista saneada (sin PIN) desde GET /api/empleados/usuarios
@@ -5079,6 +5091,16 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
 
   const nomMostrar = esNuevo ? '' : emp.nombre.replace(/^\d+\s+/, '');
 
+  // Pestaña Recibos: solo admin/jefe (mismo gate que ya protege toda esta
+  // ficha vía _isAdminJwt/adminAutenticado) y solo para un empleado ya
+  // existente — no tiene sentido antes de guardar el alta. Redundante con
+  // el backend a propósito (defensa en profundidad, la fuente de verdad
+  // sigue siendo requiereRol('admin','jefe') en /api/recibos).
+  const puedeVerRecibos = !esNuevo && (sesionActual?.rol === 'admin' || sesionActual?.rol === 'jefe');
+  _recibosFicha = puedeVerRecibos
+    ? { nombre: emp.nombre, nombreLegal: emp.nombre_legal || '', empresa: emp.empresa || '', historial: false, cargado: false, lista: [] }
+    : null;
+
   const html = `
   <div class="admin-overlay" id="adminOverlay" onclick="cerrarFormularioEmpleado(event)">
     <div class="admin-panel" onclick="event.stopPropagation()">
@@ -5093,6 +5115,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
           <button class="admin-tab active" type="button" onclick="_switchFormEmpTab('perfil', this)">Perfil</button>
           <button class="admin-tab" type="button" onclick="_switchFormEmpTab('laboral', this)">Datos laborales</button>
           <button class="admin-tab" type="button" onclick="_switchFormEmpTab('acceso', this)">Acceso</button>
+          ${puedeVerRecibos ? `<button class="admin-tab" type="button" onclick="_switchFormEmpTab('recibos', this)">Recibos</button>` : ''}
         </div>
 
         <div id="formEmpTabPerfil" class="admin-tab-content">
@@ -5183,6 +5206,11 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
         <div id="formEmpTabAcceso" class="admin-tab-content" style="display:none">
           ${_renderTabAccesoEmpleado(emp, tabInicial === 'acceso')}
         </div>
+
+        ${puedeVerRecibos ? `
+        <div id="formEmpTabRecibos" class="admin-tab-content" style="display:none">
+          ${_renderTabRecibosEmpleado(emp)}
+        </div>` : ''}
 
         <p id="formEmpError" class="alert alert-danger" style="display:none;margin-top:1rem"></p>
 
@@ -5276,11 +5304,337 @@ function _switchFormEmpTab(tab, btn) {
   document.getElementById('formEmpTabPerfil').style.display  = tab === 'perfil'  ? '' : 'none';
   document.getElementById('formEmpTabLaboral').style.display = tab === 'laboral' ? '' : 'none';
   document.getElementById('formEmpTabAcceso').style.display  = tab === 'acceso'  ? '' : 'none';
+  const tabRecibos = document.getElementById('formEmpTabRecibos');
+  if (tabRecibos) {
+    tabRecibos.style.display = tab === 'recibos' ? '' : 'none';
+    if (tab === 'recibos') _cargarRecibosEmpleado();
+  }
 }
 
 function cerrarFormularioEmpleado(event) {
   if (event && event.target !== event.currentTarget) return;
   cerrarAdmin();
+  // Invalida cualquier fetch de recibos en vuelo — ver chequeo de "gen" en
+  // _fetchRecibosEmpleado. Sin esto, una respuesta lenta podría llegar
+  // después de reabrir la ficha para OTRO empleado y pisar su listado.
+  _recibosFicha = null;
+}
+
+// ── RECIBOS DE SUELDO — pestaña admin dentro de la ficha de empleado ──
+// _recibosFicha: estado de la pestaña Recibos para el empleado actualmente
+// abierto en la ficha. Se reinicia cada vez que se abre abrirFormularioEmpleado.
+// null cuando la pestaña no está disponible (empleado nuevo o rol sin permiso).
+let _recibosFicha = null;
+
+function _renderTabRecibosEmpleado(emp) {
+  const nombreLegal = (emp.nombre_legal || '').trim();
+  const empresa = emp.empresa || '—';
+  const avisoNombreLegal = !nombreLegal ? `
+    <div class="alert alert-warning" style="margin-bottom:12px;font-size:12.5px">
+      ${icon('alertTriangle','icon-16')} Falta el nombre legal de este colaborador — completalo en la pestaña
+      <a href="javascript:void(0)" onclick="_switchFormEmpTab('perfil', document.querySelectorAll('#formEmpTabs .admin-tab')[0])" style="font-weight:600">Perfil</a>
+      antes de subir recibos.
+    </div>` : '';
+  return `
+    <div class="admin-form-grupo" style="margin-bottom:14px">
+      <div style="font-size:13.5px;font-weight:600;color:#1e293b">${nombreLegal || '<span style="color:#94a3b8;font-weight:400">Sin nombre legal cargado</span>'}</div>
+      <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">${emp.nombre} · ${empresa}</div>
+    </div>
+    ${avisoNombreLegal}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b;cursor:pointer">
+        <input type="checkbox" id="formEmpRecibosHistorial" onchange="_toggleHistorialRecibos(this.checked)" /> Ver historial completo
+      </label>
+      <button class="btn-admin-edit" type="button" id="formEmpBtnSubirRecibo" ${nombreLegal ? '' : 'disabled'} onclick="_abrirModalRecibo('subir')">${icon('plus','icon-14')} Subir recibo</button>
+    </div>
+    <div id="formEmpRecibosListado">
+      <div class="ajuste-empty-state"><div class="spinner" role="status" aria-label="Cargando"></div><p class="text-secondary">Cargando recibos…</p></div>
+    </div>
+  `;
+}
+
+// Carga el listado solo la primera vez que se entra a la pestaña — no
+// vuelve a pedir al servidor por cada click en "Recibos" salvo forzarRecarga
+// (usado tras subir/reemplazar) o al tildar "Ver historial".
+function _cargarRecibosEmpleado(forzarRecarga) {
+  if (!_recibosFicha) return;
+  if (_recibosFicha.cargado && !forzarRecarga) return;
+  _recibosFicha.cargado = true;
+  _fetchRecibosEmpleado();
+}
+
+let _recibosFichaGen = 0; // token de la consulta en vuelo — descarta respuestas obsoletas (ver abajo)
+
+async function _fetchRecibosEmpleado() {
+  const cont = document.getElementById('formEmpRecibosListado');
+  if (!cont || !_recibosFicha) return;
+  cont.innerHTML = "<div class='ajuste-empty-state'><div class='spinner' role='status' aria-label='Cargando'></div><p class='text-secondary'>Cargando recibos…</p></div>";
+
+  const gen = ++_recibosFichaGen;
+  const nombreConsultado = _recibosFicha.nombre;
+  const qs = _recibosFicha.historial ? '?incluir_historial=true' : '';
+  const data = await apiRecibos(`/empleados/${encodeURIComponent(nombreConsultado)}${qs}`, { method: 'GET' });
+
+  // Descartar si mientras esperábamos: se cerró la ficha, se reabrió para
+  // OTRO empleado (_recibosFicha ya no es el mismo objeto/nombre), o se
+  // disparó una consulta más nueva (doble click en "Ver historial", etc.)
+  // que ya actualizó _recibosFichaGen. Sin este chequeo, una respuesta
+  // lenta de un empleado anterior podía pisar el listado del actual.
+  if (gen !== _recibosFichaGen) return;
+  if (!_recibosFicha || _recibosFicha.nombre !== nombreConsultado) return;
+  if (!document.getElementById('formEmpRecibosListado')) return;
+
+  if (!data.ok) {
+    cont.innerHTML = `<div class="alert alert-danger" style="font-size:12.5px">${icon('alertTriangle','icon-16')} ${_msgApi(data, 'No se pudo cargar el listado de recibos.')}</div>`;
+    return;
+  }
+  _recibosFicha.lista = data.recibos || [];
+  _renderListadoRecibos();
+}
+
+function _toggleHistorialRecibos(checked) {
+  if (!_recibosFicha) return;
+  _recibosFicha.historial = checked;
+  _fetchRecibosEmpleado();
+}
+
+function _formatearPeriodoRecibo(periodo) {
+  const MESES_LBL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const m = /^(\d{4})-(\d{2})$/.exec(periodo || '');
+  if (!m) return periodo || '—';
+  const idx = parseInt(m[2], 10) - 1;
+  return `${MESES_LBL[idx] || m[2]} ${m[1]}`;
+}
+
+function _formatearFechaRecibo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function _renderListadoRecibos() {
+  const cont = document.getElementById('formEmpRecibosListado');
+  if (!cont || !_recibosFicha) return;
+
+  const lista = (_recibosFicha.lista || []).slice().sort((a, b) => {
+    if (a.periodo !== b.periodo) return a.periodo < b.periodo ? 1 : -1;
+    return (b.version || 0) - (a.version || 0);
+  });
+
+  if (lista.length === 0) {
+    const msg = _recibosFicha.historial ? 'Sin recibos para mostrar.' : 'Todavía no hay recibos activos cargados.';
+    cont.innerHTML = `<div class="ajuste-empty-state">${icon('fileText','icon-48')}<p class="text-secondary">${msg}</p></div>`;
+    return;
+  }
+
+  const filas = lista.map(r => {
+    const activo = r.estado === 'ACTIVO';
+    const badge = activo
+      ? `<span class="badge badge-success">Activo</span>`
+      : `<span class="badge badge-neutral">Reemplazado</span>`;
+    const idEnc = String(r.id).replace(/'/g, "\\'");
+    const nombreArchivoEsc = String(r.nombre_archivo || '').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    return `<tr>
+      <td>${_formatearPeriodoRecibo(r.periodo)}<div style="font-size:11px;color:#94a3b8">v${r.version}</div></td>
+      <td>${badge}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nombreArchivoEsc}">${nombreArchivoEsc}</td>
+      <td>${_formatearFechaRecibo(r.fecha_subida)}${r.subido_por ? `<div style="font-size:11px;color:#94a3b8">${r.subido_por}</div>` : ''}</td>
+      <td class="al-c">
+        <div style="display:flex;gap:6px;justify-content:center">
+          <button class="btn-admin-edit" type="button" title="Descargar" onclick="_recibosDescargarAdmin('${idEnc}', this)">${icon('download','icon-14')}</button>
+          ${activo ? `<button class="btn-admin-edit" type="button" title="Reemplazar" onclick="_abrirModalRecibo('reemplazar','${idEnc}')">${icon('edit','icon-14')}</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  cont.innerHTML = `<div class="dt-wrap"><table class="dt-table">
+    <thead><tr><th>Período</th><th>Estado</th><th>Archivo</th><th>Subido</th><th class="al-c">Acciones</th></tr></thead>
+    <tbody>${filas}</tbody>
+  </table></div>`;
+}
+
+// Overlay propio (no reutiliza #adminOverlay) porque este modal se abre
+// ENCIMA de la ficha de empleado, que ya está montada ahí — reutilizar el
+// mismo id la reemplazaría y se perdería. Mismo patrón que el diálogo de
+// confirmación (#confirmOverlay), apilado por encima vía CSS (ver style.css).
+function _mostrarModalRecibo(innerHtml) {
+  const existing = document.getElementById('recibosModalOverlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'recibosModalOverlay';
+  div.innerHTML = innerHtml;
+  document.body.appendChild(div);
+}
+
+function _cerrarModalRecibo(event) {
+  if (event && event.target !== event.currentTarget) return;
+  const el = document.getElementById('recibosModalOverlay');
+  if (el) el.remove();
+}
+
+function _abrirModalRecibo(modo, reciboId) {
+  if (!_recibosFicha) return;
+  if (modo === 'subir' && !_recibosFicha.nombreLegal) return; // defensa extra — el botón ya está deshabilitado en este caso
+
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+  let filaAnterior = null;
+  if (modo === 'reemplazar') {
+    filaAnterior = (_recibosFicha.lista || []).find(r => String(r.id) === String(reciboId));
+    if (!filaAnterior || filaAnterior.estado !== 'ACTIVO') { showToast('Ese recibo ya no está disponible para reemplazar'); return; }
+  }
+
+  const periodoCampoHtml = modo === 'reemplazar'
+    ? `<input type="text" class="admin-input" value="${esc(_formatearPeriodoRecibo(filaAnterior.periodo))}" readonly />
+       <input type="hidden" id="reciboPeriodoFijo" value="${esc(filaAnterior.periodo)}" />
+       <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Versión actual: v${filaAnterior.version}. Se creará una nueva versión y esta quedará marcada como reemplazada.</span>`
+    : `<input type="month" class="admin-input" id="reciboPeriodo" />`;
+
+  const html = `
+  <div class="admin-overlay recibos-modal-overlay" id="recibosModalOverlayInner" onclick="_cerrarModalRecibo(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">${modo === 'reemplazar' ? 'Reemplazar recibo' : 'Subir recibo'}</div>
+        <button class="detalle-close" onclick="_cerrarModalRecibo()">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        <input type="hidden" id="reciboModalIdAnterior" value="${esc(reciboId || '')}" />
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Colaborador</label>
+          <input type="text" class="admin-input" value="${esc(_recibosFicha.nombre)}" readonly />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Nombre legal</label>
+          <input type="text" class="admin-input" value="${esc(_recibosFicha.nombreLegal)}" readonly />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Empresa</label>
+          <input type="text" class="admin-input" value="${esc(_recibosFicha.empresa)}" readonly />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Período</label>
+          ${periodoCampoHtml}
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label">Archivo PDF (máx. 2MB)</label>
+          <input type="file" class="admin-input" id="reciboArchivo" accept="application/pdf" />
+        </div>
+        <p id="reciboModalError" class="alert alert-danger" style="display:none;margin-top:.5rem"></p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.2rem">
+          <button class="btn-connect" style="margin:0" id="reciboModalBtnGuardar" onclick="_guardarRecibo('${modo}')">${modo === 'reemplazar' ? 'Reemplazar recibo' : 'Subir recibo'}</button>
+          <button class="btn-demo" onclick="_cerrarModalRecibo()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  _mostrarModalRecibo(html);
+}
+
+const RECIBOS_TAMANO_MAXIMO_BYTES_JS = 2 * 1024 * 1024; // igual que backend/GAS — el servidor revalida igual, esto es solo para no hacer esperar al usuario
+
+function _leerArchivoComoBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultado = String(reader.result || '');
+      resolve(resultado.split(',')[1] || '');
+    };
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function _guardarRecibo(modo) {
+  if (!_recibosFicha) return;
+  const errEl = document.getElementById('reciboModalError');
+  const btn = document.getElementById('reciboModalBtnGuardar');
+  const mostrarError = (msg) => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
+  if (errEl) errEl.style.display = 'none';
+  if (!btn || btn.disabled) return; // bloqueo de doble-submit
+
+  const archivoInput = document.getElementById('reciboArchivo');
+  const file = archivoInput && archivoInput.files && archivoInput.files[0];
+  if (!file) { mostrarError('Seleccioná un archivo PDF'); return; }
+  if (file.type !== 'application/pdf') { mostrarError('Solo se aceptan archivos PDF'); return; }
+  if (file.size === 0) { mostrarError('El archivo está vacío'); return; }
+  if (file.size > RECIBOS_TAMANO_MAXIMO_BYTES_JS) { mostrarError('El archivo supera el tamaño máximo permitido (2MB)'); return; }
+
+  let periodo;
+  if (modo === 'reemplazar') {
+    periodo = document.getElementById('reciboPeriodoFijo')?.value || '';
+  } else {
+    periodo = document.getElementById('reciboPeriodo')?.value || '';
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodo)) { mostrarError('Seleccioná un período válido'); return; }
+  }
+
+  btn.disabled = true;
+  btn.dataset.textoOriginal = btn.dataset.textoOriginal || btn.textContent;
+  btn.textContent = modo === 'reemplazar' ? 'Reemplazando…' : 'Subiendo…';
+
+  try {
+    const base64 = await _leerArchivoComoBase64(file);
+    const body = {
+      periodo,
+      nombre_archivo: file.name,
+      mime_type: 'application/pdf',
+      tamano_bytes: file.size,
+      archivo_base64: base64,
+    };
+
+    let data;
+    if (modo === 'reemplazar') {
+      const idAnterior = document.getElementById('reciboModalIdAnterior')?.value || '';
+      body.empleado = _recibosFicha.nombre;
+      data = await apiRecibos(`/${encodeURIComponent(idAnterior)}/reemplazar`, { method: 'POST', body: JSON.stringify(body) });
+    } else {
+      data = await apiRecibos(`/empleados/${encodeURIComponent(_recibosFicha.nombre)}`, { method: 'POST', body: JSON.stringify(body) });
+    }
+
+    if (!data.ok) {
+      mostrarError(_msgApi(data, 'No se pudo completar la operación.'));
+      return;
+    }
+
+    _cerrarModalRecibo();
+    showToast(modo === 'reemplazar' ? 'Recibo reemplazado correctamente' : 'Recibo subido correctamente');
+    _fetchRecibosEmpleado();
+  } catch (err) {
+    mostrarError('Error de conexión. Intentá de nuevo.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.textoOriginal || (modo === 'reemplazar' ? 'Reemplazar recibo' : 'Subir recibo'); }
+  }
+}
+
+async function _recibosDescargarAdmin(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/recibos/${encodeURIComponent(id)}/descargar`, {
+      headers: { 'Authorization': `Bearer ${_getToken()}` },
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(_msgApi(err, 'No se pudo descargar el recibo'));
+      return;
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const nombreArchivo = (cd.match(/filename="(.+)"/) || [])[1] || `recibo_${id}.pdf`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast('Error de conexión al descargar');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function _mostrarErrorFormEmpleado(msg) {

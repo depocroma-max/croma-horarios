@@ -1439,6 +1439,10 @@ body {
 }
 .admin-panel-sm { max-width: 480px; }
 
+/* Modal de Subir/Reemplazar recibo — se abre por encima de la ficha de
+   empleado (admin, 600), que sigue montada detrás. */
+.recibos-modal-overlay { z-index: 650; }
+
 /* ── DIÁLOGO DE CONFIRMACIÓN (estilo Croma) ─────────── */
 .confirm-overlay { z-index: 3000; } /* por encima del detalle (500) y admin (600) */
 .confirm-panel { max-width: 400px; }
