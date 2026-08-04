@@ -3586,11 +3586,17 @@ function _asegurarHojaRecibos() {
     hoja = ss.insertSheet('RECIBOS');
     hoja.getRange(1, 1, 1, RECIBOS_HEADERS.length).setValues([RECIBOS_HEADERS]);
     hoja.setFrozenRows(1);
-    return hoja;
+  } else {
+    // Ya existía (ej. re-ejecución de esta función) — asegura cada columna
+    // sin reordenar ni tocar las que ya estén. Mismo patrón que _upsertEmpleado.
+    RECIBOS_HEADERS.forEach(function(h) { _asegurarColumna(hoja, h); });
   }
-  // Ya existía (ej. re-ejecución de esta función) — asegura cada columna
-  // sin reordenar ni tocar las que ya estén. Mismo patrón que _upsertEmpleado.
-  RECIBOS_HEADERS.forEach(function(h) { _asegurarColumna(hoja, h); });
+  // Defensa adicional: toda la columna PERIODO en texto plano, no solo la
+  // celda que se escribe en el momento — cubre ediciones manuales futuras
+  // en la hoja y no depende de que _crearMetadataRecibo sea el único
+  // camino de escritura.
+  const colPeriodo = RECIBOS_HEADERS.indexOf('PERIODO') + 1;
+  hoja.getRange(1, colPeriodo, hoja.getMaxRows(), 1).setNumberFormat('@');
   return hoja;
 }
 
@@ -3718,7 +3724,15 @@ function _crearMetadataRecibo(datos) {
   const id = datos.id || generarNuevoIdRecibo();
   const nombreArchivo = _sanearNombreArchivoRecibo(datos.nombre_archivo);
 
-  hoja.appendRow([
+  const filaIndex = hoja.getLastRow() + 1;
+  // PERIODO ("2099-01") se ve como fecha para Sheets y lo autoconvierte a
+  // Date si la celda queda en formato Automático — rompe toda comparación
+  // de string más adelante (duplicados, versión, listado). Forzar texto
+  // plano ANTES de escribir el valor, no después.
+  const colPeriodo = RECIBOS_HEADERS.indexOf('PERIODO') + 1;
+  hoja.getRange(filaIndex, colPeriodo).setNumberFormat('@');
+
+  hoja.getRange(filaIndex, 1, 1, RECIBOS_HEADERS.length).setValues([[
     id,
     datos.empleado,
     datos.nombre_legal,
@@ -3735,13 +3749,25 @@ function _crearMetadataRecibo(datos) {
     new Date(),
     datos.reemplaza_a || '',
     '', // FECHA_DESCARGA_EMPLEADO — vacía al crear
-  ]);
+  ]]);
 
   return id;
 }
 
 // DRIVE_FILE_ID deliberadamente NO se incluye acá — es el objeto que
 // eventualmente puede viajar hacia afuera de GAS (listados, etc.).
+// Defensa en la lectura: si alguna celda de PERIODO quedó como Date (fila
+// vieja escrita antes de este fix, o edición manual futura), la devuelve
+// como "YYYY-MM" igual — nunca deja pasar un objeto Date hacia afuera de
+// este archivo ni hacia una comparación de string.
+function _normalizarPeriodoCelda(valor) {
+  if (valor instanceof Date) {
+    const tz = Session.getScriptTimeZone();
+    return Utilities.formatDate(valor, tz, 'yyyy-MM');
+  }
+  return String(valor || '').trim();
+}
+
 function _filaReciboAObjeto(headers, fila) {
   const col = function(name) { return headers.indexOf(name); };
   const val = function(name) { const c = col(name); return c >= 0 ? fila[c] : ''; };
@@ -3750,7 +3776,7 @@ function _filaReciboAObjeto(headers, fila) {
     empleado:                 val('EMPLEADO'),
     nombre_legal:             val('NOMBRE_LEGAL'),
     empresa:                  val('EMPRESA'),
-    periodo:                  val('PERIODO'),
+    periodo:                  _normalizarPeriodoCelda(val('PERIODO')),
     tipo:                     val('TIPO'),
     nombre_archivo:           val('NOMBRE_ARCHIVO'),
     mime_type:                val('MIME_TYPE'),
