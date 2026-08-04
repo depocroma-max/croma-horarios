@@ -1173,6 +1173,10 @@ function despacharAccionSegura(envelope) {
   if (accion === 'asignar_numero_sysneo')     return accionAsignarNumeroSysneo(datos);
   if (accion === 'exportar_fichadas')         return accionExportarFichadas(datos);
   if (accion === 'listar_nombres_legales')    return accionListarNombresLegales();
+  if (accion === 'subir_recibo')              return accionSubirRecibo(datos);
+  if (accion === 'listar_recibos_empleado')   return accionListarRecibosEmpleado(datos);
+  if (accion === 'obtener_recibo_archivo')    return accionObtenerReciboArchivo(datos);
+  if (accion === 'reemplazar_recibo')         return accionReemplazarRecibo(datos);
 
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
@@ -3708,7 +3712,10 @@ function _crearMetadataRecibo(datos) {
   if (!Number.isFinite(datos.tamano_bytes) || datos.tamano_bytes < 0) throw new Error('TAMANO_INVALIDO');
 
   const hoja = _asegurarHojaRecibos();
-  const id = generarNuevoIdRecibo();
+  // Permite pasar un ID ya generado (subir_recibo/reemplazar_recibo lo
+  // necesitan ANTES de crear el archivo en Drive, para nombrarlo con ese
+  // ID). Si no viene, se comporta igual que antes.
+  const id = datos.id || generarNuevoIdRecibo();
   const nombreArchivo = _sanearNombreArchivoRecibo(datos.nombre_archivo);
 
   hoja.appendRow([
@@ -3791,7 +3798,9 @@ function _buscarReciboPorId(id) {
   const iId = headers.indexOf('ID');
   for (let i = 1; i < vals.length; i++) {
     if (String(vals[i][iId]).trim() === idBuscado) {
-      return { objeto: _filaReciboAObjeto(headers, vals[i]), fila: i + 1, headers: headers };
+      // valoresFila (la fila cruda) se conserva para el único uso interno
+      // legítimo de leer DRIVE_FILE_ID — ver _driveFileIdDeRecibo().
+      return { objeto: _filaReciboAObjeto(headers, vals[i]), fila: i + 1, headers: headers, valoresFila: vals[i] };
     }
   }
   return null;
@@ -3834,4 +3843,401 @@ function _actualizarFechaDescargaEmpleado(id) {
   const hoja = _asegurarHojaRecibos();
   const cFecha = encontrado.headers.indexOf('FECHA_DESCARGA_EMPLEADO');
   hoja.getRange(encontrado.fila, cFecha + 1).setValue(new Date());
+}
+
+// ══════════════════════════════════════════════════════
+//  RECIBOS — Fase 3, Commit 3: acciones seguras (subir, listar, obtener
+//  archivo, reemplazar). Únicamente dentro de despacharAccionSegura(),
+//  protegidas por BACKEND_SECRET — nunca en doGet/doPost públicos.
+// ══════════════════════════════════════════════════════
+
+// Límite PROVISIONAL basado en lo medido en el Commit 1 (100KB–2MB, sin
+// errores). No se probaron 5MB/10MB todavía — subir este número requiere
+// medir esos tamaños primero, no es una decisión de producto todavía.
+const RECIBOS_TAMANO_MAXIMO_BYTES = 2 * 1024 * 1024;
+
+// Primeros 5 bytes de un PDF válido: "%PDF-". Comparación byte a byte,
+// no regex sobre string (evita problemas de encoding con bytes > 127).
+function _tieneFirmaPdf(bytes) {
+  const firma = [0x25, 0x50, 0x44, 0x46, 0x2D]; // % P D F -
+  if (bytes.length < firma.length) return false;
+  for (let i = 0; i < firma.length; i++) {
+    if (bytes[i] !== firma[i]) return false;
+  }
+  return true;
+}
+
+// Objeto mínimo seguro para el cliente — nunca DRIVE_FILE_ID, nunca rutas
+// de Drive. Es el único "shape" de recibo que sale de este archivo hacia
+// Node en listados y confirmaciones de subida/reemplazo.
+function _respuestaPublicaRecibo(recibo) {
+  return {
+    id:             recibo.id,
+    periodo:        recibo.periodo,
+    empresa:        recibo.empresa,
+    nombre_legal:   recibo.nombre_legal,
+    tipo:           recibo.tipo,
+    estado:         recibo.estado,
+    version:        recibo.version,
+    fecha_subida:   recibo.fecha_subida,
+    nombre_archivo: recibo.nombre_archivo,
+  };
+}
+
+// Validaciones comunes a subir_recibo y reemplazar_recibo — formato,
+// firma y consistencia de tamaño. No toca Drive ni Sheets, solo valida
+// los bytes ya decodificados. Devuelve {ok:true} o {ok:false, error}.
+function _validarArchivoRecibo(bytes, tamanoDeclarado) {
+  if (!bytes || bytes.length === 0) return { ok: false, error: 'ARCHIVO_VACIO' };
+  if (typeof tamanoDeclarado !== 'number' || !Number.isFinite(tamanoDeclarado)) {
+    return { ok: false, error: 'TAMANO_DECLARADO_INVALIDO' };
+  }
+  if (tamanoDeclarado !== bytes.length) return { ok: false, error: 'TAMANO_NO_COINCIDE' };
+  if (bytes.length > RECIBOS_TAMANO_MAXIMO_BYTES) return { ok: false, error: 'ARCHIVO_DEMASIADO_GRANDE' };
+  if (!_tieneFirmaPdf(bytes)) return { ok: false, error: 'FIRMA_PDF_INVALIDA' };
+  return { ok: true };
+}
+
+// ── 1. subir_recibo ─────────────────────────────────────────────────────
+function accionSubirRecibo(datos) {
+  datos = datos || {};
+  const actor          = String(datos.actor || 'desconocido');
+  const empleadoInput   = String(datos.empleado || '').trim();
+  const periodo         = String(datos.periodo || '').trim();
+  const mimeType        = String(datos.mime_type || '').trim();
+
+  if (!empleadoInput) return _resp({ ok: false, error: 'EMPLEADO_REQUERIDO' });
+  if (!_validarPeriodoRecibo(periodo)) return _resp({ ok: false, error: 'PERIODO_INVALIDO' });
+  if (mimeType !== RECIBOS_MIME_VALIDO) return _resp({ ok: false, error: 'MIME_TYPE_INVALIDO' });
+  if (!datos.archivo_base64) return _resp({ ok: false, error: 'ARCHIVO_VACIO' });
+
+  // Nunca confiar en NOMBRE_LEGAL/EMPRESA que mande el cliente — siempre
+  // se derivan de EMPLEADOS en este momento.
+  let snapshot;
+  try {
+    snapshot = _obtenerSnapshotReciboEmpleado(empleadoInput);
+  } catch (e) {
+    return _resp({ ok: false, error: e.message });
+  }
+
+  let bytes;
+  try {
+    bytes = Utilities.base64Decode(datos.archivo_base64);
+  } catch (e) {
+    return _resp({ ok: false, error: 'BASE64_INVALIDO' });
+  }
+  const validacion = _validarArchivoRecibo(bytes, datos.tamano_bytes);
+  if (!validacion.ok) return _resp({ ok: false, error: validacion.error });
+
+  // Chequeo de duplicado #1, con lock breve — filtra el caso común sin
+  // gastar tiempo subiendo a Drive un archivo que de entrada ya sobra.
+  const lock1 = LockService.getScriptLock();
+  if (!lock1.tryLock(10000)) return _resp({ ok: false, error: 'SISTEMA_OCUPADO' });
+  try {
+    let existente;
+    try {
+      existente = _obtenerUltimaVersionActiva(snapshot.nombre, periodo);
+    } catch (eDup) {
+      return _resp({ ok: false, error: eDup.message });
+    }
+    if (existente) {
+      return _resp({ ok: false, error: 'YA_EXISTE_ACTIVO', recibo_id_existente: existente.id });
+    }
+  } finally {
+    lock1.releaseLock();
+  }
+
+  // Subida a Drive FUERA del lock — la parte lenta no bloquea otras
+  // operaciones del script mientras dura.
+  const id = generarNuevoIdRecibo(); // atómico por su cuenta (su propio lock interno)
+  const nombreFisico = id + '_' + periodo + '.pdf';
+  let carpeta, archivoDrive;
+  try {
+    carpeta = _obtenerOCrearCarpetaRecibo(snapshot.empresa, periodo);
+    const blob = Utilities.newBlob(bytes, RECIBOS_MIME_VALIDO, nombreFisico);
+    archivoDrive = carpeta.createFile(blob);
+  } catch (eDrive) {
+    return _resp({ ok: false, error: 'ERROR_DRIVE' });
+  }
+
+  // Lock #2, breve: re-verificar duplicado (cierra la ventana de carrera
+  // que se abrió al soltar el lock mientras se subía a Drive) y escribir
+  // la metadata. Si algo falla acá, el archivo recién subido va a papelera.
+  const lock2 = LockService.getScriptLock();
+  if (!lock2.tryLock(10000)) {
+    try { archivoDrive.setTrashed(true); } catch (eC) {}
+    return _resp({ ok: false, error: 'SISTEMA_OCUPADO' });
+  }
+  try {
+    let existenteOtraVez;
+    try {
+      existenteOtraVez = _obtenerUltimaVersionActiva(snapshot.nombre, periodo);
+    } catch (eDup2) {
+      try { archivoDrive.setTrashed(true); } catch (eC) {}
+      return _resp({ ok: false, error: eDup2.message });
+    }
+    if (existenteOtraVez) {
+      try { archivoDrive.setTrashed(true); } catch (eC) {}
+      return _resp({ ok: false, error: 'YA_EXISTE_ACTIVO', recibo_id_existente: existenteOtraVez.id });
+    }
+
+    let reciboId;
+    try {
+      reciboId = _crearMetadataRecibo({
+        id: id,
+        empleado: snapshot.nombre,
+        nombre_legal: snapshot.nombre_legal,
+        empresa: snapshot.empresa,
+        periodo: periodo,
+        tipo: 'RECIBO_SUELDO', // fijo en esta version, nunca desde el cliente
+        nombre_archivo: _sanearNombreArchivoRecibo(datos.nombre_archivo),
+        mime_type: RECIBOS_MIME_VALIDO,
+        tamano_bytes: bytes.length,
+        drive_file_id: archivoDrive.getId(),
+        version: 1,
+        subido_por: actor,
+        reemplaza_a: '',
+      });
+    } catch (eMeta) {
+      try { archivoDrive.setTrashed(true); } catch (eC) {}
+      return _resp({ ok: false, error: 'ERROR_METADATA' });
+    }
+
+    registrarAuditoria(actor, 'RECIBO_SUBIDO', 'RECIBO', reciboId, null, {
+      empleado: snapshot.nombre, periodo: periodo, empresa: snapshot.empresa, version: 1,
+    });
+
+    const encontrado = _buscarReciboPorId(reciboId);
+    return _resp({ ok: true, recibo: _respuestaPublicaRecibo(encontrado.objeto) });
+  } finally {
+    lock2.releaseLock();
+  }
+}
+
+// ── 2. listar_recibos_empleado ──────────────────────────────────────────
+function accionListarRecibosEmpleado(datos) {
+  datos = datos || {};
+  const empleadoInput    = String(datos.empleado || '').trim();
+  const incluirHistorial = datos.incluir_historial === true;
+
+  if (!empleadoInput) return _resp({ ok: false, error: 'EMPLEADO_REQUERIDO' });
+
+  const empleado = _resolverEmpleadoRecibo(empleadoInput);
+  if (!empleado) return _resp({ ok: false, error: 'EMPLEADO_NO_ENCONTRADO' });
+
+  let recibos = _listarRecibosPorEmpleado(empleado.nombre);
+
+  // Por defecto (Portal Empleado): solo ACTIVO. Como a lo sumo hay una
+  // fila ACTIVA por período (invariante del modelo), esto ya es "la
+  // última versión activa de cada período" sin lógica extra.
+  recibos = incluirHistorial
+    ? recibos.filter(function(r) { return r.estado === 'ACTIVO' || r.estado === 'REEMPLAZADO'; })
+    : recibos.filter(function(r) { return r.estado === 'ACTIVO'; });
+
+  recibos.sort(function(a, b) {
+    if (a.periodo !== b.periodo) return b.periodo.localeCompare(a.periodo);
+    return (parseInt(b.version, 10) || 0) - (parseInt(a.version, 10) || 0);
+  });
+
+  // Sin auditoría — es una simple visualización de listado, mismo criterio
+  // que getCertificados()/getVacaciones(), que tampoco auditan lectura.
+  return _resp({ ok: true, recibos: recibos.map(_respuestaPublicaRecibo) });
+}
+
+// ── 3. obtener_recibo_archivo ───────────────────────────────────────────
+function accionObtenerReciboArchivo(datos) {
+  datos = datos || {};
+  const reciboId  = String(datos.recibo_id || '').trim();
+  const actor     = String(datos.actor || 'desconocido');
+  // 'empleado' = descarga propia del Portal Empleado; cualquier otro valor
+  // (incluido ausente) se trata como 'admin'. GAS nunca decide esto solo
+  // con un nombre suelto del navegador — Node manda el empleado YA
+  // resuelto por resolverEmpleadoAutenticado() cuando el contexto es empleado.
+  const contexto  = datos.contexto === 'empleado' ? 'empleado' : 'admin';
+  const empleadoResuelto = String(datos.empleado_resuelto || '').trim();
+
+  if (!reciboId) return _resp({ ok: false, error: 'RECIBO_ID_REQUERIDO' });
+
+  const encontrado = _buscarReciboPorId(reciboId);
+  if (!encontrado) return _resp({ ok: false, error: 'RECIBO_NO_ENCONTRADO' });
+  const recibo = encontrado.objeto;
+
+  if (!recibo.empleado || !recibo.periodo || !recibo.mime_type) {
+    return _resp({ ok: false, error: 'METADATA_INVALIDA' });
+  }
+
+  if (contexto === 'empleado') {
+    // Mismo mensaje genérico tanto si no hay empleadoResuelto como si no
+    // coincide — nunca se le confirma a un empleado que un ID ajeno existe.
+    if (!empleadoResuelto || _normalizarNombreEmpleado(empleadoResuelto) !== _normalizarNombreEmpleado(recibo.empleado)) {
+      return _resp({ ok: false, error: 'NO_AUTORIZADO' });
+    }
+  }
+
+  const driveFileId = _driveFileIdDeRecibo(encontrado.headers, encontrado.valoresFila);
+  if (!driveFileId) return _resp({ ok: false, error: 'METADATA_INVALIDA' });
+
+  let archivoDrive;
+  try {
+    archivoDrive = DriveApp.getFileById(driveFileId);
+  } catch (e) {
+    return _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' }); // metadata existe, archivo falta en Drive
+  }
+
+  let blob;
+  try {
+    blob = archivoDrive.getBlob();
+  } catch (e) {
+    return _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' });
+  }
+
+  const mimeReal = blob.getContentType();
+  if (mimeReal !== RECIBOS_MIME_VALIDO) return _resp({ ok: false, error: 'MIME_TYPE_INVALIDO' });
+
+  const bytes  = blob.getBytes();
+  const base64 = Utilities.base64Encode(bytes);
+
+  // Criterio elegido para FECHA_DESCARGA_EMPLEADO: se actualiza apenas se
+  // recuperó el archivo con éxito desde Drive (acá mismo), no cuando el
+  // navegador confirma haber terminado de recibirlo — GAS no tiene forma
+  // de saber eso. Solo aplica a descargas del propio empleado, nunca
+  // cuando un admin descarga en gestión de otra persona.
+  if (contexto === 'empleado') {
+    try { _actualizarFechaDescargaEmpleado(reciboId); } catch (eFecha) { /* no bloquea la respuesta */ }
+  }
+
+  const accionAuditoria = contexto === 'empleado' ? 'RECIBO_DESCARGADO_EMPLEADO' : 'RECIBO_DESCARGADO_ADMIN';
+  registrarAuditoria(actor, accionAuditoria, 'RECIBO', reciboId, null, {
+    empleado: recibo.empleado, periodo: recibo.periodo, empresa: recibo.empresa,
+  });
+
+  return _resp({
+    ok: true,
+    archivo_base64: base64,
+    mime_type: mimeReal,
+    nombre_archivo: recibo.nombre_archivo,
+    tamano_bytes: bytes.length,
+    recibo: _respuestaPublicaRecibo(recibo),
+  });
+}
+
+// ── 4. reemplazar_recibo ────────────────────────────────────────────────
+function accionReemplazarRecibo(datos) {
+  datos = datos || {};
+  const actor         = String(datos.actor || 'desconocido');
+  const idAnterior     = String(datos.recibo_id_anterior || '').trim();
+  const empleadoInput  = String(datos.empleado || '').trim();
+  const periodo        = String(datos.periodo || '').trim();
+  const mimeType       = String(datos.mime_type || '').trim();
+
+  if (!idAnterior) return _resp({ ok: false, error: 'RECIBO_ID_ANTERIOR_REQUERIDO' });
+  if (!empleadoInput) return _resp({ ok: false, error: 'EMPLEADO_REQUERIDO' });
+  if (!_validarPeriodoRecibo(periodo)) return _resp({ ok: false, error: 'PERIODO_INVALIDO' });
+  if (mimeType !== RECIBOS_MIME_VALIDO) return _resp({ ok: false, error: 'MIME_TYPE_INVALIDO' });
+  if (!datos.archivo_base64) return _resp({ ok: false, error: 'ARCHIVO_VACIO' });
+
+  let snapshot;
+  try {
+    snapshot = _obtenerSnapshotReciboEmpleado(empleadoInput);
+  } catch (e) {
+    return _resp({ ok: false, error: e.message });
+  }
+
+  let bytes;
+  try {
+    bytes = Utilities.base64Decode(datos.archivo_base64);
+  } catch (e) {
+    return _resp({ ok: false, error: 'BASE64_INVALIDO' });
+  }
+  const validacion = _validarArchivoRecibo(bytes, datos.tamano_bytes);
+  if (!validacion.ok) return _resp({ ok: false, error: validacion.error });
+
+  // Validar el recibo anterior ANTES de tocar Drive — falla rápido si no
+  // corresponde, sin gastar una subida.
+  const anteriorEncontrado = _buscarReciboPorId(idAnterior);
+  if (!anteriorEncontrado) return _resp({ ok: false, error: 'RECIBO_ANTERIOR_NO_ENCONTRADO' });
+  const anterior = anteriorEncontrado.objeto;
+  if (anterior.estado !== 'ACTIVO') return _resp({ ok: false, error: 'RECIBO_ANTERIOR_NO_ACTIVO' });
+  if (_normalizarNombreEmpleado(anterior.empleado) !== _normalizarNombreEmpleado(snapshot.nombre) || anterior.periodo !== periodo) {
+    return _resp({ ok: false, error: 'RECIBO_ANTERIOR_NO_CORRESPONDE' });
+  }
+
+  // Subida a Drive FUERA del lock principal — mismo criterio que subir_recibo.
+  const idNuevo = generarNuevoIdRecibo();
+  const nombreFisico = idNuevo + '_' + periodo + '.pdf';
+  let carpeta, archivoDrive;
+  try {
+    carpeta = _obtenerOCrearCarpetaRecibo(snapshot.empresa, periodo);
+    const blob = Utilities.newBlob(bytes, RECIBOS_MIME_VALIDO, nombreFisico);
+    archivoDrive = carpeta.createFile(blob);
+  } catch (eDrive) {
+    return _resp({ ok: false, error: 'ERROR_DRIVE' });
+  }
+
+  // LOCK: re-verificar que el anterior sigue ACTIVO, calcular versión,
+  // crear la fila nueva y recién ahí marcar la anterior como REEMPLAZADO.
+  // Todo esto, atómico — evita que dos reemplazos concurrentes generen
+  // dos versiones "siguientes" iguales o dejen dos filas ACTIVAS.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    try { archivoDrive.setTrashed(true); } catch (eC) {}
+    return _resp({ ok: false, error: 'SISTEMA_OCUPADO' });
+  }
+  try {
+    const reVerificado = _buscarReciboPorId(idAnterior);
+    if (!reVerificado || reVerificado.objeto.estado !== 'ACTIVO') {
+      try { archivoDrive.setTrashed(true); } catch (eC) {}
+      return _resp({ ok: false, error: 'RECIBO_ANTERIOR_NO_ACTIVO' });
+    }
+
+    const version = _calcularSiguienteVersion(snapshot.nombre, periodo);
+
+    let reciboIdNuevo;
+    try {
+      reciboIdNuevo = _crearMetadataRecibo({
+        id: idNuevo,
+        empleado: snapshot.nombre,
+        nombre_legal: snapshot.nombre_legal,
+        empresa: snapshot.empresa,
+        periodo: periodo,
+        tipo: 'RECIBO_SUELDO',
+        nombre_archivo: _sanearNombreArchivoRecibo(datos.nombre_archivo),
+        mime_type: RECIBOS_MIME_VALIDO,
+        tamano_bytes: bytes.length,
+        drive_file_id: archivoDrive.getId(),
+        version: version,
+        subido_por: actor,
+        reemplaza_a: idAnterior,
+      });
+    } catch (eMeta) {
+      try { archivoDrive.setTrashed(true); } catch (eC) {}
+      return _resp({ ok: false, error: 'ERROR_METADATA' });
+    }
+
+    // La fila nueva YA existe en este punto. Si marcar la anterior como
+    // REEMPLAZADO falla, no se revierte la fila nueva (perderla sería peor
+    // que dejar temporalmente dos ACTIVOS) — se deja un error explícito y
+    // recuperable, nunca se oculta la inconsistencia.
+    try {
+      _marcarReciboReemplazado(idAnterior);
+    } catch (eMarcar) {
+      return _resp({
+        ok: false,
+        error: 'INCONSISTENCIA_RECUPERABLE',
+        detalle: 'Se creó el recibo nuevo (' + reciboIdNuevo + ') pero no se pudo marcar el anterior (' + idAnterior + ') como REEMPLAZADO. Requiere revisión manual.',
+        recibo_id_nuevo: reciboIdNuevo,
+      });
+    }
+
+    registrarAuditoria(
+      actor, 'RECIBO_REEMPLAZADO', 'RECIBO', reciboIdNuevo,
+      { id: idAnterior, version: anterior.version },
+      { id: reciboIdNuevo, version: version, periodo: periodo, empresa: snapshot.empresa }
+    );
+
+    const nuevoEncontrado = _buscarReciboPorId(reciboIdNuevo);
+    return _resp({ ok: true, recibo: _respuestaPublicaRecibo(nuevoEncontrado.objeto) });
+  } finally {
+    lock.releaseLock();
+  }
 }
