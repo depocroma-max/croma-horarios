@@ -5378,17 +5378,19 @@ let _recibosFicha = null;
 
 function _renderTabRecibosEmpleado(emp) {
   const nombreLegal = (emp.nombre_legal || '').trim();
-  const empresa = emp.empresa || '—';
   const avisoNombreLegal = !nombreLegal ? `
     <div class="alert alert-warning" style="margin-bottom:12px;font-size:12.5px">
       ${icon('alertTriangle','icon-16')} Falta el nombre legal de este colaborador — completalo en la pestaña
       <a href="javascript:void(0)" onclick="_switchFormEmpTab('perfil', document.querySelectorAll('#formEmpTabs .admin-tab')[0])" style="font-weight:600">Perfil</a>
       antes de subir recibos.
     </div>` : '';
+  // Nombre/nombre legal/empresa ya se muestran en el encabezado de la
+  // ficha (ver admin-header-rich) — acá solo lo específico de Recibos,
+  // sin duplicar identidad.
   return `
-    <div class="admin-form-grupo" style="margin-bottom:14px">
-      <div style="font-size:13.5px;font-weight:600;color:#1e293b">${nombreLegal || '<span style="color:#94a3b8;font-weight:400">Sin nombre legal cargado</span>'}</div>
-      <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">${emp.nombre} · ${empresa}</div>
+    <div style="margin-bottom:14px">
+      <div style="font-family:var(--font-display);font-size:17px;letter-spacing:.5px;color:#0d0d0d">Recibos de sueldo</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:2px">Los recibos publicados para este colaborador van a aparecer acá.</div>
     </div>
     ${avisoNombreLegal}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
