@@ -3451,3 +3451,106 @@ function accionDiagnosticoFichadas() {
     empleados_sin_match_muestra: Object.keys(empleadosSinMatch).slice(0, 20),
   });
 }
+
+// ══════════════════════════════════════════════════════
+//  RECIBOS — Fase 3, Commit 1: prueba aislada de DriveApp.
+//  HERRAMIENTA INTERNA — NO desplegada como acción del dispatcher (retirada
+//  de despacharAccionSegura el 2026-08-03, tras medir 100KB/500KB/1MB/2MB,
+//  los 4 sin error). Se conserva en el archivo como referencia y para
+//  volver a usarla manualmente si hace falta remedir con tamaños mayores:
+//  ejecutarla desde el editor de Apps Script ("Ejecutar" con datos de
+//  prueba armados a mano), nunca vía HTTP. Si se necesita de nuevo como
+//  endpoint, hay que agregarla explícitamente al dispatcher otra vez.
+//  La carpeta raíz que crea SÍ queda (es parte de la estructura real que
+//  va a usar el módulo); _DIAGNOSTICO_TEMPORAL queda vacía.
+// ══════════════════════════════════════════════════════
+function accionDiagnosticoDrive(datos) {
+  datos = datos || {};
+  const resultado = { ok: true };
+
+  // Datos de cuenta: SOLO al log de ejecución de GAS (Ver > Registro de
+  // ejecución en el editor), NUNCA en la respuesta HTTP — el diagnóstico
+  // no debe devolver datos de cuenta al llamador bajo ninguna circunstancia.
+  try { Logger.log('usuario_activo: ' + (Session.getActiveUser().getEmail() || '(vacío)')); } catch (e) { Logger.log('usuario_activo: ERROR ' + e.message); }
+  try { Logger.log('usuario_efectivo: ' + (Session.getEffectiveUser().getEmail() || '(vacío)')); } catch (e) { Logger.log('usuario_efectivo: ERROR ' + e.message); }
+
+  // Carpeta raíz — SÍ es parte de la estructura real y permanente del
+  // módulo (no se borra al terminar el diagnóstico).
+  const NOMBRE_RAIZ = 'CROMA_HORARIOS_RECIBOS';
+  let carpetaRaiz;
+  try {
+    const existentes = DriveApp.getFoldersByName(NOMBRE_RAIZ);
+    const yaExistia = existentes.hasNext();
+    carpetaRaiz = yaExistia ? existentes.next() : DriveApp.createFolder(NOMBRE_RAIZ);
+    resultado.carpeta_raiz_creada_o_encontrada = true;
+    resultado.carpeta_raiz_ya_existia = yaExistia;
+    try {
+      const acceso = carpetaRaiz.getSharingAccess();
+      // Solo un booleano — nunca el enum crudo ni ningún identificador.
+      resultado.carpeta_raiz_es_privada = (acceso === DriveApp.Access.PRIVATE);
+    } catch (e2) {
+      resultado.carpeta_raiz_es_privada = null;
+    }
+  } catch (e) {
+    resultado.ok = false;
+    resultado.error_carpeta_raiz = e.message;
+    return _resp(resultado);
+  }
+
+  // El diagnóstico opera ÚNICAMENTE dentro de _DIAGNOSTICO_TEMPORAL — la
+  // estructura real de empresa/período (MOSHE_SRL/2026-08, etc.) es parte
+  // de la implementación definitiva, después de aprobar este diagnóstico,
+  // no de esta prueba.
+  let carpetaPrueba;
+  try {
+    const NOMBRE_PRUEBA = '_DIAGNOSTICO_TEMPORAL';
+    const itP = carpetaRaiz.getFoldersByName(NOMBRE_PRUEBA);
+    carpetaPrueba = itP.hasNext() ? itP.next() : carpetaRaiz.createFolder(NOMBRE_PRUEBA);
+  } catch (e) {
+    resultado.ok = false;
+    resultado.error_carpeta_prueba = e.message;
+    return _resp(resultado);
+  }
+
+  // Prueba de tamaño real — contenido SINTÉTICO (nunca un recibo real),
+  // solo si Node manda un base64 de prueba. try/finally: el archivo se
+  // borra de la carpeta de prueba pase lo que pase, incluso si falla la
+  // lectura de verificación a mitad de camino.
+  if (datos.base64_prueba) {
+    let archivo = null;
+    try {
+      const t0 = new Date().getTime();
+      const bytes = Utilities.base64Decode(datos.base64_prueba);
+      const blob  = Utilities.newBlob(bytes, 'application/pdf', 'prueba_diagnostico.pdf');
+      const tDecode = new Date().getTime() - t0;
+
+      const t1 = new Date().getTime();
+      archivo = carpetaPrueba.createFile(blob);
+      const tSubida = new Date().getTime() - t1;
+
+      const t2 = new Date().getTime();
+      const tamanoLeido = archivo.getBlob().getBytes().length;
+      const tLectura = new Date().getTime() - t2;
+
+      resultado.prueba_archivo = {
+        tamano_enviado_bytes: bytes.length,
+        tamano_leido_bytes: tamanoLeido,
+        coincide: bytes.length === tamanoLeido,
+        ms_decode_base64: tDecode,
+        ms_subida: tSubida,
+        ms_lectura: tLectura,
+      };
+    } catch (e) {
+      resultado.prueba_archivo = { error: e.message };
+    } finally {
+      // Se ejecuta siempre, incluso si el try de arriba explotó a mitad
+      // de camino (por eso "archivo" se inicializa afuera del try).
+      if (archivo) {
+        try { archivo.setTrashed(true); resultado.archivo_prueba_limpiado = true; }
+        catch (eLimpieza) { resultado.archivo_prueba_limpiado = false; resultado.error_limpieza = eLimpieza.message; }
+      }
+    }
+  }
+
+  return _resp(resultado);
+}
