@@ -629,7 +629,7 @@ function renderEmpleados(datos) {
     const [anio, mes] = selPeriodo.split('||');
     datosFilt = datosFilt.filter(r => String(r.AÑO) === anio && r.MES === mes);
   }
-  if (selLocal !== 'all') datosFilt = datosFilt.filter(r => r.LOCAL === selLocal);
+  if (selLocal !== 'all') datosFilt = datosFilt.filter(r => (EMPLEADOS_PERFILES[r.EMPLEADO]?.sucursal_id || r.LOCAL) === selLocal);
   if (selEmpresa !== 'all') {
     datosFilt = datosFilt.filter(r => {
       const perfil = EMPLEADOS_PERFILES[r.EMPLEADO];
@@ -6545,10 +6545,13 @@ function buscarEmpleado(query) {
   const q = query.toLowerCase();
   const datos = state.datos;
 
-  // Buscar coincidencias únicas por empleado
+  // Buscar coincidencias únicas por empleado (nombre o apodo)
   const matches = [...new Map(
     datos
-      .filter(r => r.EMPLEADO.toLowerCase().includes(q))
+      .filter(r => {
+        const apodo = EMPLEADOS_PERFILES[r.EMPLEADO]?.apodo || '';
+        return r.EMPLEADO.toLowerCase().includes(q) || apodo.toLowerCase().includes(q);
+      })
       .map(r => [r.EMPLEADO, r])
   ).values()].slice(0, 8);
 
@@ -6591,11 +6594,12 @@ function mostrarDropdownBusqueda(matches) {
     const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
     const numVend  = numMatch ? `<span class="search-num">#${numMatch[1]}</span>` : '';
     const nombre   = numMatch ? numMatch[2] : r.EMPLEADO;
+    const apodo    = EMPLEADOS_PERFILES[r.EMPLEADO]?.apodo || '';
     return `<div class="search-item"
       data-emp="${r.EMPLEADO.replace(/"/g,'&quot;')}"
       data-suc="${r.LOCAL}">
       <span class="search-dot" style="background:${s.color}"></span>
-      <span class="search-nombre">${numVend} ${nombre}</span>
+      <span class="search-nombre">${numVend} ${nombre}${apodo ? ` <span class="badge badge-neutral" style="font-size:10px;padding:1px 7px;vertical-align:middle">${apodo}</span>` : ''}</span>
       <span class="search-suc">${s.nombre}</span>
     </div>`;
   }).join('');
