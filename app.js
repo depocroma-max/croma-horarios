@@ -3599,7 +3599,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <span>Sábados</span>
           <strong id="inicioSabs">${totalSabs}</strong>
         </div>
-        <div class="portal-summary-card">
+        <div class="portal-summary-card" style="display:none">
           <span>Saldo banco</span>
           <strong id="inicioBanco">—</strong>
         </div>
@@ -6871,7 +6871,7 @@ function renderVacacionesEmpleadoHTML(nombreEmp, vac, solicitudes) {
     : `<p style="color:#94a3b8;font-size:13px">No tenés solicitudes.</p>`;
 
   return `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+    <div class="emp-portal-vac-stats">
       <div class="detalle-stat"><span class="detalle-stat-val">${banco}</span><span class="detalle-stat-lbl">Días banco</span></div>
       <div class="detalle-stat"><span class="detalle-stat-val">${usado}</span><span class="detalle-stat-lbl">Usados</span></div>
       <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb">${disponible}</span><span class="detalle-stat-lbl">Disponibles</span></div>
