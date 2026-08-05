@@ -1162,7 +1162,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
         <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
-        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td></td>
         <td>—</td>
         <td>—</td>
         <td></td>
@@ -1340,7 +1340,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-feriado="0" data-sab="${f.esSab?1:0}" data-cert="1">
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
-                <td><strong>${f.hsTotal.toFixed(1)}</strong></td><td>—</td><td>—</td><td></td><td>—</td>
+                <td></td><td>—</td><td>—</td><td></td><td>—</td>
                 <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar" aria-label="Borrar certificado">${icon('x','icon-12')}</button></td>
               </tr>`;
               return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
@@ -2771,10 +2771,6 @@ async function borrarCertificado(id) {
 
 function abrirFormCertificado(nombreEmp, desdeAdmin) {
   _certFlujoDesdeAdmin = !!desdeAdmin;
-  const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
-  const cat    = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
-  // Determinar horas por defecto según categoría
-  const hsPorDefecto = cat?.regla === 'fijo4' ? 4 : 8;
 
   const tiposOpts = TIPOS_CERTIFICADO.map(t =>
     `<option value="${t}">${t}</option>`
@@ -2816,10 +2812,10 @@ function abrirFormCertificado(nombreEmp, desdeAdmin) {
         </div>
         <div class="admin-form-grupo" id="certDiasGrupo" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
-            <label class="emp-filtro-label" style="margin:0">Cobertura por día</label>
+            <label class="emp-filtro-label" style="margin:0">Días cubiertos</label>
             <div style="display:flex;gap:6px">
-              <button type="button" class="cert-bulk" onclick="setCertTodos('completa')">Todos completa</button>
-              <button type="button" class="cert-bulk" onclick="setCertTodos('media')">Todos media</button>
+              <button type="button" class="cert-bulk" onclick="setCertTodos('incluir')">Todos incluir</button>
+              <button type="button" class="cert-bulk" onclick="setCertTodos('quitar')">Todos quitar</button>
             </div>
           </div>
           <div id="certDiasContainer"></div>
@@ -2836,8 +2832,7 @@ function abrirFormCertificado(nombreEmp, desdeAdmin) {
   </div>`;
   montarOverlayAdmin(html);
 
-  // Estado de cobertura por día y horas de jornada completa según categoría
-  CERT_HS_FULL = hsPorDefecto;
+  // Estado de cobertura por día (los certificados no suman horas)
   CERT_DIAS_STATE = {};
 
   // Rango por defecto: hoy → hoy
@@ -2849,8 +2844,7 @@ function abrirFormCertificado(nombreEmp, desdeAdmin) {
 }
 
 // Estado del formulario de certificados por rango
-let CERT_DIAS_STATE = {};   // { 'YYYY-MM-DD': 'completa' | 'media' | 'quitar' }
-let CERT_HS_FULL = 8;       // horas de jornada completa del empleado
+let CERT_DIAS_STATE = {};   // { 'YYYY-MM-DD': 'incluir' | 'quitar' }
 
 function renderCertRango() {
   const desde = document.getElementById('certDesde')?.value;
@@ -2878,9 +2872,9 @@ function renderCertRango() {
     const iso = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`;
     dias.push(iso);
     if (!(iso in CERT_DIAS_STATE)) {
-      // Default según día: domingo → quitar, sábado → media, resto → completa
-      const dow = cur.getDay();
-      CERT_DIAS_STATE[iso] = dow === 0 ? 'quitar' : (dow === 6 ? 'media' : 'completa');
+      // Por defecto se incluyen todos los días del rango, lunes a domingo,
+      // sin importar si ese día se trabaja o no.
+      CERT_DIAS_STATE[iso] = 'incluir';
     }
     cur.setDate(cur.getDate() + 1);
     guard++;
@@ -2889,7 +2883,6 @@ function renderCertRango() {
   Object.keys(CERT_DIAS_STATE).forEach(k => { if (!dias.includes(k)) delete CERT_DIAS_STATE[k]; });
 
   const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  const hsMedia = CERT_HS_FULL / 2;
   const seg = (iso, val, label) => {
     const activo = CERT_DIAS_STATE[iso] === val ? 'active' : '';
     return `<button type="button" class="cert-seg ${activo}" data-iso="${iso}" data-val="${val}" onclick="setCertDia('${iso}','${val}')">${label}</button>`;
@@ -2902,15 +2895,14 @@ function renderCertRango() {
     return `<div class="cert-dia-row ${finde ? 'cert-dia-finde' : ''} ${fer ? 'cert-dia-feriado' : ''}">
       <span class="cert-dia-lbl">${DIAS_SEMANA[dObj.getDay()]} ${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}${fer ? ' <span class="cert-dia-fer-tag">Feriado</span>' : ''}</span>
       <div class="cert-seg-group">
-        ${seg(iso,'completa','Completa')}
-        ${seg(iso,'media','Media')}
+        ${seg(iso,'incluir','Incluir')}
         ${seg(iso,'quitar','Quitar')}
       </div>
     </div>`;
   }).join('');
 
   cont.innerHTML =
-    `<div class="cert-dias-nota">Completa = ${CERT_HS_FULL}h · Media = ${hsMedia}h · "Quitar" = no genera certificado ese día</div>
+    `<div class="cert-dias-nota">El certificado no suma horas: solo marca el día como CERTIFICADO. "Quitar" excluye ese día puntual.</div>
      <div class="cert-dias-cont">${filas}</div>`;
 }
 
@@ -2958,7 +2950,7 @@ async function confirmarCertificado(nombreEmp) {
   let okCount = 0, fail = 0;
   for (let i = 0; i < dias.length; i++) {
     const fecha = dias[i];
-    const hs = CERT_DIAS_STATE[fecha] === 'media' ? CERT_HS_FULL / 2 : CERT_HS_FULL;
+    const hs = 0; // los certificados no suman horas
     if (btn) { btn.disabled = true; btn.textContent = `Guardando ${i+1}/${dias.length}...`; }
     const r = await guardarCertificado({ empleado: empLimpio, fecha, tipo, hs, nota });
     if (r.ok) okCount++; else fail++;
@@ -3467,7 +3459,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
         <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
-        <td><strong>${f.hsTotal.toFixed(1)}</strong></td>
+        <td></td>
         <td>—</td>
         <td>—</td>
         <td></td>
@@ -3499,7 +3491,6 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
               <span class="ev-card-fecha-str">${f.fechaStr}</span>
             </div>
             <div class="ev-card-hs">
-              <span class="ev-card-hs-val">${f.hsTotal.toFixed(1)}<small>hs</small></span>
             </div>
           </div>
           <div class="ev-card-turnos">
