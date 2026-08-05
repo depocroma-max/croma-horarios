@@ -3797,21 +3797,21 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <button type="button" class="portal-mas-item" onclick="abrirMiPerfil()">${icon('user','icon-18')}<span>Mi perfil</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
       </div>
 
-      <div id="masSeccionVacaciones" style="display:none">
+      <div id="masSeccionVacaciones" class="portal-mas-seccion" style="display:none">
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
         <div id="evTabVacaciones">
           <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
         </div>
       </div>
 
-      <div id="masSeccionBancoHoras" style="display:none">
+      <div id="masSeccionBancoHoras" class="portal-mas-seccion" style="display:none">
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
         <div id="evTabBancoHoras">
           <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
         </div>
       </div>
 
-      <div id="masSeccionRecibos" style="display:none">
+      <div id="masSeccionRecibos" class="portal-mas-seccion" style="display:none">
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
         <div class="emp-vista-toolbar">
           <div>

@@ -3226,6 +3226,11 @@ body {
   width: 100%; text-align: left; font-family: var(--font-body); font-size: 14px; color: var(--black);
 }
 .portal-mas-item:last-child { border-bottom: none; }
+/* Vacaciones/Banco de horas/Recibos dentro de "Más" — al mover este
+   contenido de las tabs superiores viejas (que tenían padding:1.5rem) al
+   nav inferior, ese padding se perdió y quedaba todo pegado al borde.
+   Restaurado acá, aplicado a los tres por igual. */
+.portal-mas-seccion { padding: 1.25rem 0 2rem; }
 .portal-mas-item svg { color: var(--gray-600); flex-shrink: 0; }
 .portal-mas-item .chevron-mas { margin-left: auto; color: var(--gray-400); flex-shrink: 0; }
 /* Stats de Vacaciones (Más → Vacaciones) — min-width:0 evita que
