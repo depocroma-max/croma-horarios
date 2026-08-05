@@ -4161,6 +4161,7 @@ function renderAdminInline() {
       "<button class='rail-item' onclick=\"switchAdminTab('configuracion',this)\">" + icon('settings','icon-16') + "<span>Configuración</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('ajusteJornada',this)\">" + icon('clock','icon-16') + "<span>Ajuste de jornada</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('fichadas',this)\">" + icon('download','icon-16') + "<span>Fichadas</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('recibos',this)\">" + icon('fileText','icon-16') + "<span>Recibos</span></button>" +
     "</nav>" +
     "<main class='admin-main-v2'>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
@@ -4284,6 +4285,7 @@ function renderAdminInline() {
     "</div>" +
     "<div id='adminTabAjusteJornada' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabFichadas' class='admin-tab-content' style='display:none'></div>" +
+    "<div id='adminTabRecibos' class='admin-tab-content' style='display:none'></div>" +
     "</main>" +
     "</div>" +
     "</div>";
@@ -4300,9 +4302,103 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabConfiguracion').style.display= tab === 'configuracion' ? 'block' : 'none';
   document.getElementById('adminTabAjusteJornada').style.display= tab === 'ajusteJornada'  ? 'block' : 'none';
   document.getElementById('adminTabFichadas').style.display     = tab === 'fichadas'       ? 'block' : 'none';
+  document.getElementById('adminTabRecibos').style.display      = tab === 'recibos'        ? 'block' : 'none';
   if (tab === 'configuracion') cargarConfigAdmin();
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
   if (tab === 'fichadas') renderFichadasTab();
+  if (tab === 'recibos') renderRecibosAdminTab();
+}
+
+// ── ADMINISTRACIÓN → RECIBOS ──────────────────────────
+// Acceso rápido a Subir/Reemplazar/Descargar recibos sin entrar a la
+// ficha completa de cada empleado. Reutiliza 100% la lógica ya construida
+// en la ficha admin (_recibosFicha, _cargarRecibosEmpleado,
+// _renderTabRecibosEmpleado, _abrirModalRecibo, _recibosDescargarAdmin) —
+// solo cambia el punto de entrada. Mismos permisos: esta pestaña vive
+// dentro de Administración, ya gateada a admin/jefe.
+function renderRecibosAdminTab() {
+  const container = document.getElementById('adminTabRecibos');
+  if (!container) return;
+
+  const empleadosAdmin = obtenerEmpleadosAdmin().filter(e => e.estado !== 'inactivo');
+
+  const filas = empleadosAdmin.map(emp => {
+    const nombre = emp.nombre;
+    const nomMostrar = nombre.replace(/^\d+\s+/, '');
+    const nomEnc = nombre.replace(/'/g, "\\'");
+    const rowId = 'recAdminFila_' + nombre.replace(/[^a-zA-Z0-9]/g, '_');
+    const nombreLegalHTML = emp.nombre_legal
+      ? `<span style="font-size:11px;color:var(--text-muted)">${emp.nombre_legal}</span>`
+      : `<span class="badge badge-neutral" style="font-size:10px;padding:1px 6px">Nombre legal pendiente</span>`;
+    return `
+    <tr class="dt-clickable" data-nombre="${nombre.replace(/"/g, '&quot;')}" onclick="_toggleRecibosAdminFila('${nomEnc}','${rowId}')">
+      <td><div class="dt-identity"><div class="dt-identity-text">
+        <div class="dt-identity-name">${nomMostrar}</div>
+        <div class="dt-identity-legal" style="margin-top:2px">${nombreLegalHTML}</div>
+      </div></div></td>
+      <td><span style="font-size:12.5px;color:var(--text-secondary)">${emp.empresa || '—'}</span></td>
+      <td class="al-c"><button class="btn-admin-edit" type="button" onclick="event.stopPropagation();_toggleRecibosAdminFila('${nomEnc}','${rowId}')">${icon('fileText', 'icon-14')} Ver recibos</button></td>
+    </tr>
+    <tr id="${rowId}" style="display:none">
+      <td colspan="3" style="padding:0;border-bottom:1px solid var(--border-neutral)">
+        <div style="padding:16px 18px;background:var(--gray-50)" id="${rowId}_body"></div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="admin-head-row">
+      <div class="admin-head">
+        <h1>Recibos</h1>
+        <p>Subí, reemplazá o descargá recibos de sueldo de cualquier empleado sin entrar a su ficha completa.</p>
+      </div>
+    </div>
+    <div class="filters-bar">
+      <div class="f-search-wrap">${icon('search', 'icon-16')}<input type="text" class="f-search" id="adminBuscarRecibos" placeholder="Buscar empleado…" oninput="_filtrarTablaRecibosAdmin()" /></div>
+    </div>
+    <div class="dt-wrap"><div class="dt-scroll">
+      <table class="dt-table" id="adminTablaRecibos">
+        <thead><tr><th>Empleado</th><th>Empresa</th><th class="al-c"></th></tr></thead>
+        <tbody>${filas || '<tr><td colspan="3" style="text-align:center;padding:2.5rem;color:var(--text-muted);font-size:13px">Sin empleados cargados</td></tr>'}</tbody>
+      </table>
+    </div></div>
+  `;
+}
+
+// Solo una fila expandida a la vez: _renderTabRecibosEmpleado() genera IDs
+// fijos (formEmpRecibosListado, formEmpBtnSubirRecibo, etc.) que no pueden
+// duplicarse en el DOM — abrir una nueva fila cierra cualquier otra.
+function _toggleRecibosAdminFila(nombre, rowId) {
+  const fila = document.getElementById(rowId);
+  if (!fila) return;
+  const yaAbierta = fila.style.display !== 'none';
+
+  document.querySelectorAll('#adminTablaRecibos tbody tr[id^="recAdminFila_"]').forEach(tr => {
+    if (tr !== fila) tr.style.display = 'none';
+  });
+
+  if (yaAbierta) { fila.style.display = 'none'; return; }
+
+  const emp = obtenerEmpleadosAdmin().find(e => e.nombre === nombre);
+  if (!emp) return;
+
+  fila.style.display = '';
+  _recibosFicha = { nombre: emp.nombre, nombreLegal: emp.nombre_legal || '', empresa: emp.empresa || '', historial: false, cargado: false, lista: [] };
+  const body = document.getElementById(rowId + '_body');
+  if (body) body.innerHTML = _renderTabRecibosEmpleado(emp);
+  _cargarRecibosEmpleado();
+}
+
+function _filtrarTablaRecibosAdmin() {
+  const q = (document.getElementById('adminBuscarRecibos')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#adminTablaRecibos tbody tr.dt-clickable').forEach(row => {
+    const nombre = (row.dataset.nombre || '').toLowerCase();
+    const visible = !q || nombre.includes(q);
+    row.style.display = visible ? '' : 'none';
+    // Ocultar/mostrar también la fila expandida asociada, si existe.
+    const next = row.nextElementSibling;
+    if (next && next.id && next.id.startsWith('recAdminFila_') && !visible) next.style.display = 'none';
+  });
 }
 
 function _filtrarTablaCertAdmin() {
@@ -5397,6 +5493,17 @@ function _mostrarCampoPinEmpleado() {
   if (btn) btn.style.display = 'none';
 }
 
+// El aviso "falta nombre legal" dentro de _renderTabRecibosEmpleado()
+// aparece tanto en la ficha completa (donde existe #formEmpTabs) como en
+// Administración → Recibos (donde no existe ninguna ficha montada) — este
+// helper elige el comportamiento correcto según el contexto en vez de
+// asumir siempre la ficha.
+function _irAPerfilDesdeRecibos(nombre) {
+  const tabs = document.querySelectorAll('#formEmpTabs .admin-tab');
+  if (tabs.length) { _switchFormEmpTab('perfil', tabs[0]); return; }
+  abrirFormularioEmpleado(nombre);
+}
+
 function _switchFormEmpTab(tab, btn) {
   document.querySelectorAll('#formEmpTabs .admin-tab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
@@ -5441,10 +5548,11 @@ let _recibosFicha = null;
 
 function _renderTabRecibosEmpleado(emp) {
   const nombreLegal = (emp.nombre_legal || '').trim();
+  const nomEncAviso = String(emp.nombre || '').replace(/'/g, "\\'");
   const avisoNombreLegal = !nombreLegal ? `
     <div class="alert alert-warning" style="margin-bottom:12px;font-size:12.5px">
       ${icon('alertTriangle','icon-16')} Falta el nombre legal de este colaborador — completalo en la pestaña
-      <a href="javascript:void(0)" onclick="_switchFormEmpTab('perfil', document.querySelectorAll('#formEmpTabs .admin-tab')[0])" style="font-weight:600">Perfil</a>
+      <a href="javascript:void(0)" onclick="_irAPerfilDesdeRecibos('${nomEncAviso}')" style="font-weight:600">Perfil</a>
       antes de subir recibos.
     </div>` : '';
   // Nombre/nombre legal/empresa ya se muestran en el encabezado de la
