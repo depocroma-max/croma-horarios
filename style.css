@@ -3507,20 +3507,6 @@ body {
   font-size: 11px;
   color: var(--gray-500);
 }
-.emp-portal-mobilefirst .detalle-tabs {
-  background: var(--white);
-  border: 1px solid var(--gray-100) !important;
-  border-radius: 16px 16px 0 0;
-  padding: 6px;
-  margin-top: 14px !important;
-}
-.emp-portal-mobilefirst #evTabJornada,
-.emp-portal-mobilefirst #evTabVacaciones {
-  background: var(--white);
-  border: 1px solid var(--gray-100);
-  border-top: none;
-  border-radius: 0 0 16px 16px;
-}
 .emp-portal-mobilefirst .emp-vista-toolbar {
   margin: 0;
   border-radius: 0;
