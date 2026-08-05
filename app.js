@@ -3799,29 +3799,35 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 
       <div id="masSeccionVacaciones" class="portal-mas-seccion" style="display:none">
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
-        <div id="evTabVacaciones">
-          <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+        <div class="portal-mas-card">
+          <div id="evTabVacaciones">
+            <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+          </div>
         </div>
       </div>
 
       <div id="masSeccionBancoHoras" class="portal-mas-seccion" style="display:none">
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
-        <div id="evTabBancoHoras">
-          <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+        <div class="portal-mas-card">
+          <div id="evTabBancoHoras">
+            <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+          </div>
         </div>
       </div>
 
       <div id="masSeccionRecibos" class="portal-mas-seccion" style="display:none">
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
-        <div class="emp-vista-toolbar">
-          <div>
-            <h2 style="font-family:var(--font-display);font-size:18px;letter-spacing:.5px;color:#0d0d0d;margin:0">Mis recibos</h2>
-            <p style="font-size:12px;color:#94a3b8;margin:2px 0 0">Tus recibos de sueldo publicados van a aparecer acá.</p>
+        <div class="portal-mas-card">
+          <div class="emp-vista-toolbar">
+            <div>
+              <h2 style="font-family:var(--font-display);font-size:18px;letter-spacing:.5px;color:#0d0d0d;margin:0">Mis recibos</h2>
+              <p style="font-size:12px;color:#94a3b8;margin:2px 0 0">Tus recibos de sueldo publicados van a aparecer acá.</p>
+            </div>
+            <button class="detalle-footer-refresh" onclick="_recargarRecibosPortal()" title="Actualizar" aria-label="Actualizar">${icon('refresh','icon-14')}</button>
           </div>
-          <button class="detalle-footer-refresh" onclick="_recargarRecibosPortal()" title="Actualizar" aria-label="Actualizar">${icon('refresh','icon-14')}</button>
-        </div>
-        <div id="portalRecibosContenido">
-          <div class="ajuste-empty-state"><div class="spinner" role="status" aria-label="Cargando"></div><p class="text-secondary">Cargando tus recibos…</p></div>
+          <div id="portalRecibosContenido">
+            <div class="ajuste-empty-state"><div class="spinner" role="status" aria-label="Cargando"></div><p class="text-secondary">Cargando tus recibos…</p></div>
+          </div>
         </div>
       </div>
     </div><!-- fin portalVistaMas -->

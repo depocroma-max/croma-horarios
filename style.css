@@ -3227,10 +3227,15 @@ body {
 }
 .portal-mas-item:last-child { border-bottom: none; }
 /* Vacaciones/Banco de horas/Recibos dentro de "Más" — al mover este
-   contenido de las tabs superiores viejas (que tenían padding:1.5rem) al
-   nav inferior, ese padding se perdió y quedaba todo pegado al borde.
-   Restaurado acá, aplicado a los tres por igual. */
+   contenido de las tabs superiores viejas al nav inferior quedó todo
+   pegado, sin ningún borde visible. .portal-mas-card le da una tarjeta
+   real (mismos valores que .ev-card, ya usada en el resto del Portal),
+   así el límite queda inequívoco en vez de un padding sutil. */
 .portal-mas-seccion { padding: 1.25rem 0 2rem; }
+.portal-mas-card {
+  background: #fff; border: 1px solid #efefec; border-radius: 16px;
+  padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-top: 12px;
+}
 .portal-mas-item svg { color: var(--gray-600); flex-shrink: 0; }
 .portal-mas-item .chevron-mas { margin-left: auto; color: var(--gray-400); flex-shrink: 0; }
 /* Stats de Vacaciones (Más → Vacaciones) — min-width:0 evita que
