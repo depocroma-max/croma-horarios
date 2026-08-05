@@ -3076,12 +3076,13 @@ function actualizarIndicadorSesion() {
     topActions.parentNode.insertBefore(chip, topActions);
   }
   const esAdmin = sesionActual.rol === 'admin';
+  const esEmpleado = sesionActual.rol === 'empleado';
+  // Portal Empleado: "Mi perfil" y el nombre se sacaron de la topbar y
+  // viven en "Más" (ver masListado en renderVistaEmpleado) — acá queda
+  // solo el botón de salir, como en el resto de la app.
   chip.innerHTML = `
-    <span class="sesion-nombre">${esAdmin ? `${icon('user','icon-14')} Admin` : sesionActual.nombre}</span>
-    ${!esAdmin ? `<button class="sesion-perfil" onclick="abrirMiPerfil()" title="Mi perfil" aria-label="Mi perfil">
-      ${icon('user','icon-12')}
-      Mi perfil
-    </button>` : ''}
+    ${esAdmin ? `<span class="sesion-nombre">${icon('user','icon-14')} Admin</span>` : ''}
+    ${!esAdmin && !esEmpleado ? `<span class="sesion-nombre">${sesionActual.nombre}</span>` : ''}
     <button class="sesion-logout" onclick="cerrarSesion()" title="Cerrar sesión" aria-label="Cerrar sesión">
       ${icon('logOut','icon-13')}
     </button>
@@ -3719,6 +3720,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <button type="button" class="portal-mas-item" onclick="switchMasSeccion('vacaciones')">${icon('palmtree','icon-18')}<span>Vacaciones</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
         <button type="button" class="portal-mas-item" onclick="switchMasSeccion('bancoHoras')">${icon('timer','icon-18')}<span>Banco de horas</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
         <button type="button" class="portal-mas-item" onclick="switchMasSeccion('recibos')">${icon('fileText','icon-18')}<span>Recibos</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
+        <button type="button" class="portal-mas-item" onclick="abrirMiPerfil()">${icon('user','icon-18')}<span>Mi perfil</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
       </div>
 
       <div id="masSeccionVacaciones" style="display:none">
