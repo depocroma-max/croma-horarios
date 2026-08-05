@@ -3542,8 +3542,9 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
 
   const _vc = document.getElementById('vistaEmpleadoContainer');
   _vc.innerHTML = `
-    <div class="emp-vista-personal emp-portal-mobilefirst">
+    <div class="emp-vista-personal emp-portal-mobilefirst emp-portal-bottomnav-pad">
 
+    <div id="portalVistaInicio">
       <!-- PORTAL EMPLEADO -->
       <section class="portal-hero" style="--portal-color:${suc.color};--portal-soft:${suc.colorLight}">
         <div class="portal-profile-card">
@@ -3569,15 +3570,75 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <div class="portal-next-card">
           <span class="portal-kicker">Turno de hoy</span>
           ${getProximoTurno()}
+          <button class="btn-fichar-cta" style="margin:6px 0 0" onclick="irAFicharEmpleado()">
+            ${icon('clock','icon-18')}
+            Registrar mi jornada
+          </button>
         </div>
       </section>
 
-      <button class="btn-fichar-cta" onclick="irAFicharEmpleado()">
-        ${icon('clock','icon-18')}
-        Registrar mi jornada
-      </button>
-
       <section class="portal-summary-grid">
+        <div class="portal-summary-card">
+          <span>Días</span>
+          <strong id="inicioDias">${diasUnicos}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Hs totales</span>
+          <strong id="inicioHoras">${totalHoras.toFixed(1)}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Hs extra</span>
+          <strong id="inicioExtra">${totalHsExtra.toFixed(1)}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Hs feriado</span>
+          <strong id="inicioFeriado">${totalHsFeriado.toFixed(1)}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Sábados</span>
+          <strong id="inicioSabs">${totalSabs}</strong>
+        </div>
+        <div class="portal-summary-card">
+          <span>Saldo banco</span>
+          <strong id="inicioBanco">—</strong>
+        </div>
+      </section>
+
+      <!-- SECCIÓN ANUNCIOS (historial) -->
+      <div id="anunciosSectionWrap" style="display:none">
+        <section class="portal-section portal-anuncios-section">
+          <div class="portal-section-head">
+            <div>
+              <span class="portal-kicker">Novedades <span class="anuncio-seccion-badge" id="anunciosBadgeCount" style="display:none"></span></span>
+              <h2>Anuncios</h2>
+            </div>
+          </div>
+          <div id="anunciosSectionList"></div>
+        </section>
+      </div>
+    </div><!-- fin portalVistaInicio -->
+
+    <div id="portalVistaSemana" style="display:none">
+      <section class="portal-section portal-week-section">
+        <div class="portal-section-head">
+          <div>
+            <span class="portal-kicker" id="empSemanaLabel">${getEmpSemanaLabel(_empSemanaOffset)}</span>
+            <h2>Mi semana</h2>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="emp-semana-nav-btn" onclick="empNavSemana(-1)" title="Semana anterior" aria-label="Semana anterior">&#8592;</button>
+            <button class="emp-semana-nav-btn emp-semana-nav-hoy" onclick="empNavSemana(0,'reset')" title="Ir a esta semana">Hoy</button>
+            <button class="emp-semana-nav-btn" onclick="empNavSemana(1)" title="Semana siguiente" aria-label="Semana siguiente">&#8594;</button>
+          </div>
+        </div>
+        <div class="portal-week-grid" id="empSemanaGrid">
+          ${buildSemanaEmpleado()}
+        </div>
+      </section>
+    </div><!-- fin portalVistaSemana -->
+
+    <div id="portalVistaHistorial" style="display:none">
+      <section class="portal-summary-grid" style="margin-bottom:1rem">
         <div class="portal-summary-card">
           <span>Días</span>
           <strong id="evDias">${diasUnicos}</strong>
@@ -3600,46 +3661,6 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
       </section>
 
-      <!-- SECCIÓN ANUNCIOS (historial) -->
-      <div id="anunciosSectionWrap" style="display:none">
-        <section class="portal-section portal-anuncios-section">
-          <div class="portal-section-head">
-            <div>
-              <span class="portal-kicker">Novedades <span class="anuncio-seccion-badge" id="anunciosBadgeCount" style="display:none"></span></span>
-              <h2>Anuncios</h2>
-            </div>
-          </div>
-          <div id="anunciosSectionList"></div>
-        </section>
-      </div>
-
-      <section class="portal-section portal-week-section">
-        <div class="portal-section-head">
-          <div>
-            <span class="portal-kicker" id="empSemanaLabel">${getEmpSemanaLabel(_empSemanaOffset)}</span>
-            <h2>Mi semana</h2>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button class="emp-semana-nav-btn" onclick="empNavSemana(-1)" title="Semana anterior" aria-label="Semana anterior">&#8592;</button>
-            <button class="emp-semana-nav-btn emp-semana-nav-hoy" onclick="empNavSemana(0,'reset')" title="Ir a esta semana">Hoy</button>
-            <button class="emp-semana-nav-btn" onclick="empNavSemana(1)" title="Semana siguiente" aria-label="Semana siguiente">&#8594;</button>
-          </div>
-        </div>
-        <div class="portal-week-grid" id="empSemanaGrid">
-          ${buildSemanaEmpleado()}
-        </div>
-      </section>
-
-      <!-- TABS EMPLEADO -->
-      <div class="detalle-tabs" style="margin:0 0 0 0;border-bottom:1px solid var(--gray-100)">
-        <button class="detalle-tab active" onclick="switchEvTab('jornada',this)">Historial</button>
-        <button class="detalle-tab" onclick="switchEvTab('vacaciones',this)">${icon('palmtree','icon-14')} Vacaciones</button>
-        <button class="detalle-tab" onclick="switchEvTab('bancoHoras',this)">${icon('timer','icon-14')} Banco de horas</button>
-        <button class="detalle-tab" onclick="switchEvTab('recibos',this)">${icon('fileText','icon-14')} Recibos</button>
-      </div>
-
-      <!-- CONTENIDO JORNADA -->
-      <div id="evTabJornada">
       <!-- SELECTOR DE PERÍODO -->
       <div class="emp-vista-toolbar">
         <div style="display:flex;align-items:center;gap:8px">
@@ -3691,20 +3712,31 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <span>${totalSabs} sábados</span>
         </div>
       </div>
-      </div><!-- fin evTabJornada -->
+    </div><!-- fin portalVistaHistorial -->
 
-      <!-- CONTENIDO VACACIONES EMPLEADO -->
-      <div id="evTabVacaciones" style="display:none;padding:1.5rem">
-        <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+    <div id="portalVistaMas" style="display:none">
+      <div id="masListado">
+        <button type="button" class="portal-mas-item" onclick="switchMasSeccion('vacaciones')">${icon('palmtree','icon-18')}<span>Vacaciones</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
+        <button type="button" class="portal-mas-item" onclick="switchMasSeccion('bancoHoras')">${icon('timer','icon-18')}<span>Banco de horas</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
+        <button type="button" class="portal-mas-item" onclick="switchMasSeccion('recibos')">${icon('fileText','icon-18')}<span>Recibos</span>${icon('chevronRight','icon-16 chevron-mas')}</button>
       </div>
 
-      <!-- CONTENIDO BANCO DE HORAS EMPLEADO -->
-      <div id="evTabBancoHoras" style="display:none;padding:1.5rem">
-        <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+      <div id="masSeccionVacaciones" style="display:none">
+        <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
+        <div id="evTabVacaciones">
+          <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+        </div>
       </div>
 
-      <!-- CONTENIDO RECIBOS EMPLEADO (Fase 3, Commit 6 — Portal Empleado) -->
-      <div id="evTabRecibos" style="display:none;padding:1.5rem">
+      <div id="masSeccionBancoHoras" style="display:none">
+        <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
+        <div id="evTabBancoHoras">
+          <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+        </div>
+      </div>
+
+      <div id="masSeccionRecibos" style="display:none">
+        <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
         <div class="emp-vista-toolbar">
           <div>
             <h2 style="font-family:var(--font-display);font-size:18px;letter-spacing:.5px;color:#0d0d0d;margin:0">Mis recibos</h2>
@@ -3716,6 +3748,14 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <div class="ajuste-empty-state"><div class="spinner" role="status" aria-label="Cargando"></div><p class="text-secondary">Cargando tus recibos…</p></div>
         </div>
       </div>
+    </div><!-- fin portalVistaMas -->
+
+    <nav class="portal-bottomnav">
+      <button type="button" class="portal-bottomnav-item active" onclick="switchPortalVista('inicio',this)">${icon('building','icon-20')}<span>Inicio</span></button>
+      <button type="button" class="portal-bottomnav-item" onclick="switchPortalVista('semana',this)">${icon('calendar','icon-20')}<span>Mi semana</span></button>
+      <button type="button" class="portal-bottomnav-item" onclick="switchPortalVista('historial',this)">${icon('clock','icon-20')}<span>Historial</span></button>
+      <button type="button" class="portal-bottomnav-item" onclick="switchPortalVista('mas',this)">${icon('moreVertical','icon-20')}<span>Más</span></button>
+    </nav>
 
     </div>
   `;
@@ -7108,20 +7148,35 @@ async function confirmarSolicitudVac(empEnc) {
   }
 }
 
-// ── SWITCH TAB VISTA EMPLEADO ─────────────────────────
-function switchEvTab(tab, btn) {
-  document.querySelectorAll('.emp-vista-personal .detalle-tabs .detalle-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const jornada    = document.getElementById('evTabJornada');
-  const vacaciones = document.getElementById('evTabVacaciones');
-  const bancoHoras = document.getElementById('evTabBancoHoras');
-  const recibos    = document.getElementById('evTabRecibos');
-  if (jornada)    jornada.style.display    = tab === 'jornada'    ? 'block' : 'none';
-  if (vacaciones) vacaciones.style.display = tab === 'vacaciones' ? 'block' : 'none';
-  if (bancoHoras) bancoHoras.style.display = tab === 'bancoHoras' ? 'block' : 'none';
-  if (recibos) {
-    recibos.style.display = tab === 'recibos' ? 'block' : 'none';
-    if (tab === 'recibos') _cargarRecibosPortal();
+// ── NAVEGACIÓN INFERIOR DEL PORTAL EMPLEADO ───────────
+// Reemplaza el switchEvTab anterior (tabs superiores). Historial/
+// Vacaciones/Banco de horas/Recibos siguen siendo los mismos contenedores
+// e IDs de siempre (evTabVacaciones/evTabBancoHoras/evTabRecibos,
+// evSelectMes, evTbody, etc.) — solo cambió dónde viven en el layout,
+// ninguna función de carga de datos se tocó.
+function switchPortalVista(vista, btn) {
+  document.querySelectorAll('.emp-vista-personal .portal-bottomnav .portal-bottomnav-item').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  ['Inicio', 'Semana', 'Historial', 'Mas'].forEach(v => {
+    const el = document.getElementById('portalVista' + v);
+    if (el) el.style.display = v.toLowerCase() === vista ? '' : 'none';
+  });
+  if (vista === 'mas') switchMasSeccion('lista');
+  window.scrollTo(0, 0);
+}
+
+function switchMasSeccion(seccion) {
+  const listado = document.getElementById('masListado');
+  const vac     = document.getElementById('masSeccionVacaciones');
+  const banco   = document.getElementById('masSeccionBancoHoras');
+  const rec     = document.getElementById('masSeccionRecibos');
+  [listado, vac, banco, rec].forEach(el => { if (el) el.style.display = 'none'; });
+  if (seccion === 'lista' && listado) { listado.style.display = ''; return; }
+  if (seccion === 'vacaciones' && vac) vac.style.display = '';
+  if (seccion === 'bancoHoras' && banco) banco.style.display = '';
+  if (seccion === 'recibos' && rec) {
+    rec.style.display = '';
+    _cargarRecibosPortal();
   }
 }
 
@@ -8370,6 +8425,9 @@ async function cargarBancoHorasEmpleado(nombreEmp) {
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
     container.innerHTML = renderBancoHorasHTML(json);
+    // Sincroniza la tarjeta "Saldo banco" de Inicio, si está montada (Portal Empleado).
+    const inicioBancoEl = document.getElementById('inicioBanco');
+    if (inicioBancoEl && typeof json.saldo_hs === 'number') inicioBancoEl.textContent = json.saldo_hs.toFixed(1) + ' hs';
   } catch(e) {
     container.innerHTML = '<p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p>';
   }
