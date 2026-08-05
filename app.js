@@ -683,7 +683,8 @@ function renderEmpleados(datos) {
     ...empsDisp.map(e => {
       const numMatch = e.match(/^(\d+)\s+(.+)$/);
       const label = numMatch ? `#${numMatch[1]} ${numMatch[2]}` : e;
-      return `<option value="${e}" ${e === selEmp ? 'selected' : ''}>${label}</option>`;
+      const apodo = EMPLEADOS_PERFILES[e]?.apodo;
+      return `<option value="${e}" ${e === selEmp ? 'selected' : ''}>${label}${apodo ? ' — ' + apodo : ''}</option>`;
     })].join('');
 
   // Grilla de tarjetas (cuando no hay empleado específico)
@@ -706,7 +707,7 @@ function renderEmpleados(datos) {
       const perfil = EMPLEADOS_PERFILES[r.EMPLEADO] || {};
       const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
       empMap[key] = { nombre: r.EMPLEADO, suc: perfil.sucursal_id || r.LOCAL, horas: 0, dias: new Set(), hsExtra: 0, hsFeriado: 0, sabados: new Set(),
-                      empresa: perfil.empresa || '—', categoria: cat?.nombre || '—', foto_url: perfil.foto_url || '',
+                      empresa: perfil.empresa || '—', categoria: cat?.nombre || '—', foto_url: perfil.foto_url || '', apodo: perfil.apodo || '',
                       activo: perfil.activo !== false, diasProcesados: new Set() };
     }
     empMap[key].horas += parseFloat(r.TOTAL_HS) || 0;
@@ -801,7 +802,7 @@ function renderEmpleados(datos) {
             ${avatarInner}
           </div>
           <div style="flex:1;min-width:0">
-            <div class="emp-nombre">${nombreParaMostrar}</div>
+            <div class="emp-nombre">${nombreParaMostrar}${e.apodo ? ` <span class="badge badge-neutral" style="font-size:10px;padding:1px 7px;vertical-align:middle">${e.apodo}</span>` : ''}</div>
             <div class="emp-suc" style="color:${s.color}">${s.nombre}${numVend ? ` · #${numVend}` : ''}</div>
             <div class="emp-badges-row">${inactivoBadge}${empresaBadge}${catBadge}</div>
           </div>
@@ -4099,7 +4100,7 @@ function renderAdminInline() {
       "<td><div class='dt-identity'>" +
         "<div class='dt-avatar-wrap'>" + avatarInner + "<span class='dt-avatar-dot dot-" + acceso.tono + "'></span></div>" +
         "<div class='dt-identity-text'>" +
-          "<div class='dt-identity-name'>" + nomMostrar + " <span style='font-size:10.5px;font-weight:600;color:var(--text-muted)'>#" + (emp.numero_vendedor_sysneo || '—') + "</span></div>" +
+          "<div class='dt-identity-name'>" + nomMostrar + (emp.apodo ? " <span class='badge badge-neutral' style='font-size:10px;padding:1px 7px;vertical-align:middle'>" + emp.apodo + "</span>" : "") + " <span style='font-size:10.5px;font-weight:600;color:var(--text-muted)'>#" + (emp.numero_vendedor_sysneo || '—') + "</span></div>" +
           "<div class='dt-identity-sub'>" + subLinea + "</div>" +
           "<div class='dt-identity-legal' style='margin-top:2px'>" + nombreLegalHTML + "</div>" +
         "</div>" +
@@ -4333,7 +4334,7 @@ function renderRecibosAdminTab() {
     return `
     <tr class="dt-clickable" data-nombre="${nombre.replace(/"/g, '&quot;')}" onclick="_toggleRecibosAdminFila('${nomEnc}','${rowId}')">
       <td><div class="dt-identity"><div class="dt-identity-text">
-        <div class="dt-identity-name">${nomMostrar}</div>
+        <div class="dt-identity-name">${nomMostrar}${emp.apodo ? ` <span class="badge badge-neutral" style="font-size:10px;padding:1px 7px;vertical-align:middle">${emp.apodo}</span>` : ''}</div>
         <div class="dt-identity-legal" style="margin-top:2px">${nombreLegalHTML}</div>
       </div></div></td>
       <td><span style="font-size:12.5px;color:var(--text-secondary)">${emp.empresa || '—'}</span></td>
@@ -4392,8 +4393,8 @@ function _toggleRecibosAdminFila(nombre, rowId) {
 function _filtrarTablaRecibosAdmin() {
   const q = (document.getElementById('adminBuscarRecibos')?.value || '').trim().toLowerCase();
   document.querySelectorAll('#adminTablaRecibos tbody tr.dt-clickable').forEach(row => {
-    const nombre = (row.dataset.nombre || '').toLowerCase();
-    const visible = !q || nombre.includes(q);
+    // textContent (no solo data-nombre) para que el apodo también sea buscable.
+    const visible = !q || row.textContent.toLowerCase().includes(q);
     row.style.display = visible ? '' : 'none';
     // Ocultar/mostrar también la fila expandida asociada, si existe.
     const next = row.nextElementSibling;
@@ -5322,6 +5323,14 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
               Se utiliza para recibos de sueldo y documentación formal. No modifica el nombre usado en fichadas e historial.
             </span>
           </div>
+          <div class="admin-form-grupo">
+            <label class="emp-filtro-label">Apodo</label>
+            <input type="text" class="admin-input" id="formEmpApodo" value="${emp.apodo || ''}"
+              placeholder="Ej: Turco" autocomplete="off" maxlength="30" />
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+              Opcional. Aparece junto al nombre en las tarjetas de Empleados y se puede buscar por él.
+            </span>
+          </div>
           <div class="admin-form-grupo admin-form-grid-full">
             <label class="emp-filtro-label">Número de vendedor Sysneo</label>
             <span class="${_infoSysneoAdmin(emp).clase}">${_infoSysneoAdmin(emp).label}</span>
@@ -5909,6 +5918,7 @@ async function guardarFormularioEmpleado() {
   const empleadoPayload = {
     nombre,
     nombre_legal:            nombreLegal,
+    apodo:                   (document.getElementById('formEmpApodo')?.value || '').trim(),
     empresa:                document.getElementById('formEmpEmpresa')?.value || '',
     categoria_id:            document.getElementById('formEmpCategoria')?.value || '',
     regla_custom:            document.getElementById('formEmpReglaCustom')?.value || '',

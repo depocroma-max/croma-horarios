@@ -322,6 +322,7 @@ function getPerfiles() {
           numero_vendedor_sysneo: col('NUMERO_VENDEDOR_SYSNEO') >= 0 ? (r[col('NUMERO_VENDEDOR_SYSNEO')] || '') : '',
           celular:                col('CELULAR') >= 0 ? (r[col('CELULAR')] || '') : '',
           estado:                 col('ESTADO') >= 0 ? (r[col('ESTADO')] || 'activo') : 'activo',
+          apodo:                  col('APODO') >= 0 ? (r[col('APODO')] || '') : '',
         };
       });
     }
@@ -665,6 +666,7 @@ function _filaEmpleadoAObjeto(headers, fila) {
     celular:                 val('CELULAR') || '',
     numero_vendedor_sysneo:   val('NUMERO_VENDEDOR_SYSNEO') || '',
     estado:                  val('ESTADO') || 'activo',
+    apodo:                   val('APODO') || '',
   };
 }
 
@@ -690,6 +692,7 @@ function _upsertEmpleado(perfil) {
   _asegurarColumna(hoja, 'CELULAR');
   _asegurarColumna(hoja, 'ESTADO');
   _asegurarColumna(hoja, 'NOMBRE_LEGAL'); // Fase 2 — campo permanente, independiente de NOMBRE
+  _asegurarColumna(hoja, 'APODO'); // apodo opcional, solo visual/búsqueda — no reemplaza NOMBRE ni NOMBRE_LEGAL
 
   const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(h => String(h).trim().toUpperCase());
   const col = function(name) { return headers.indexOf(name); };
@@ -722,6 +725,9 @@ function _upsertEmpleado(perfil) {
   // NOMBRE_LEGAL: independiente de NOMBRE, nunca lo pisa ni se deriva de él.
   if (col('NOMBRE_LEGAL') >= 0 && perfil.nombre_legal !== undefined) {
     fila[col('NOMBRE_LEGAL')] = perfil.nombre_legal || '';
+  }
+  if (col('APODO') >= 0 && perfil.apodo !== undefined) {
+    fila[col('APODO')] = perfil.apodo || '';
   }
 
   const estadoPrevio = antes ? antes.estado : null;
