@@ -60,6 +60,7 @@ let CATEGORIAS_CONFIG = [
 // Formato: { nombre, empresa, categoria_id, hs_base, dias_base, foto_url, activo, regla_custom }
 let EMPLEADOS_PERFILES = {};   // clave: nombre exacto del empleado
 let CERTIFICADOS_CACHE = [];   // lista de certificados cargados del Sheet
+let VACACIONES_APROBADAS_CACHE = [];   // solicitudes de vacaciones ya aprobadas (empleado o admin), para el historial
 let _certFlujoDesdeAdmin = false; // true si abrirFormCertificado se abrió desde Administración > Certificados
 let _verInactivos = false;     // panel Empleados: mostrar u ocultar la sección de ex-empleados
 
@@ -989,11 +990,13 @@ function empCambioLocal() {
 // ── DETALLE EMPLEADO ───────────────────────────────────
 async function abrirDetalleEmpleado(nombreEmp, sucId) {
   if (CERTIFICADOS_CACHE.length === 0) await cargarCertificados();
+  if (VACACIONES_APROBADAS_CACHE.length === 0) await cargarVacacionesAprobadas();
   abrirDetalleEmpleadoConDatos(nombreEmp, sucId, state.datos.filter(r => r.EMPLEADO === nombreEmp));
 }
 
 async function abrirDetalleEmpleadoDesdePanel(nombreEmp, sucId) {
   if (CERTIFICADOS_CACHE.length === 0) await cargarCertificados();
+  if (VACACIONES_APROBADAS_CACHE.length === 0) await cargarVacacionesAprobadas();
   const selPeriodo = document.getElementById('empFiltPeriodo')?.value || 'all';
   const registros  = state.datos.filter(r => r.EMPLEADO === nombreEmp);
   let periodoForzado = null;
@@ -1123,6 +1126,46 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       });
     });
 
+    // Agregar filas de vacaciones aprobadas (por el empleado o cargadas por admin)
+    const vacs = getVacacionesAprobadasDe(nombreEmp);
+    vacs.forEach(v => {
+      const [dy,dm,dd] = String(v.fecha_desde).split('-').map(Number);
+      const [hy,hm,hd] = String(v.fecha_hasta).split('-').map(Number);
+      const cur = new Date(dy, dm-1, dd);
+      const fin = new Date(hy, hm-1, hd);
+      let guard = 0;
+      while (cur <= fin && guard < 120) {
+        const fechaVac = new Date(cur);
+        guard++;
+        cur.setDate(cur.getDate() + 1);
+
+        if (periodo !== 'TODOS') {
+          const mesAnio = `${MESES_ES[fechaVac.getMonth()]} ${fechaVac.getFullYear()}`;
+          if (mesAnio !== periodo) continue;
+        }
+        if (diaFiltrado(fechaVac)) continue;
+
+        filas.push({
+          fechaStr: fechaVac.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}),
+          diaSem:   DIAS_SEMANA[fechaVac.getDay()],
+          horaReg:  '—',
+          turno1:   `VACACIONES`,
+          turno2:   '',
+          hsTotal:  0,
+          hsExtra:  0,
+          hsFeriado: 0,
+          esSab:    fechaVac.getDay() === 6,
+          esDom:    fechaVac.getDay() === 0,
+          esFer:    esFeriado(fechaVac),
+          nota:     'Vacaciones',
+          localStr: '—',
+          esVac:    true,
+          vacId:    v.id,
+          fechaISO: `${fechaVac.getFullYear()}-${String(fechaVac.getMonth()+1).padStart(2,'0')}-${String(fechaVac.getDate()).padStart(2,'0')}`,
+        });
+      }
+    });
+
     // Ordenar todas las filas por fecha asc (más viejo primero)
     filas.sort((a, b) => {
       const [ya,ma,da] = a.fechaISO.split('-').map(Number);
@@ -1168,6 +1211,19 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td></td>
         <td>—</td>
         <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar certificado" aria-label="Borrar certificado">${icon('x','icon-12')}</button></td>
+      </tr>`;
+      if (f.esVac) return `
+      <tr class="fila-vacaciones" data-fecha="${f.fechaISO}" data-hs="0" data-extra="0" data-feriado="0" data-sab="${f.esSab?1:0}" data-vac="1">
+        <td>${f.fechaStr}</td>
+        <td>${f.diaSem}</td>
+        <td class="hora-reg">—</td>
+        <td colspan="2"><span class="tag-vac">VACACIONES</span></td>
+        <td></td>
+        <td>—</td>
+        <td>—</td>
+        <td></td>
+        <td>—</td>
+        <td></td>
       </tr>`;
       return `
       <tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
@@ -1342,6 +1398,12 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
                 <td></td><td>—</td><td>—</td><td></td><td>—</td>
                 <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar" aria-label="Borrar certificado">${icon('x','icon-12')}</button></td>
+              </tr>`;
+              if (f.esVac) return `<tr class="fila-vacaciones" data-fecha="${f.fechaISO}" data-hs="0" data-extra="0" data-feriado="0" data-sab="${f.esSab?1:0}" data-vac="1">
+                <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
+                <td colspan="2"><span class="tag-vac">VACACIONES</span></td>
+                <td></td><td>—</td><td>—</td><td></td><td>—</td>
+                <td></td>
               </tr>`;
               return `<tr class="${f.esSab ? 'fila-sabado' : ''} ${f.esDom ? 'fila-domingo' : ''} ${f.esFer ? 'fila-feriado' : ''}" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="${f.hsExtra}" data-feriado="${f.hsFeriado||0}" data-sab="${f.esSab?1:0}" data-cert="0">
               <td>${f.fechaStr}${f.esFer ? ' <span class="tag-feriado">F</span>' : ''}</td>
@@ -2314,6 +2376,7 @@ async function cargarDatos(urls) {
   // acá, para no pedirla de arriba para todos los empleados.
   cargarPerfiles();
   cargarCertificados();
+  cargarVacacionesAprobadas();
   cargarNombresLegales(); // visible para cualquier rol logueado (ver diseño)
 
   const urlUnica = urls['unica'] || null;
@@ -2747,6 +2810,24 @@ function getCertificadosDe(nombreEmp) {
   return CERTIFICADOS_CACHE.filter(c => normalizar(c.empleado) === empNorm);
 }
 
+// ── VACACIONES APROBADAS (para el historial, igual que certificados) ──
+async function cargarVacacionesAprobadas() {
+  try {
+    const json = await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=get_solicitudes_vac&estado=aprobada`);
+    if (json.ok) VACACIONES_APROBADAS_CACHE = json.solicitudes || [];
+    return VACACIONES_APROBADAS_CACHE;
+  } catch(e) {
+    console.warn('Error cargando vacaciones aprobadas:', e);
+    return [];
+  }
+}
+
+function getVacacionesAprobadasDe(nombreEmp) {
+  const normalizar = n => n.trim().toLowerCase().replace(/^\d+\s+/, '').replace(/\s+/g, ' ');
+  const empNorm = normalizar(nombreEmp);
+  return VACACIONES_APROBADAS_CACHE.filter(v => normalizar(v.empleado) === empNorm);
+}
+
 async function guardarCertificado(cert) {
   try {
     const datos = encodeURIComponent(JSON.stringify(cert));
@@ -3126,9 +3207,10 @@ async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
     const urlHorarios = `${url}?accion=horarios` +
       (nombreEmp ? '&empleado=' + encodeURIComponent(nombreEmp) : '');
 
-    const [, , horariosResp] = await Promise.allSettled([
+    const [, , , horariosResp] = await Promise.allSettled([
       cargarPerfiles(),
       cargarCertificados(),
+      cargarVacacionesAprobadas(),
       fetch(urlHorarios).then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -6926,6 +7008,9 @@ function renderVacacionesAdminHTML(nombreEmp, vac, solicitudes, anio) {
       <div class="detalle-stat"><span class="detalle-stat-val" style="color:#2563eb">${disponible}</span><span class="detalle-stat-lbl">Disponibles</span></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap">
+      <button class="btn-detalle-accion" style="color:#059669;border-color:#6ee7b7;background:#f0fdf4" onclick="abrirModalSolicitudVac('${empEnc}',true)">
+        + Agregar vacaciones
+      </button>
       <button class="btn-detalle-accion" onclick="abrirModalAjusteAdmin('${empEnc}',${anio})">
         ± Ajustar días
       </button>
@@ -7175,7 +7260,7 @@ async function responderSolicitudAdmin(id, estado, nota) {
 }
 
 // ── MODAL SOLICITAR VACACIONES (empleado) ─────────────
-function abrirModalSolicitudVac(empEnc) {
+function abrirModalSolicitudVac(empEnc, esAdmin) {
   const nombreEmp = decodeURIComponent(empEnc);
   const hoy = new Date();
   const hoyISO = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
@@ -7183,19 +7268,19 @@ function abrirModalSolicitudVac(empEnc) {
   <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
     <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
       <div class="admin-header">
-        <div class="admin-titulo">Solicitar vacaciones</div>
+        <div class="admin-titulo">${esAdmin ? 'Agregar vacaciones' : 'Solicitar vacaciones'}</div>
         <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
           <label class="emp-filtro-label">Fecha desde</label>
           <input type="date" class="admin-input" id="vacDesde" value="${hoyISO}"
-            onchange="calcularDiasVacForm()" min="${hoyISO}" />
+            onchange="calcularDiasVacForm()" ${esAdmin ? '' : `min="${hoyISO}"`} />
         </div>
         <div class="admin-form-grupo">
           <label class="emp-filtro-label">Fecha hasta</label>
           <input type="date" class="admin-input" id="vacHasta" value="${hoyISO}"
-            onchange="calcularDiasVacForm()" min="${hoyISO}" />
+            onchange="calcularDiasVacForm()" ${esAdmin ? '' : `min="${hoyISO}"`} />
         </div>
         <div class="admin-form-grupo">
           <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
@@ -7208,7 +7293,7 @@ function abrirModalSolicitudVac(empEnc) {
         </div>
         <p id="vacSolError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0" id="btnEnviarSolicitudVac" onclick="confirmarSolicitudVac('${empEnc}')">Enviar solicitud</button>
+          <button class="btn-connect" style="margin:0" id="btnEnviarSolicitudVac" onclick="confirmarSolicitudVac('${empEnc}',${esAdmin ? 'true' : 'false'})">${esAdmin ? 'Guardar (queda aprobada)' : 'Enviar solicitud'}</button>
           <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
@@ -7232,7 +7317,7 @@ function calcularDiasVacForm() {
   return dias;
 }
 
-async function confirmarSolicitudVac(empEnc) {
+async function confirmarSolicitudVac(empEnc, esAdmin) {
   const btn = document.getElementById('btnEnviarSolicitudVac');
   if (btn && btn.disabled) return; // evita doble envío por doble click
   const nombreEmp = decodeURIComponent(empEnc);
@@ -7247,19 +7332,27 @@ async function confirmarSolicitudVac(empEnc) {
   }
   const dias = calcularDiasVacForm();
   const datos = encodeURIComponent(JSON.stringify({ empleado: nombreEmp, fecha_desde: desde, fecha_hasta: hasta, dias }));
-  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  const accion = esAdmin ? 'agregar_vacacion_admin' : 'solicitar_vac';
+  if (btn) { btn.disabled = true; btn.textContent = esAdmin ? 'Guardando...' : 'Enviando...'; }
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=solicitar_vac&datos=${datos}`);
+    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=${accion}&datos=${datos}`);
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
     _vacSolicitudesCache = null; // invalidar cache
+    VACACIONES_APROBADAS_CACHE = []; // forzar recarga para que aparezca en el historial
+    await cargarVacacionesAprobadas();
     cerrarAdmin();
-    showToast('✓ Solicitud enviada — quedá pendiente de aprobación');
-    cargarVacacionesEmpleado(nombreEmp);
+    if (esAdmin) {
+      showToast('✓ Vacaciones agregadas');
+      cargarVacacionesAdmin(nombreEmp);
+    } else {
+      showToast('✓ Solicitud enviada — quedá pendiente de aprobación');
+      cargarVacacionesEmpleado(nombreEmp);
+    }
   } catch(e) {
     errEl.textContent = e.message;
     errEl.style.display = 'block';
-    if (btn) { btn.disabled = false; btn.textContent = 'Enviar solicitud'; }
+    if (btn) { btn.disabled = false; btn.textContent = esAdmin ? 'Guardar (queda aprobada)' : 'Enviar solicitud'; }
   }
 }
 

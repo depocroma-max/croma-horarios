@@ -211,6 +211,7 @@ function doGet(e) {
   if (accion === 'solicitar_vac')       return solicitarVacaciones(e);
   if (accion === 'get_solicitudes_vac') return getSolicitudesVacaciones(e);
   if (accion === 'responder_solicitud') return responderSolicitud(e);
+  if (accion === 'agregar_vacacion_admin') return agregarVacacionAdmin(e);
   if (accion === 'get_anuncios')        return getAnuncios(e);
   if (accion === 'guardar_anuncio')     return guardarAnuncio(e);
   if (accion === 'eliminar_anuncio')    return eliminarAnuncio(e);
@@ -1559,6 +1560,33 @@ function ajustarDiasVacaciones(e) {
   }
 }
 
+// Descuenta `dias` del banco de vacaciones de `empleado` para el año que
+// corresponda a `fechaDesde` (Date o string yyyy-MM-dd). Usado tanto al
+// aprobar una solicitud del empleado como al cargar vacaciones directo
+// desde el admin.
+function descontarDiasVacaciones(ss, empleado, fechaDesde, dias) {
+  let anio = new Date().getFullYear();
+  if (fechaDesde instanceof Date) {
+    anio = fechaDesde.getFullYear();
+  } else if (typeof fechaDesde === 'string' && fechaDesde.length >= 4) {
+    anio = parseInt(fechaDesde.substring(0,4));
+  }
+
+  const hojaVac = ss.getSheetByName('VACACIONES');
+  if (!hojaVac) return;
+  const vVac = hojaVac.getDataRange().getValues();
+  const iVac = vVac.findIndex((r,i) => i>0 &&
+    parseInt(r[0]) === anio && String(r[1]).trim().toLowerCase() === empleado.toLowerCase()
+  );
+  if (iVac < 1) return;
+  const banco      = parseInt(vVac[iVac][3]) || 0;
+  const usados     = (parseInt(vVac[iVac][4]) || 0) + dias;
+  const ajuste     = parseInt(vVac[iVac][5]) || 0;
+  const disponible = banco + ajuste - usados;
+  hojaVac.getRange(iVac+1, 5).setValue(usados);
+  hojaVac.getRange(iVac+1, 7).setValue(disponible);
+}
+
 // ── SOLICITUDES DE VACACIONES ──────────────────────────
 // Hoja SOLICITUDES_VAC: ID | EMPLEADO | FECHA_DESDE | FECHA_HASTA | DIAS | ESTADO | FECHA_SOLICITUD | NOTA_ADMIN
 
@@ -1692,28 +1720,7 @@ function responderSolicitud(e) {
       const empleado   = String(vals[idx][1]).trim();
       const dias       = parseInt(vals[idx][4]) || 0;
       const fechaDesde = vals[idx][2];
-      let anio         = new Date().getFullYear();
-      if (fechaDesde instanceof Date) {
-        anio = fechaDesde.getFullYear();
-      } else if (typeof fechaDesde === 'string' && fechaDesde.length >= 4) {
-        anio = parseInt(fechaDesde.substring(0,4));
-      }
-
-      const hojaVac = ss.getSheetByName('VACACIONES');
-      if (hojaVac) {
-        const vVac = hojaVac.getDataRange().getValues();
-        const iVac = vVac.findIndex((r,i) => i>0 &&
-          parseInt(r[0]) === anio && String(r[1]).trim().toLowerCase() === empleado.toLowerCase()
-        );
-        if (iVac >= 1) {
-          const banco     = parseInt(vVac[iVac][3]) || 0;
-          const usados    = (parseInt(vVac[iVac][4]) || 0) + dias;
-          const ajuste    = parseInt(vVac[iVac][5]) || 0;
-          const disponible = banco + ajuste - usados;
-          hojaVac.getRange(iVac+1, 5).setValue(usados);
-          hojaVac.getRange(iVac+1, 7).setValue(disponible);
-        }
-      }
+      descontarDiasVacaciones(ss, empleado, fechaDesde, dias);
     }
 
     // Enviar email al empleado si tiene EMAIL en EMPLEADOS
@@ -1762,6 +1769,41 @@ function responderSolicitud(e) {
     }
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Alta directa de vacaciones desde el admin: a diferencia de solicitarVacaciones
+// (que crea una fila 'pendiente' que después hay que aprobar), esta queda
+// 'aprobada' desde el primer momento y descuenta el banco al toque.
+function agregarVacacionAdmin(e) {
+  try {
+    const datos = JSON.parse(decodeURIComponent(e.parameter.datos || '{}'));
+    const empleado    = String(datos.empleado    || '').trim();
+    const fechaDesde  = String(datos.fecha_desde || '').trim();
+    const fechaHasta  = String(datos.fecha_hasta || '').trim();
+    const dias        = parseInt(datos.dias) || 1;
+    if (!empleado || !fechaDesde || !fechaHasta) throw new Error('Faltan datos');
+
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    let hoja   = ss.getSheetByName('SOLICITUDES_VAC');
+    if (!hoja) {
+      hoja = ss.insertSheet('SOLICITUDES_VAC');
+      hoja.getRange(1,1,1,8).setValues([[
+        'ID','EMPLEADO','FECHA_DESDE','FECHA_HASTA','DIAS','ESTADO','FECHA_SOLICITUD','NOTA_ADMIN'
+      ]]);
+    }
+
+    const id    = 'vac_' + Date.now();
+    const ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    hoja.appendRow([id, empleado, fechaDesde, fechaHasta, dias, 'aprobada', ahora, 'Cargado por admin']);
+
+    descontarDiasVacaciones(ss, empleado, fechaDesde, dias);
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, id }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))

@@ -2140,6 +2140,18 @@ body {
   letter-spacing: 0.5px; margin-right: 4px;
 }
 
+/* ===== VACACIONES (historial) ===== */
+.fila-vacaciones td {
+  background: #F0FDF4;
+  border-bottom: 1px solid #BBF7D0;
+}
+.tag-vac {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  background: #059669; color: white;
+  padding: 1px 7px; border-radius: 20px;
+  letter-spacing: 0.5px; margin-right: 4px;
+}
+
 /* ── CAMBIO DE FOTO DE EMPLEADO ─────────────────────── */
 .emp-vista-avatar-wrap {
   position: relative;
