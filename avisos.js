@@ -61,9 +61,18 @@
     calMes: null, // 0-11
     archivadosAbiertos: false,
 
-    // Copia de trabajo — nunca se lee ni escribe window.CROMA_AVISOS_MOCK
-    // directamente después de init().
+    // Copia de trabajo en memoria — poblada por el repository (Fase 3B.1:
+    // API o Mock según CromaAvisosConfig.modo), nunca leída/escrita directo
+    // desde window.CROMA_AVISOS_MOCK.
     avisos: [],
+
+    // Estado de la carga inicial (Fase 3B.1) — una sola carga por sesión,
+    // reutilizada por Hoy/Calendario/Lista. 'idle'|'cargando'|'listo'|'error'.
+    carga: {
+      estado: 'idle',
+      error: null,      // { status, mensaje } | null
+      generacion: 0,    // anti-carrera: descarta respuestas obsoletas
+    },
 
     // Panel lateral único (detalle / form / cerrar-local / resumen-dia)
     panel: {
@@ -122,6 +131,39 @@
 
   function sucursalPorId(id) { return SUCURSALES.find(function (s) { return s.id === id; }); }
   function empleadosMock() { return window.CROMA_EMPLEADOS_MOCK || []; }
+
+  // ── Fase 3B.1: solo lectura contra la API real ─────────
+  // Las mutaciones (crear/editar/duplicar/archivar/restaurar/cerrar local)
+  // quedan para la Fase 3B.2 — en modo 'api' todavía no hay ningún backend
+  // de escritura conectado, así que esos controles quedan deshabilitados
+  // (mismo patrón visual "Disponible en la próxima fase" ya usado en
+  // Fase 1). En modo 'mock' (activación explícita, ver avisos-repository.js)
+  // siguen 100% funcionales como en Fase 2, para QA local sin backend.
+  function mutacionesHabilitadas() {
+    return !!(window.CromaAvisosConfig && window.CromaAvisosConfig.modo === 'mock');
+  }
+
+  // ── Carga inicial (una sola vez por sesión, ver activar()) ─────────────
+  function cargarAvisosIniciales() {
+    if (state.carga.estado === 'cargando') return;
+    if (!window.CromaAvisosRepository) return; // avisos-repository.js no cargó — no debería pasar
+    state.carga.estado = 'cargando';
+    state.carga.error = null;
+    const generacion = ++state.carga.generacion;
+    render();
+
+    window.CromaAvisosRepository.listar().then(function (resultado) {
+      if (generacion !== state.carga.generacion) return; // respuesta obsoleta, se descarta
+      if (resultado.ok) {
+        state.avisos = resultado.avisos;
+        state.carga.estado = 'listo';
+      } else {
+        state.carga.estado = 'error';
+        state.carga.error = { status: resultado.status, mensaje: resultado.error };
+      }
+      render();
+    });
+  }
 
   // ── Estado mock mutable ────────────────────────────────
   function clonarDestinatarios(d) {
@@ -302,14 +344,14 @@
               '<label class="avz-visually-hidden" for="avzBuscar">Buscar avisos</label>' +
               '<input type="search" id="avzBuscar" placeholder="Buscar avisos..." value="' + escapeAttr(state.busqueda) + '" />' +
             '</div>' +
-            '<button class="btn btn-primary" id="avzBtnNuevo" type="button">' +
+            '<button class="btn btn-primary" id="avzBtnNuevo" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>' +
               icon('plus', 'icon-16') + ' Nuevo aviso' +
             '</button>' +
           '</div>' +
         '</div>' +
         '<div class="avz-suc-tabs" id="avzSucTabs" role="tablist" aria-label="Sucursal">' + sucOpts + '</div>' +
         '<div class="avz-quick-actions">' +
-          '<button class="btn btn-outline" id="avzBtnCerrarLocal" type="button">🔒 Cerrar local</button>' +
+          '<button class="btn btn-outline" id="avzBtnCerrarLocal" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>🔒 Cerrar local</button>' +
           '<button class="btn btn-outline avz-btn-beta" disabled title="Disponible en una próxima fase">⧉ Duplicar último</button>' +
         '</div>' +
         '<div class="avz-body" id="avzBody"></div>' +
@@ -349,11 +391,43 @@
   function renderBody() {
     const body = document.getElementById('avzBody');
     if (!body) return;
+
+    if (state.carga.estado === 'idle' || state.carga.estado === 'cargando') {
+      body.innerHTML = renderCargando();
+      return;
+    }
+    if (state.carga.estado === 'error') {
+      body.innerHTML = renderErrorCarga();
+      wireErrorCarga(body);
+      return;
+    }
+
     if (state.vista === 'hoy') body.innerHTML = renderHoy();
     else if (state.vista === 'calendario') { body.innerHTML = renderCalendarioShell(); wireCalendario(); }
     else body.innerHTML = renderLista();
     wireAccionesFila(body);
     wireClicksAbrirDetalle(body);
+  }
+
+  function renderCargando() {
+    return '<div class="ajuste-empty-state">' +
+      '<div class="spinner" role="status" aria-label="Cargando"></div>' +
+      '<p class="text-secondary">Cargando avisos…</p>' +
+    '</div>';
+  }
+
+  function renderErrorCarga() {
+    const err = state.carga.error || {};
+    return '<div class="avz-vacio">' +
+      '<div class="avz-vacio-titulo">No pudimos cargar los avisos.</div>' +
+      '<div class="avz-vacio-sub">' + escapeHtml(err.mensaje || 'Probá de nuevo en unos segundos.') + '</div>' +
+      '<button class="btn btn-outline" id="avzReintentarCarga" type="button" style="margin-top:12px">Reintentar</button>' +
+    '</div>';
+  }
+
+  function wireErrorCarga(body) {
+    const btn = body.querySelector('#avzReintentarCarga');
+    if (btn) btn.addEventListener('click', cargarAvisosIniciales);
   }
 
   // Delegación única: cualquier elemento con data-abrir-aviso abre el
@@ -469,6 +543,13 @@
       '<select class="avz-select" disabled title="Disponible en una próxima fase"><option>Prioridad</option></select>';
   }
 
+  function botonFilaAccion(accion, id, label, iconoHtml) {
+    const habilitado = mutacionesHabilitadas();
+    return '<button class="avz-fila-accion-btn" type="button" data-fila-accion="' + accion + '" data-id="' + id + '"' +
+      (habilitado ? '' : ' disabled') +
+      ' title="' + (habilitado ? label : 'Disponible en la próxima fase') + '" aria-label="' + label + ' aviso">' + iconoHtml + '</button>';
+  }
+
   function renderGrupo(label, avisos) {
     if (!avisos.length) return '';
     let html = label ? '<div class="avz-lista-grupo-label">' + label + '</div>' : '';
@@ -485,11 +566,11 @@
         '</div>' +
         '<span class="avz-fila-fecha">' + fmtRango(a.fechaDesde, a.fechaHasta) + '</span>' +
         '<div class="avz-fila-acciones">' +
-          '<button class="avz-fila-accion-btn" type="button" data-fila-accion="editar" data-id="' + a.id + '" title="Editar" aria-label="Editar aviso">' + icon('edit', 'icon-14') + '</button>' +
-          '<button class="avz-fila-accion-btn" type="button" data-fila-accion="duplicar" data-id="' + a.id + '" title="Duplicar" aria-label="Duplicar aviso">⧉</button>' +
+          botonFilaAccion('editar', a.id, 'Editar', icon('edit', 'icon-14')) +
+          botonFilaAccion('duplicar', a.id, 'Duplicar', '⧉') +
           (archivado
-            ? '<button class="avz-fila-accion-btn" type="button" data-fila-accion="restaurar" data-id="' + a.id + '" title="Restaurar" aria-label="Restaurar aviso">' + icon('refresh', 'icon-14') + '</button>'
-            : '<button class="avz-fila-accion-btn" type="button" data-fila-accion="archivar" data-id="' + a.id + '" title="Archivar" aria-label="Archivar aviso">' + icon('trash', 'icon-14') + '</button>') +
+            ? botonFilaAccion('restaurar', a.id, 'Restaurar', icon('refresh', 'icon-14'))
+            : botonFilaAccion('archivar', a.id, 'Archivar', icon('trash', 'icon-14'))) +
         '</div>' +
       '</div>';
     });
@@ -612,7 +693,7 @@
       const masBtn = e.target.closest('.avz-cal-mas');
       if (masBtn) { abrirPanel('resumen-dia', { fecha: masBtn.dataset.resumenDia, elementoOrigen: masBtn }); return; }
       const celda = e.target.closest('.avz-cal-celda');
-      if (celda) { abrirPanel('form', { fecha: celda.dataset.celdaFecha, elementoOrigen: celda }); }
+      if (celda && mutacionesHabilitadas()) { abrirPanel('form', { fecha: celda.dataset.celdaFecha, elementoOrigen: celda }); }
     });
   }
 
@@ -814,11 +895,11 @@
         '<div class="avz-detalle-fila"><span>Creado</span><strong>' + fmtCorta(a.fechaCreacion) + '</strong></div>' +
       '</div>' +
       '<div class="avz-panel-footer">' +
-        '<button class="btn btn-outline" id="avzDetEditar" type="button">Editar</button>' +
-        '<button class="btn btn-outline" id="avzDetDuplicar" type="button">Duplicar</button>' +
+        '<button class="btn btn-outline" id="avzDetEditar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Editar</button>' +
+        '<button class="btn btn-outline" id="avzDetDuplicar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Duplicar</button>' +
         (a.archivado
-          ? '<button class="btn btn-primary" id="avzDetRestaurar" type="button">Restaurar</button>'
-          : '<button class="btn btn-danger" id="avzDetArchivar" type="button">Archivar</button>') +
+          ? '<button class="btn btn-primary" id="avzDetRestaurar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Restaurar</button>'
+          : '<button class="btn btn-danger" id="avzDetArchivar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Archivar</button>') +
       '</div>';
   }
 
@@ -866,7 +947,7 @@
     return headerPanel(fechaLarga(fecha)) +
       '<div class="avz-panel-body">' + (items || '<div class="avz-vacio-sub">No hay avisos este día.</div>') + '</div>' +
       '<div class="avz-panel-footer">' +
-        '<button class="btn btn-primary" id="avzResumenNuevo" type="button">' + icon('plus', 'icon-16') + ' Nuevo aviso</button>' +
+        '<button class="btn btn-primary" id="avzResumenNuevo" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>' + icon('plus', 'icon-16') + ' Nuevo aviso</button>' +
       '</div>';
   }
 
@@ -1319,10 +1400,8 @@
     if (statsRow) statsRow.style.display = 'none';
     localStorage.setItem('croma_vista', 'avisos');
 
-    if (!state.avisos.length) {
-      state.avisos = (window.CROMA_AVISOS_MOCK || []).map(clonarAviso);
-    }
     render();
+    if (state.carga.estado === 'idle') cargarAvisosIniciales();
 
     const drawerOverlay = document.getElementById('drawerOverlay');
     const drawerMenu = document.getElementById('drawerMenu');
@@ -1340,9 +1419,20 @@
     if (btnDrawer) btnDrawer.style.display = visible ? '' : 'none';
   }
 
+  // El badge "Beta" ya existe en el HTML estático (index.html) — acá solo
+  // se le agrega el sufijo "· Mock" cuando corresponde, sin tocar el markup
+  // original ni agregar ningún elemento nuevo.
+  function marcarBadgeSiEsMock() {
+    if (!window.CromaAvisosConfig || window.CromaAvisosConfig.modo !== 'mock') return;
+    document.querySelectorAll('.avz-beta-badge').forEach(function (el) {
+      if (el.textContent.indexOf('Mock') === -1) el.textContent = el.textContent.trim() + ' · Mock';
+    });
+  }
+
   function init() {
     if (inicializado) return;
     inicializado = true;
+    marcarBadgeSiEsMock();
     const btnTop = document.getElementById('avzNavBtn');
     const btnDrawer = document.getElementById('avzDrawerNavBtn');
     if (btnTop) btnTop.addEventListener('click', activar);
@@ -1362,6 +1452,14 @@
     init();
   }
 
+  // Herramienta de debugging (Fase 3B.1): vuelve a pedir la carga inicial
+  // al repository activo sin recargar la página. No agrega ningún botón ni
+  // cambia la UX — es exclusivamente para invocar desde la consola.
+  function reload() {
+    state.carga.estado = 'idle';
+    cargarAvisosIniciales();
+  }
+
   // Exposición mínima para integración/debug — el resto queda privado.
-  window.CromaAvisos = { activar: activar };
+  window.CromaAvisos = { activar: activar, reload: reload };
 })();
