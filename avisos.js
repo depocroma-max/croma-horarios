@@ -1,8 +1,7 @@
 // =====================================================
-//  AVISOS · Fase 1 — shell visual con datos mock
-//  Sin backend, sin drawer, sin calendario "funcional"
-//  (grilla navegable, sin avisos pintados en las celdas).
-//  Encapsulado en un único namespace: CromaAvisos.
+//  AVISOS · Fase 2 — interacción, panel lateral y
+//  creación/edición/duplicación/archivado con datos mock.
+//  Sin backend, sin Apps Script. Encapsulado en CromaAvisos.
 // =====================================================
 
 (function () {
@@ -19,6 +18,7 @@
     { id: 'DEPO',     label: 'Depo',           var: '--suc-depo' },
     { id: 'OFICINA',  label: 'Oficina',        var: '--suc-oficina' },
   ];
+  const SUCURSALES_SELECCIONABLES = SUCURSALES.filter(function (s) { return s.id !== 'todas'; });
 
   const TIPO_META = {
     informacion:   { label: 'Información',   icono: 'ⓘ' },
@@ -26,9 +26,32 @@
     local_cerrado: { label: 'Local cerrado', icono: '▓' },
   };
 
+  // Defaults por tipo — documentados y aprobados en el plan técnico.
+  // Evento: Novedades queda OFF por default (el calendario ya lo
+  // comunica visualmente; el banner es un refuerzo opcional, no
+  // obligatorio, a diferencia de Información y Local cerrado).
+  const DEFAULTS_POR_TIPO = {
+    informacion: {
+      canales: { calendario: false, banner: true, email: false, whatsapp: false },
+      prioridad: 'normal',
+      destinatarios: { modo: 'todos' },
+    },
+    evento: {
+      canales: { calendario: true, banner: false, email: false, whatsapp: false },
+      prioridad: 'normal',
+      destinatarios: { modo: 'todos' },
+    },
+    local_cerrado: {
+      canales: { calendario: true, banner: true, email: true, whatsapp: false },
+      prioridad: 'normal',
+      destinatarios: { modo: 'sucursal', ids: [] },
+    },
+  };
+
   const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
     'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const MAX_INDICADORES_POR_CELDA = 3;
 
   const state = {
     sucursal: 'todas',
@@ -37,6 +60,24 @@
     calAnio: null,
     calMes: null, // 0-11
     archivadosAbiertos: false,
+
+    // Copia de trabajo — nunca se lee ni escribe window.CROMA_AVISOS_MOCK
+    // directamente después de init().
+    avisos: [],
+
+    // Panel lateral único (detalle / form / cerrar-local / resumen-dia)
+    panel: {
+      abierto: false,
+      modo: null,
+      avisoId: null,
+      fechaPrecargada: null,
+      borrador: null,
+      original: null,       // JSON.stringify del borrador al abrir, para dirty-check
+      dirty: false,
+      intentoPublicar: false,
+      masOpcionesAbiertas: false,
+      elementoOrigen: null,
+    },
   };
 
   let inicializado = false;
@@ -56,10 +97,94 @@
   function fmtRango(desde, hasta) {
     return desde === hasta ? fmtCorta(desde) : fmtCorta(desde) + ' → ' + fmtCorta(hasta);
   }
+  function diffDias(isoA, isoB) {
+    const a = new Date(isoA + 'T00:00:00');
+    const b = new Date(isoB + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+  }
+  function fechaLargaHoy() {
+    const d = new Date();
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    return dias[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()].toLowerCase();
+  }
+  function fechaLarga(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    return dias[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()].toLowerCase();
+  }
 
-  // ── Resolución de datos (contrato definitivo) ─────────
-  function todosLosAvisos() {
-    return (window.CROMA_AVISOS_MOCK || []).slice();
+  function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>]/g, function (c) {
+      return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;';
+    });
+  }
+
+  function sucursalPorId(id) { return SUCURSALES.find(function (s) { return s.id === id; }); }
+  function empleadosMock() { return window.CROMA_EMPLEADOS_MOCK || []; }
+
+  // ── Estado mock mutable ────────────────────────────────
+  function clonarDestinatarios(d) {
+    if (d.modo === 'sucursal') return { modo: 'sucursal', ids: d.ids.slice() };
+    if (d.modo === 'empleado') return { modo: 'empleado', nombres: d.nombres.slice(), sucursalId: d.sucursalId };
+    if (d.modo === 'administracion') return { modo: 'administracion' };
+    return { modo: 'todos' };
+  }
+  function clonarAviso(a) {
+    return Object.assign({}, a, {
+      destinatarios: clonarDestinatarios(a.destinatarios),
+      canales: Object.assign({}, a.canales),
+    });
+  }
+  function nuevoId() { return 'AVI-' + Date.now() + '-' + Math.floor(Math.random() * 1000); }
+  function obtenerAviso(id) { return state.avisos.find(function (a) { return a.id === id; }); }
+
+  function crearAviso(datos) {
+    const nuevo = Object.assign({}, datos, {
+      id: nuevoId(),
+      archivado: false,
+      autor: 'Admin',
+      fechaCreacion: hoyISO(),
+    });
+    state.avisos.push(nuevo);
+    render();
+    return nuevo;
+  }
+  function actualizarAviso(id, datos) {
+    const idx = state.avisos.findIndex(function (a) { return a.id === id; });
+    if (idx === -1) return;
+    state.avisos[idx] = Object.assign({}, state.avisos[idx], datos);
+    render();
+  }
+  function duplicarAviso(id) {
+    const original = obtenerAviso(id);
+    if (!original) return;
+    const copia = clonarAviso(original);
+    copia.id = nuevoId();
+    copia.titulo = original.titulo + ' (copia)';
+    copia.archivado = false;
+    copia.autor = 'Admin';
+    copia.fechaCreacion = hoyISO();
+    state.avisos.push(copia);
+    render();
+    return copia;
+  }
+  function archivarAviso(id) {
+    const a = obtenerAviso(id);
+    if (!a) return;
+    a.archivado = true;
+    render();
+    mostrarToastDeshacer('Aviso archivado.', function () {
+      a.archivado = false;
+      render();
+    });
+  }
+  function restaurarAviso(id) {
+    const a = obtenerAviso(id);
+    if (!a) return;
+    a.archivado = false;
+    render();
+    showToast('Aviso restaurado.');
   }
 
   function estadoDe(aviso) {
@@ -73,11 +198,12 @@
   // Regla de visibilidad por tab de sucursal (modelo funcional aprobado):
   // - "todos" siempre visible en cualquier tab, incluida "Todas"
   // - "sucursal" visible en "Todas" y en cada sucursal incluida
-  // - "administracion" nunca aparece en tabs de sucursal (es por rol, no geográfico)
-  // - "empleado" se ubica en la tab de la sucursal de ese empleado (mock trae sucursalId)
+  // - "administracion" es visible SIEMPRE, independientemente de la tab
+  //   (es una excepción explícita: no depende de ubicación, sino de rol)
+  // - "empleado" se ubica en la tab de la sucursal de ese empleado
   function visibleEnTab(aviso, sucId) {
     const d = aviso.destinatarios;
-    if (d.modo === 'administracion') return false;
+    if (d.modo === 'administracion') return true;
     if (sucId === 'todas') return true;
     if (d.modo === 'todos') return true;
     if (d.modo === 'sucursal') return d.ids.indexOf(sucId) !== -1;
@@ -85,14 +211,14 @@
     return false;
   }
 
-  function labelDestinatarios(aviso) {
-    const d = aviso.destinatarios;
+  function labelDestinatarios(d) {
     if (d.modo === 'todos') return 'Todos';
     if (d.modo === 'administracion') return 'Administración';
-    if (d.modo === 'empleado') return d.nombres.join(', ');
+    if (d.modo === 'empleado') return (d.nombres && d.nombres.length) ? d.nombres.join(', ') : 'Sin empleados';
     if (d.modo === 'sucursal') {
+      if (!d.ids || !d.ids.length) return 'Sin sucursal';
       return d.ids.map(function (id) {
-        const s = SUCURSALES.find(function (x) { return x.id === id; });
+        const s = sucursalPorId(id);
         return s ? s.label : id;
       }).join(' + ');
     }
@@ -107,21 +233,49 @@
   }
 
   function avisosFiltrados() {
-    return todosLosAvisos()
+    return state.avisos
       .filter(function (a) { return visibleEnTab(a, state.sucursal); })
       .filter(function (a) { return coincideBusqueda(a, state.busqueda); });
   }
 
+  function avisosDelDia(iso) {
+    return avisosFiltrados()
+      .filter(function (a) { return a.fechaDesde <= iso && a.fechaHasta >= iso && !a.archivado; })
+      .sort(function (a, b) {
+        const pa = a.prioridad === 'urgente' ? 0 : 1;
+        const pb = b.prioridad === 'urgente' ? 0 : 1;
+        return pa - pb;
+      });
+  }
+
   function colorSucursalDeAviso(aviso) {
     if (aviso.destinatarios.modo === 'sucursal' && aviso.destinatarios.ids.length === 1) {
-      const s = SUCURSALES.find(function (x) { return x.id === aviso.destinatarios.ids[0]; });
+      const s = sucursalPorId(aviso.destinatarios.ids[0]);
       if (s && s.var) return s.var;
     }
     if (aviso.destinatarios.modo === 'empleado') {
-      const s = SUCURSALES.find(function (x) { return x.id === aviso.destinatarios.sucursalId; });
+      const s = sucursalPorId(aviso.destinatarios.sucursalId);
       if (s && s.var) return s.var;
     }
     return null;
+  }
+
+  // ── Toasts ──────────────────────────────────────────────
+  function mostrarToastDeshacer(mensaje, onDeshacer) {
+    const existing = document.getElementById('avzToast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = 'avzToast';
+    el.className = 'avz-toast';
+    el.innerHTML = '<span>' + escapeHtml(mensaje) + '</span>' +
+      '<button class="avz-toast-deshacer" id="avzToastDeshacer" type="button">Deshacer</button>';
+    document.body.appendChild(el);
+    const t = setTimeout(function () { el.remove(); }, 5000);
+    el.querySelector('#avzToastDeshacer').addEventListener('click', function () {
+      clearTimeout(t);
+      el.remove();
+      onDeshacer();
+    });
   }
 
   // ── Render: shell general ─────────────────────────────
@@ -132,7 +286,7 @@
     const sucOpts = SUCURSALES.map(function (s) {
       const activo = s.id === state.sucursal ? ' active' : '';
       const dotStyle = s.var ? ' style="--suc-dot:var(' + s.var + ')"' : '';
-      return '<button class="avz-suc-tab' + activo + '" data-suc="' + s.id + '"' + dotStyle + '>' +
+      return '<button class="avz-suc-tab' + activo + '" data-suc="' + s.id + '" aria-selected="' + (s.id === state.sucursal) + '"' + dotStyle + '>' +
         (s.var ? '<span class="avz-suc-dot"></span>' : '') + s.label + '</button>';
     }).join('');
 
@@ -145,17 +299,18 @@
               btnVista('hoy', 'Hoy') + btnVista('calendario', 'Calendario') + btnVista('lista', 'Lista') +
             '</div>' +
             '<div class="avz-search">' + icon('search', 'icon-16') +
+              '<label class="avz-visually-hidden" for="avzBuscar">Buscar avisos</label>' +
               '<input type="search" id="avzBuscar" placeholder="Buscar avisos..." value="' + escapeAttr(state.busqueda) + '" />' +
             '</div>' +
-            '<button class="btn btn-primary avz-btn-beta" id="avzBtnNuevo" disabled title="Disponible en la próxima fase">' +
+            '<button class="btn btn-primary" id="avzBtnNuevo" type="button">' +
               icon('plus', 'icon-16') + ' Nuevo aviso' +
             '</button>' +
           '</div>' +
         '</div>' +
-        '<div class="avz-suc-tabs" id="avzSucTabs">' + sucOpts + '</div>' +
+        '<div class="avz-suc-tabs" id="avzSucTabs" role="tablist" aria-label="Sucursal">' + sucOpts + '</div>' +
         '<div class="avz-quick-actions">' +
-          '<button class="btn btn-outline avz-btn-beta" disabled title="Disponible en la próxima fase">🔒 Cerrar local</button>' +
-          '<button class="btn btn-outline avz-btn-beta" disabled title="Disponible en la próxima fase">⧉ Duplicar último</button>' +
+          '<button class="btn btn-outline" id="avzBtnCerrarLocal" type="button">🔒 Cerrar local</button>' +
+          '<button class="btn btn-outline avz-btn-beta" disabled title="Disponible en una próxima fase">⧉ Duplicar último</button>' +
         '</div>' +
         '<div class="avz-body" id="avzBody"></div>' +
       '</div>';
@@ -176,20 +331,19 @@
       state.busqueda = e.target.value;
       renderBody();
     });
+    document.getElementById('avzBtnNuevo').addEventListener('click', function () {
+      abrirPanel('form', {});
+    });
+    document.getElementById('avzBtnCerrarLocal').addEventListener('click', function () {
+      abrirPanel('cerrar-local', {});
+    });
 
     renderBody();
   }
 
   function btnVista(id, label) {
     const activo = state.vista === id ? ' active' : '';
-    return '<button class="avz-view-btn' + activo + '" data-vista="' + id + '">' + label + '</button>';
-  }
-
-  function escapeAttr(s) { return String(s || '').replace(/"/g, '&quot;'); }
-  function escapeHtml(s) {
-    return String(s || '').replace(/[&<>]/g, function (c) {
-      return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;';
-    });
+    return '<button class="avz-view-btn' + activo + '" data-vista="' + id + '" aria-selected="' + (state.vista === id) + '">' + label + '</button>';
   }
 
   function renderBody() {
@@ -199,6 +353,18 @@
     else if (state.vista === 'calendario') { body.innerHTML = renderCalendarioShell(); wireCalendario(); }
     else body.innerHTML = renderLista();
     wireAccionesFila(body);
+    wireClicksAbrirDetalle(body);
+  }
+
+  // Delegación única: cualquier elemento con data-abrir-aviso abre el
+  // detalle de ese aviso (usado en Hoy, Lista y Calendario).
+  function wireClicksAbrirDetalle(root) {
+    root.querySelectorAll('[data-abrir-aviso]').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        if (e.target.closest('[data-fila-accion]')) return; // los botones de acción manejan su propio click
+        abrirPanel('detalle', { avisoId: el.dataset.abrirAviso, elementoOrigen: el });
+      });
+    });
   }
 
   // ── Vista Hoy ──────────────────────────────────────────
@@ -230,22 +396,22 @@
     cierresHoy.forEach(function (a) {
       const cv = colorSucursalDeAviso(a);
       const bg = cv ? ' style="background:var(' + cv + '-light,var(--gray-50))"' : '';
-      html += '<div class="avz-card avz-card-cierre"' + bg + '>' +
+      html += '<div class="avz-card avz-card-cierre" data-abrir-aviso="' + a.id + '" tabindex="0" role="button"' + bg + '>' +
         '<span class="avz-card-icono">▓</span>' +
         '<div class="avz-card-texto">' +
           '<div class="avz-card-titulo">' + escapeHtml(a.titulo) + '</div>' +
-          '<div class="avz-card-sub">' + escapeHtml(labelDestinatarios(a)) + '</div>' +
+          '<div class="avz-card-sub">' + escapeHtml(labelDestinatarios(a.destinatarios)) + '</div>' +
         '</div>' +
         '<div class="avz-card-fecha">' + fmtRango(a.fechaDesde, a.fechaHasta) + '</div>' +
       '</div>';
     });
 
     urgentes.forEach(function (a) {
-      html += '<div class="avz-card avz-card-urgente">' +
+      html += '<div class="avz-card avz-card-urgente" data-abrir-aviso="' + a.id + '" tabindex="0" role="button">' +
         '<span class="avz-card-icono">🔴</span>' +
         '<div class="avz-card-texto">' +
           '<div class="avz-card-titulo">Urgente · ' + escapeHtml(a.titulo) + '</div>' +
-          '<div class="avz-card-sub">' + escapeHtml(labelDestinatarios(a)) + '</div>' +
+          '<div class="avz-card-sub">' + escapeHtml(labelDestinatarios(a.destinatarios)) + '</div>' +
         '</div>' +
       '</div>';
     });
@@ -253,28 +419,16 @@
     if (en7dias.length) {
       html += '<div class="avz-proximos-label">Próximos 7 días</div>';
       en7dias.forEach(function (a) {
-        html += '<div class="avz-proximo-fila">' +
+        html += '<div class="avz-proximo-fila" data-abrir-aviso="' + a.id + '" tabindex="0" role="button">' +
           '<span class="avz-card-icono">' + TIPO_META[a.tipo].icono + '</span>' +
           '<span class="avz-proximo-fecha">' + fmtCorta(a.fechaDesde) + '</span>' +
           '<span class="avz-proximo-titulo">' + escapeHtml(a.titulo) + '</span>' +
-          '<span class="avz-proximo-dest">' + escapeHtml(labelDestinatarios(a)) + '</span>' +
+          '<span class="avz-proximo-dest">' + escapeHtml(labelDestinatarios(a.destinatarios)) + '</span>' +
         '</div>';
       });
     }
 
     return html;
-  }
-
-  function fechaLargaHoy() {
-    const d = new Date();
-    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-    return dias[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()].toLowerCase();
-  }
-
-  function diffDias(isoA, isoB) {
-    const a = new Date(isoA + 'T00:00:00');
-    const b = new Date(isoB + 'T00:00:00');
-    return Math.round((b - a) / 86400000);
   }
 
   // ── Vista Lista ────────────────────────────────────────
@@ -302,7 +456,7 @@
     html += renderGrupo('Vencidos', grupos.vencido);
 
     if (archivados.length) {
-      html += '<button class="avz-archivados-toggle" id="avzToggleArchivados">' +
+      html += '<button class="avz-archivados-toggle" id="avzToggleArchivados" aria-expanded="' + state.archivadosAbiertos + '">' +
         (state.archivadosAbiertos ? '▾' : '▸') + ' Archivados (' + archivados.length + ')</button>';
       if (state.archivadosAbiertos) html += renderGrupo(null, archivados);
     }
@@ -310,28 +464,32 @@
   }
 
   function selectsListaInertes() {
-    return '<select class="avz-select" disabled title="Disponible en la próxima fase"><option>Tipo</option></select>' +
-      '<select class="avz-select" disabled title="Disponible en la próxima fase"><option>Estado</option></select>' +
-      '<select class="avz-select" disabled title="Disponible en la próxima fase"><option>Prioridad</option></select>';
+    return '<select class="avz-select" disabled title="Disponible en una próxima fase"><option>Tipo</option></select>' +
+      '<select class="avz-select" disabled title="Disponible en una próxima fase"><option>Estado</option></select>' +
+      '<select class="avz-select" disabled title="Disponible en una próxima fase"><option>Prioridad</option></select>';
   }
 
   function renderGrupo(label, avisos) {
     if (!avisos.length) return '';
     let html = label ? '<div class="avz-lista-grupo-label">' + label + '</div>' : '';
     avisos.forEach(function (a) {
-      html += '<div class="avz-fila">' +
+      const archivado = a.archivado;
+      html += '<div class="avz-fila" data-abrir-aviso="' + a.id + '" tabindex="0" role="button">' +
         '<span class="avz-fila-icono">' + TIPO_META[a.tipo].icono + '</span>' +
         '<div class="avz-fila-info">' +
           '<div class="avz-fila-titulo">' +
             (a.prioridad === 'urgente' ? '<span class="avz-urgente-dot"></span>' : '') +
             escapeHtml(a.titulo) +
           '</div>' +
-          '<div class="avz-fila-dest">' + escapeHtml(labelDestinatarios(a)) + '</div>' +
+          '<div class="avz-fila-dest">' + escapeHtml(labelDestinatarios(a.destinatarios)) + '</div>' +
         '</div>' +
         '<span class="avz-fila-fecha">' + fmtRango(a.fechaDesde, a.fechaHasta) + '</span>' +
         '<div class="avz-fila-acciones">' +
-          '<button class="avz-fila-accion-btn" disabled title="Disponible en la próxima fase">' + icon('edit', 'icon-14') + '</button>' +
-          '<button class="avz-fila-accion-btn" disabled title="Disponible en la próxima fase">' + icon('trash', 'icon-14') + '</button>' +
+          '<button class="avz-fila-accion-btn" type="button" data-fila-accion="editar" data-id="' + a.id + '" title="Editar" aria-label="Editar aviso">' + icon('edit', 'icon-14') + '</button>' +
+          '<button class="avz-fila-accion-btn" type="button" data-fila-accion="duplicar" data-id="' + a.id + '" title="Duplicar" aria-label="Duplicar aviso">⧉</button>' +
+          (archivado
+            ? '<button class="avz-fila-accion-btn" type="button" data-fila-accion="restaurar" data-id="' + a.id + '" title="Restaurar" aria-label="Restaurar aviso">' + icon('refresh', 'icon-14') + '</button>'
+            : '<button class="avz-fila-accion-btn" type="button" data-fila-accion="archivar" data-id="' + a.id + '" title="Archivar" aria-label="Archivar aviso">' + icon('trash', 'icon-14') + '</button>') +
         '</div>' +
       '</div>';
     });
@@ -344,9 +502,21 @@
       state.archivadosAbiertos = !state.archivadosAbiertos;
       renderBody();
     });
+
+    body.querySelectorAll('[data-fila-accion]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const accion = btn.dataset.filaAccion;
+        if (accion === 'editar') abrirPanel('form', { avisoId: id, elementoOrigen: btn });
+        else if (accion === 'duplicar') { duplicarAviso(id); showToast('Aviso duplicado.'); }
+        else if (accion === 'archivar') archivarAviso(id);
+        else if (accion === 'restaurar') restaurarAviso(id);
+      });
+    });
   }
 
-  // ── Vista Calendario (grilla real, sin avisos pintados) ─
+  // ── Vista Calendario ─────────────────────────────────────
   function renderCalendarioShell() {
     if (state.calAnio === null) {
       const hoy = hoyDate();
@@ -360,7 +530,7 @@
           '<span class="avz-cal-mes">' + MESES[state.calMes] + ' ' + state.calAnio + '</span>' +
           '<button class="avz-cal-nav-btn" id="avzMesNext" aria-label="Mes siguiente">' + icon('chevronRight', 'icon-16') + '</button>' +
         '</div>' +
-        '<button class="avz-cal-hoy-btn" id="avzMesHoy">Hoy</button>' +
+        '<button class="avz-cal-hoy-btn" id="avzMesHoy" type="button">Hoy</button>' +
       '</div>' +
       '<div class="avz-cal-grid">' +
         '<div class="avz-cal-dias-header">' + cabeceraDias + '</div>' +
@@ -373,21 +543,22 @@
 
   function renderSemanas(anio, mes) {
     const primerDia = new Date(anio, mes, 1);
-    // lunes = 0 ... domingo = 6
-    const offset = (primerDia.getDay() + 6) % 7;
+    const offset = (primerDia.getDay() + 6) % 7; // lunes = 0
     const diasEnMes = new Date(anio, mes + 1, 0).getDate();
-    const diasMesAnterior = new Date(anio, mes, 0).getDate();
     const hoy = hoyISO();
 
     const celdas = [];
     for (let i = 0; i < offset; i++) {
-      celdas.push({ num: diasMesAnterior - offset + i + 1, fuera: true });
+      const fecha = new Date(anio, mes, 1 - (offset - i));
+      celdas.push({ num: fecha.getDate(), fuera: true, iso: isoDeDate(fecha) });
     }
     for (let d = 1; d <= diasEnMes; d++) {
       celdas.push({ num: d, fuera: false, iso: isoDeDate(new Date(anio, mes, d)) });
     }
+    let siguiente = 1;
     while (celdas.length % 7 !== 0) {
-      celdas.push({ num: celdas.length - offset - diasEnMes + 1, fuera: true });
+      const fecha = new Date(anio, mes + 1, siguiente++);
+      celdas.push({ num: fecha.getDate(), fuera: true, iso: isoDeDate(fecha) });
     }
 
     let html = '';
@@ -396,8 +567,23 @@
       for (let i = s; i < s + 7; i++) {
         const c = celdas[i];
         const esHoy = !c.fuera && c.iso === hoy;
-        html += '<div class="avz-cal-celda' + (c.fuera ? ' fuera-de-mes' : '') + (esHoy ? ' es-hoy' : '') + '">' +
+        const avisosDia = avisosDelDia(c.iso);
+        const visibles = avisosDia.slice(0, MAX_INDICADORES_POR_CELDA);
+        const restantes = avisosDia.length - visibles.length;
+
+        const itemsHtml = visibles.map(function (a) {
+          return '<div class="avz-cal-aviso-item" data-abrir-aviso="' + a.id + '" tabindex="0" role="button" title="' + escapeAttr(a.titulo) + '">' +
+            (a.prioridad === 'urgente' ? '<span class="avz-urgente-dot"></span>' : '<span class="avz-cal-aviso-icono">' + TIPO_META[a.tipo].icono + '</span>') +
+            '<span class="avz-cal-aviso-titulo">' + escapeHtml(a.titulo) + '</span>' +
+          '</div>';
+        }).join('');
+        const masHtml = restantes > 0
+          ? '<button class="avz-cal-mas" type="button" data-resumen-dia="' + c.iso + '">+' + restantes + ' más</button>'
+          : '';
+
+        html += '<div class="avz-cal-celda' + (c.fuera ? ' fuera-de-mes' : '') + (esHoy ? ' es-hoy' : '') + '" data-celda-fecha="' + c.iso + '">' +
           '<div class="avz-cal-num">' + c.num + '</div>' +
+          '<div class="avz-cal-avisos">' + itemsHtml + masHtml + '</div>' +
         '</div>';
       }
       html += '</div>';
@@ -417,6 +603,17 @@
       state.calMes = hoy.getMonth();
       renderBody();
     });
+
+    const semanas = document.getElementById('avzCalSemanas');
+    if (!semanas) return;
+    semanas.addEventListener('click', function (e) {
+      const item = e.target.closest('.avz-cal-aviso-item');
+      if (item) { abrirPanel('detalle', { avisoId: item.dataset.abrirAviso, elementoOrigen: item }); return; }
+      const masBtn = e.target.closest('.avz-cal-mas');
+      if (masBtn) { abrirPanel('resumen-dia', { fecha: masBtn.dataset.resumenDia, elementoOrigen: masBtn }); return; }
+      const celda = e.target.closest('.avz-cal-celda');
+      if (celda) { abrirPanel('form', { fecha: celda.dataset.celdaFecha, elementoOrigen: celda }); }
+    });
   }
 
   function cambiarMes(delta) {
@@ -426,13 +623,687 @@
     renderBody();
   }
 
+  // =======================================================
+  //  PANEL LATERAL ÚNICO
+  //  Modos: 'detalle' | 'form' | 'cerrar-local' | 'resumen-dia'
+  // =======================================================
+
+  function nuevoBorradorForm(opts) {
+    opts = opts || {};
+    if (opts.avisoId) {
+      const original = obtenerAviso(opts.avisoId);
+      return {
+        tipo: original.tipo,
+        titulo: original.titulo,
+        mensaje: original.mensaje,
+        fechaDesde: original.fechaDesde,
+        fechaHasta: original.fechaHasta,
+        destinatarios: clonarDestinatarios(original.destinatarios),
+        canales: Object.assign({}, original.canales),
+        prioridad: original.prioridad,
+      };
+    }
+    const tipo = opts.tipo || 'informacion';
+    const def = DEFAULTS_POR_TIPO[tipo];
+    return {
+      tipo: tipo,
+      titulo: tipo === 'local_cerrado' ? 'LOCAL CERRADO' : '',
+      mensaje: '',
+      fechaDesde: opts.fecha || '',
+      fechaHasta: opts.fecha || '',
+      destinatarios: clonarDestinatarios(def.destinatarios),
+      canales: Object.assign({}, def.canales),
+      prioridad: def.prioridad,
+    };
+  }
+
+  function nuevoBorradorCerrarLocal(opts) {
+    opts = opts || {};
+    const sucInicial = (state.sucursal && state.sucursal !== 'todas') ? [state.sucursal] : [];
+    return {
+      sucursalIds: opts.sucursalIds || sucInicial,
+      fechaDesde: opts.fecha || hoyISO(),
+      fechaHasta: opts.fecha || hoyISO(),
+      motivo: '',
+    };
+  }
+
+  function abrirPanel(modo, opts) {
+    opts = opts || {};
+    state.panel.abierto = true;
+    state.panel.modo = modo;
+    state.panel.avisoId = opts.avisoId || null;
+    state.panel.fechaPrecargada = opts.fecha || null;
+    state.panel.elementoOrigen = opts.elementoOrigen || document.activeElement;
+    state.panel.dirty = false;
+    state.panel.intentoPublicar = false;
+    state.panel.masOpcionesAbiertas = false;
+
+    if (modo === 'form') {
+      state.panel.borrador = nuevoBorradorForm(opts);
+      state.panel.original = JSON.stringify(state.panel.borrador);
+    } else if (modo === 'cerrar-local') {
+      state.panel.borrador = nuevoBorradorCerrarLocal(opts);
+      state.panel.original = JSON.stringify(state.panel.borrador);
+    } else {
+      state.panel.borrador = null;
+      state.panel.original = null;
+    }
+
+    montarPanel();
+    document.addEventListener('keydown', onPanelKeydown, true);
+  }
+
+  function cerrarPanel(force) {
+    if (!force && state.panel.dirty) {
+      mostrarConfirm({
+        titulo: '¿Descartar cambios?',
+        mensaje: 'Tenés cambios sin guardar en este aviso. Si salís ahora se van a perder.',
+        textoOk: 'Descartar cambios',
+        textoCancel: 'Seguir editando',
+        peligro: true,
+        onOk: function () { cerrarPanel(true); },
+      });
+      return;
+    }
+    document.removeEventListener('keydown', onPanelKeydown, true);
+    const overlay = document.getElementById('avzPanelOverlay');
+    if (overlay) overlay.remove();
+    const origen = state.panel.elementoOrigen;
+    state.panel = {
+      abierto: false, modo: null, avisoId: null, fechaPrecargada: null,
+      borrador: null, original: null, dirty: false, intentoPublicar: false,
+      masOpcionesAbiertas: false, elementoOrigen: null,
+    };
+    if (origen && typeof origen.focus === 'function') origen.focus();
+  }
+
+  function onPanelKeydown(e) {
+    if (!state.panel.abierto) return;
+    if (e.key === 'Escape') { e.preventDefault(); cerrarPanel(); return; }
+    if (e.key === 'Tab') {
+      const panel = document.getElementById('avzPanel');
+      if (!panel) return;
+      const focusables = Array.prototype.slice.call(
+        panel.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
+      ).filter(function (el) { return el.offsetParent !== null; });
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      else if (!panel.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  function montarPanel() {
+    const existing = document.getElementById('avzPanelOverlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'avzPanelOverlay';
+    overlay.className = 'avz-panel-overlay';
+    overlay.innerHTML = '<div class="avz-panel" id="avzPanel" role="dialog" aria-modal="true" aria-label="' + escapeAttr(tituloPanelActual()) + '">' + renderPanelContenido() + '</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('mousedown', function (e) {
+      if (e.target === overlay) cerrarPanel();
+    });
+    wirePanelContenido();
+    const panelEl = document.getElementById('avzPanel');
+    const foco = panelEl.querySelector('[data-autofocus]') || panelEl.querySelector('button, input, select, textarea');
+    if (foco) foco.focus();
+  }
+
+  function tituloPanelActual() {
+    const m = state.panel.modo;
+    if (m === 'detalle') return 'Detalle del aviso';
+    if (m === 'cerrar-local') return 'Cerrar local';
+    if (m === 'resumen-dia') return 'Avisos del día';
+    return state.panel.avisoId ? 'Editar aviso' : 'Nuevo aviso';
+  }
+
+  function renderPanelContenido() {
+    const m = state.panel.modo;
+    if (m === 'detalle') return renderPanelDetalle();
+    if (m === 'cerrar-local') return renderPanelCerrarLocal();
+    if (m === 'resumen-dia') return renderPanelResumenDia();
+    return renderPanelForm();
+  }
+
+  function wirePanelContenido() {
+    const cerrar = document.getElementById('avzPanelClose');
+    if (cerrar) cerrar.addEventListener('click', function () { cerrarPanel(); });
+
+    const m = state.panel.modo;
+    if (m === 'detalle') wirePanelDetalle();
+    else if (m === 'cerrar-local') wirePanelCerrarLocal();
+    else if (m === 'resumen-dia') wirePanelResumenDia();
+    else wirePanelForm();
+  }
+
+  function headerPanel(titulo) {
+    return '<div class="avz-panel-header">' +
+      '<h2 class="avz-panel-titulo">' + escapeHtml(titulo) + '</h2>' +
+      '<button class="avz-panel-close" id="avzPanelClose" type="button" aria-label="Cerrar panel">×</button>' +
+    '</div>';
+  }
+
+  // ── Panel: Detalle ──────────────────────────────────────
+  function renderPanelDetalle() {
+    const a = obtenerAviso(state.panel.avisoId);
+    if (!a) {
+      return headerPanel('Detalle del aviso') +
+        '<div class="avz-panel-body"><div class="avz-vacio-sub">Este aviso ya no existe.</div></div>';
+    }
+    const st = estadoDe(a);
+    const canalesActivos = Object.keys(a.canales).filter(function (k) { return a.canales[k]; });
+    const canalesLabel = { calendario: 'Calendario', banner: 'Novedades', email: 'Email', whatsapp: 'WhatsApp' };
+
+    return headerPanel(tituloPanelActual()) +
+      '<div class="avz-panel-body">' +
+        '<div class="avz-detalle-tipo">' + TIPO_META[a.tipo].icono + ' ' + TIPO_META[a.tipo].label + '</div>' +
+        '<h3 class="avz-detalle-titulo">' + escapeHtml(a.titulo) + '</h3>' +
+        '<div class="avz-detalle-meta">' +
+          '<span class="badge badge-neutral">' + labelEstado(st) + '</span>' +
+          (a.prioridad === 'urgente' ? '<span class="badge badge-danger">Urgente</span>' : '') +
+        '</div>' +
+        '<div class="avz-detalle-fecha">' + fmtRango(a.fechaDesde, a.fechaHasta) + '</div>' +
+        '<p class="avz-detalle-mensaje">' + escapeHtml(a.mensaje) + '</p>' +
+        '<div class="avz-detalle-fila"><span>Destinatarios</span><strong>' + escapeHtml(labelDestinatarios(a.destinatarios)) + '</strong></div>' +
+        '<div class="avz-detalle-fila"><span>Canales</span><strong>' + (canalesActivos.length ? canalesActivos.map(function (c) { return canalesLabel[c]; }).join(', ') : 'Ninguno') + '</strong></div>' +
+        '<div class="avz-detalle-fila"><span>Autor</span><strong>' + escapeHtml(a.autor) + '</strong></div>' +
+        '<div class="avz-detalle-fila"><span>Creado</span><strong>' + fmtCorta(a.fechaCreacion) + '</strong></div>' +
+      '</div>' +
+      '<div class="avz-panel-footer">' +
+        '<button class="btn btn-outline" id="avzDetEditar" type="button">Editar</button>' +
+        '<button class="btn btn-outline" id="avzDetDuplicar" type="button">Duplicar</button>' +
+        (a.archivado
+          ? '<button class="btn btn-primary" id="avzDetRestaurar" type="button">Restaurar</button>'
+          : '<button class="btn btn-danger" id="avzDetArchivar" type="button">Archivar</button>') +
+      '</div>';
+  }
+
+  function labelEstado(st) {
+    return { activo: 'Activo', programado: 'Programado', vencido: 'Vencido', archivado: 'Archivado' }[st] || st;
+  }
+
+  function wirePanelDetalle() {
+    const id = state.panel.avisoId;
+    const btnEditar = document.getElementById('avzDetEditar');
+    const btnDup = document.getElementById('avzDetDuplicar');
+    const btnArch = document.getElementById('avzDetArchivar');
+    const btnRest = document.getElementById('avzDetRestaurar');
+    if (btnEditar) btnEditar.addEventListener('click', function () {
+      const origen = state.panel.elementoOrigen;
+      abrirPanel('form', { avisoId: id, elementoOrigen: origen });
+    });
+    if (btnDup) btnDup.addEventListener('click', function () {
+      duplicarAviso(id);
+      cerrarPanel(true);
+      showToast('Aviso duplicado.');
+    });
+    if (btnArch) btnArch.addEventListener('click', function () {
+      archivarAviso(id);
+      cerrarPanel(true);
+    });
+    if (btnRest) btnRest.addEventListener('click', function () {
+      restaurarAviso(id);
+      cerrarPanel(true);
+    });
+  }
+
+  // ── Panel: Resumen de un día ─────────────────────────────
+  function renderPanelResumenDia() {
+    const fecha = state.panel.fechaPrecargada;
+    const avisos = avisosDelDia(fecha);
+    const items = avisos.map(function (a) {
+      return '<button class="avz-resumen-item" type="button" data-abrir-aviso="' + a.id + '">' +
+        '<span class="avz-fila-icono">' + TIPO_META[a.tipo].icono + '</span>' +
+        '<span class="avz-resumen-item-titulo">' + escapeHtml(a.titulo) + (a.prioridad === 'urgente' ? ' <span class="avz-urgente-dot"></span>' : '') + '</span>' +
+        '<span class="avz-fila-dest">' + escapeHtml(labelDestinatarios(a.destinatarios)) + '</span>' +
+      '</button>';
+    }).join('');
+
+    return headerPanel(fechaLarga(fecha)) +
+      '<div class="avz-panel-body">' + (items || '<div class="avz-vacio-sub">No hay avisos este día.</div>') + '</div>' +
+      '<div class="avz-panel-footer">' +
+        '<button class="btn btn-primary" id="avzResumenNuevo" type="button">' + icon('plus', 'icon-16') + ' Nuevo aviso</button>' +
+      '</div>';
+  }
+
+  function wirePanelResumenDia() {
+    const panel = document.getElementById('avzPanel');
+    panel.querySelectorAll('[data-abrir-aviso]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        abrirPanel('detalle', { avisoId: el.dataset.abrirAviso });
+      });
+    });
+    const btnNuevo = document.getElementById('avzResumenNuevo');
+    if (btnNuevo) btnNuevo.addEventListener('click', function () {
+      abrirPanel('form', { fecha: state.panel.fechaPrecargada });
+    });
+  }
+
+  // ── Panel: Cerrar local (flujo rápido) ──────────────────
+  function renderPanelCerrarLocal() {
+    const b = state.panel.borrador;
+    const val = validarCerrarLocal(b);
+    const sucCheckboxes = SUCURSALES_SELECCIONABLES.map(function (s) {
+      const marcado = b.sucursalIds.indexOf(s.id) !== -1;
+      return '<label class="avz-check-row">' +
+        '<input type="checkbox" class="avz-cl-suc" value="' + s.id + '"' + (marcado ? ' checked' : '') + ' /> ' + s.label +
+      '</label>';
+    }).join('');
+    const todasMarcadas = SUCURSALES_SELECCIONABLES.every(function (s) { return b.sucursalIds.indexOf(s.id) !== -1; });
+
+    return headerPanel('Cerrar local') +
+      '<div class="avz-panel-body">' +
+        '<div class="avz-field">' +
+          '<div class="avz-field-label-row">' +
+            '<span class="avz-field-label">Sucursal(es)</span>' +
+            '<button class="avz-link-btn" type="button" id="avzClTodas">' + (todasMarcadas ? 'Quitar selección' : 'Seleccionar todas') + '</button>' +
+          '</div>' +
+          '<div class="avz-check-grid">' + sucCheckboxes + '</div>' +
+          (state.panel.intentoPublicar && val.errores.sucursal ? '<div class="avz-field-error">' + val.errores.sucursal + '</div>' : '') +
+        '</div>' +
+        '<div class="avz-field-row">' +
+          '<div class="avz-field">' +
+            '<label class="avz-field-label" for="avzClDesde">Desde</label>' +
+            '<input type="date" class="form-control" id="avzClDesde" value="' + escapeAttr(b.fechaDesde) + '" />' +
+          '</div>' +
+          '<div class="avz-field">' +
+            '<label class="avz-field-label" for="avzClHasta">Hasta</label>' +
+            '<input type="date" class="form-control" id="avzClHasta" value="' + escapeAttr(b.fechaHasta) + '" />' +
+          '</div>' +
+        '</div>' +
+        (state.panel.intentoPublicar && val.errores.fecha ? '<div class="avz-field-error">' + val.errores.fecha + '</div>' : '') +
+        '<div class="avz-field">' +
+          '<label class="avz-field-label" for="avzClMotivo">Motivo (opcional)</label>' +
+          '<textarea class="form-textarea" id="avzClMotivo" rows="2" placeholder="Ej: refacciones">' + escapeHtml(b.motivo) + '</textarea>' +
+        '</div>' +
+        '<div class="avz-resumen-canales">Se va a mostrar en <strong>Calendario, Novedades y Email</strong> de la sucursal seleccionada.</div>' +
+        '<button class="avz-link-btn" type="button" id="avzClMasOpciones">Más opciones →</button>' +
+      '</div>' +
+      '<div class="avz-panel-footer">' +
+        '<button class="btn btn-outline" id="avzClCancelar" type="button">Cancelar</button>' +
+        '<button class="btn btn-danger" id="avzClConfirmar" type="button"' + (val.valido ? '' : ' disabled') + '>Cerrar local</button>' +
+      '</div>';
+  }
+
+  function validarCerrarLocal(b) {
+    const errores = {};
+    if (!b.sucursalIds.length) errores.sucursal = 'Elegí al menos una sucursal.';
+    if (!b.fechaDesde) errores.fecha = 'La fecha "desde" es obligatoria.';
+    else if (b.fechaHasta < b.fechaDesde) errores.fecha = 'La fecha "hasta" no puede ser anterior a "desde".';
+    return { valido: Object.keys(errores).length === 0, errores: errores };
+  }
+
+  function wirePanelCerrarLocal() {
+    const b = state.panel.borrador;
+    const panel = document.getElementById('avzPanel');
+
+    function marcarDirty() { state.panel.dirty = JSON.stringify(b) !== state.panel.original; }
+    function refrescarBoton() {
+      const val = validarCerrarLocal(b);
+      const btn = document.getElementById('avzClConfirmar');
+      if (btn) btn.disabled = !val.valido;
+    }
+
+    panel.querySelectorAll('.avz-cl-suc').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const idx = b.sucursalIds.indexOf(cb.value);
+        if (cb.checked && idx === -1) b.sucursalIds.push(cb.value);
+        else if (!cb.checked && idx !== -1) b.sucursalIds.splice(idx, 1);
+        marcarDirty();
+        refrescarBoton();
+        // El label "Seleccionar todas" puede haber cambiado — re-render completo del panel es aceptable acá (checkbox, no texto).
+        montarPanel();
+      });
+    });
+    const btnTodas = document.getElementById('avzClTodas');
+    if (btnTodas) btnTodas.addEventListener('click', function () {
+      const todasIds = SUCURSALES_SELECCIONABLES.map(function (s) { return s.id; });
+      const todasMarcadas = todasIds.every(function (id) { return b.sucursalIds.indexOf(id) !== -1; });
+      b.sucursalIds = todasMarcadas ? [] : todasIds.slice();
+      marcarDirty();
+      montarPanel();
+    });
+    const desde = document.getElementById('avzClDesde');
+    const hasta = document.getElementById('avzClHasta');
+    if (desde) desde.addEventListener('input', function () {
+      b.fechaDesde = desde.value;
+      if (hasta.value < desde.value) hasta.value = desde.value;
+      b.fechaHasta = hasta.value;
+      marcarDirty();
+      refrescarBoton();
+    });
+    if (hasta) hasta.addEventListener('input', function () {
+      b.fechaHasta = hasta.value;
+      marcarDirty();
+      refrescarBoton();
+    });
+    const motivo = document.getElementById('avzClMotivo');
+    if (motivo) motivo.addEventListener('input', function () {
+      b.motivo = motivo.value;
+      marcarDirty();
+    });
+    const btnMas = document.getElementById('avzClMasOpciones');
+    if (btnMas) btnMas.addEventListener('click', function () { convertirCerrarLocalAForm(); });
+    const btnCancelar = document.getElementById('avzClCancelar');
+    if (btnCancelar) btnCancelar.addEventListener('click', function () { cerrarPanel(); });
+    const btnConfirmar = document.getElementById('avzClConfirmar');
+    if (btnConfirmar) btnConfirmar.addEventListener('click', function () {
+      state.panel.intentoPublicar = true;
+      const val = validarCerrarLocal(b);
+      if (!val.valido) { montarPanel(); return; }
+      crearAviso({
+        tipo: 'local_cerrado',
+        titulo: 'LOCAL CERRADO',
+        mensaje: b.motivo.trim() || 'El local permanecerá cerrado.',
+        fechaDesde: b.fechaDesde,
+        fechaHasta: b.fechaHasta,
+        destinatarios: { modo: 'sucursal', ids: b.sucursalIds.slice() },
+        canales: Object.assign({}, DEFAULTS_POR_TIPO.local_cerrado.canales),
+        prioridad: 'normal',
+      });
+      cerrarPanel(true);
+      showToast('Local cerrado publicado.');
+    });
+  }
+
+  function convertirCerrarLocalAForm() {
+    const b = state.panel.borrador;
+    const formBorrador = {
+      tipo: 'local_cerrado',
+      titulo: 'LOCAL CERRADO',
+      mensaje: b.motivo || '',
+      fechaDesde: b.fechaDesde,
+      fechaHasta: b.fechaHasta,
+      destinatarios: { modo: 'sucursal', ids: b.sucursalIds.slice() },
+      canales: Object.assign({}, DEFAULTS_POR_TIPO.local_cerrado.canales),
+      prioridad: 'normal',
+    };
+    state.panel.modo = 'form';
+    state.panel.avisoId = null;
+    state.panel.borrador = formBorrador;
+    state.panel.original = JSON.stringify(formBorrador);
+    state.panel.dirty = false;
+    state.panel.intentoPublicar = false;
+    state.panel.masOpcionesAbiertas = true;
+    montarPanel();
+  }
+
+  // ── Panel: Nuevo aviso / Editar (formulario completo) ────
+  function requiereFecha(b) { return b.tipo !== 'informacion' || b.canales.calendario || !!b.fechaDesde; }
+
+  function validarBorradorForm(b) {
+    const errores = {};
+    if (!b.titulo.trim()) errores.titulo = 'El título es obligatorio.';
+    if (!b.mensaje.trim()) errores.mensaje = 'El mensaje es obligatorio.';
+    if (requiereFecha(b)) {
+      if (!b.fechaDesde) errores.fecha = 'La fecha es obligatoria para este tipo de aviso.';
+      else if (b.fechaHasta < b.fechaDesde) errores.fecha = 'La fecha "hasta" no puede ser anterior a "desde".';
+    }
+    if (b.destinatarios.modo === 'sucursal' && !b.destinatarios.ids.length) {
+      errores.destinatarios = b.tipo === 'local_cerrado'
+        ? 'Elegí al menos una sucursal para el cierre.'
+        : 'Elegí al menos una sucursal.';
+    }
+    if (b.destinatarios.modo === 'empleado' && !b.destinatarios.nombres.length) {
+      errores.destinatarios = 'Elegí al menos un empleado.';
+    }
+    return { valido: Object.keys(errores).length === 0, errores: errores };
+  }
+
+  function textoVistaPrevia(b) {
+    const titulo = b.titulo.trim() || '(sin título)';
+    const dest = labelDestinatarios(b.destinatarios);
+    const fecha = b.fechaDesde ? fmtRango(b.fechaDesde, b.fechaHasta || b.fechaDesde) : '';
+    const canales = Object.keys(b.canales).filter(function (k) { return b.canales[k]; });
+    const canalesLabel = { calendario: 'Calendario', banner: 'Novedades', email: 'Email', whatsapp: 'WhatsApp' };
+    let txt = titulo + ' — ' + dest;
+    if (fecha) txt += ', ' + fecha;
+    txt += '. Se muestra en: ' + (canales.length ? canales.map(function (c) { return canalesLabel[c]; }).join(', ') : 'ningún canal') + '.';
+    return txt;
+  }
+
+  function renderPanelForm() {
+    const b = state.panel.borrador;
+    const val = validarBorradorForm(b);
+    const err = state.panel.intentoPublicar ? val.errores : {};
+    const esEdicion = !!state.panel.avisoId;
+
+    const tipoChips = Object.keys(TIPO_META).map(function (t) {
+      const activo = b.tipo === t;
+      return '<button class="avz-tipo-chip' + (activo ? ' active' : '') + '" type="button" data-tipo="' + t + '" role="radio" aria-checked="' + activo + '">' +
+        TIPO_META[t].icono + ' ' + TIPO_META[t].label + '</button>';
+    }).join('');
+
+    const destRadios = [
+      ['todos', 'Todos'], ['sucursal', 'Sucursal(es)'], ['empleado', 'Empleado(s)'], ['administracion', 'Administración'],
+    ].map(function (d) {
+      const marcado = b.destinatarios.modo === d[0];
+      return '<label class="avz-radio-row"><input type="radio" name="avzDest" value="' + d[0] + '"' + (marcado ? ' checked' : '') + ' /> ' + d[1] + '</label>';
+    }).join('');
+
+    let destDetalle = '';
+    if (b.destinatarios.modo === 'sucursal') {
+      const todasMarcadas = SUCURSALES_SELECCIONABLES.every(function (s) { return b.destinatarios.ids.indexOf(s.id) !== -1; });
+      destDetalle = '<div class="avz-field-label-row">' +
+          '<span></span><button class="avz-link-btn" type="button" id="avzFormSucTodas">' + (todasMarcadas ? 'Quitar selección' : 'Seleccionar todas') + '</button>' +
+        '</div>' +
+        '<div class="avz-check-grid">' + SUCURSALES_SELECCIONABLES.map(function (s) {
+          const marcado = b.destinatarios.ids.indexOf(s.id) !== -1;
+          return '<label class="avz-check-row"><input type="checkbox" class="avz-form-suc" value="' + s.id + '"' + (marcado ? ' checked' : '') + ' /> ' + s.label + '</label>';
+        }).join('') + '</div>';
+    } else if (b.destinatarios.modo === 'empleado') {
+      destDetalle = '<div class="avz-check-grid">' + empleadosMock().map(function (emp) {
+        const marcado = b.destinatarios.nombres.indexOf(emp.nombre) !== -1;
+        return '<label class="avz-check-row"><input type="checkbox" class="avz-form-emp" value="' + escapeAttr(emp.nombre) + '"' + (marcado ? ' checked' : '') + ' /> ' + escapeHtml(emp.nombre) + '</label>';
+      }).join('') + '</div>';
+    }
+
+    const mostrarFecha = requiereFecha(b);
+
+    return headerPanel(esEdicion ? 'Editar aviso' : 'Nuevo aviso') +
+      '<div class="avz-panel-body">' +
+        '<div class="avz-field">' +
+          '<span class="avz-field-label">¿Qué querés comunicar?</span>' +
+          '<div class="avz-tipo-chips" role="radiogroup" aria-label="Tipo de aviso">' + tipoChips + '</div>' +
+        '</div>' +
+        '<div class="avz-field">' +
+          '<label class="avz-field-label" for="avzFormTitulo">Título</label>' +
+          '<input type="text" class="form-control" id="avzFormTitulo" maxlength="80" value="' + escapeAttr(b.titulo) + '" data-autofocus />' +
+          (err.titulo ? '<div class="avz-field-error">' + err.titulo + '</div>' : '') +
+        '</div>' +
+        '<div class="avz-field">' +
+          '<label class="avz-field-label" for="avzFormMensaje">Mensaje</label>' +
+          '<textarea class="form-textarea" id="avzFormMensaje" rows="3">' + escapeHtml(b.mensaje) + '</textarea>' +
+          (err.mensaje ? '<div class="avz-field-error">' + err.mensaje + '</div>' : '') +
+        '</div>' +
+        '<div class="avz-field">' +
+          '<span class="avz-field-label">A quién le llega</span>' +
+          '<div class="avz-radio-group" role="radiogroup" aria-label="Destinatarios">' + destRadios + '</div>' +
+          destDetalle +
+          (err.destinatarios ? '<div class="avz-field-error">' + err.destinatarios + '</div>' : '') +
+        '</div>' +
+        (mostrarFecha ? (
+          '<div class="avz-field-row">' +
+            '<div class="avz-field"><label class="avz-field-label" for="avzFormDesde">Desde</label>' +
+              '<input type="date" class="form-control" id="avzFormDesde" value="' + escapeAttr(b.fechaDesde) + '" /></div>' +
+            '<div class="avz-field"><label class="avz-field-label" for="avzFormHasta">Hasta</label>' +
+              '<input type="date" class="form-control" id="avzFormHasta" value="' + escapeAttr(b.fechaHasta) + '" /></div>' +
+          '</div>' +
+          (err.fecha ? '<div class="avz-field-error">' + err.fecha + '</div>' : '')
+        ) : '') +
+        '<button class="avz-mas-opciones-btn" type="button" id="avzFormMasOpciones" aria-expanded="' + state.panel.masOpcionesAbiertas + '" aria-controls="avzFormMasOpcionesBody">' +
+          (state.panel.masOpcionesAbiertas ? '▾' : '▸') + ' Más opciones' +
+        '</button>' +
+        (state.panel.masOpcionesAbiertas ? (
+          '<div class="avz-mas-opciones-body" id="avzFormMasOpcionesBody">' +
+            '<div class="avz-field">' +
+              '<span class="avz-field-label">Prioridad</span>' +
+              '<label class="avz-radio-row"><input type="radio" name="avzPrioridad" value="normal"' + (b.prioridad === 'normal' ? ' checked' : '') + ' /> Normal</label>' +
+              '<label class="avz-radio-row"><input type="radio" name="avzPrioridad" value="urgente"' + (b.prioridad === 'urgente' ? ' checked' : '') + ' /> Urgente</label>' +
+            '</div>' +
+            '<div class="avz-field">' +
+              '<span class="avz-field-label">Canales</span>' +
+              canalCheckbox('calendario', 'Calendario', b) +
+              canalCheckbox('banner', 'Novedades', b) +
+              canalCheckbox('email', 'Email a sucursal', b) +
+              canalCheckbox('whatsapp', 'WhatsApp', b) +
+            '</div>' +
+          '</div>'
+        ) : '') +
+        '<div class="avz-preview-box"><strong>Vista previa:</strong> <span id="avzPreviewTexto">' + escapeHtml(textoVistaPrevia(b)) + '</span></div>' +
+      '</div>' +
+      '<div class="avz-panel-footer">' +
+        '<button class="btn btn-outline" id="avzFormCancelar" type="button">Cancelar</button>' +
+        '<button class="btn btn-primary" id="avzFormPublicar" type="button"' + (val.valido ? '' : ' disabled') + '>' + (esEdicion ? 'Guardar cambios' : 'Publicar aviso') + '</button>' +
+      '</div>';
+  }
+
+  function canalCheckbox(clave, label, b) {
+    return '<label class="avz-check-row"><input type="checkbox" class="avz-form-canal" data-canal="' + clave + '"' + (b.canales[clave] ? ' checked' : '') + ' /> ' + label + '</label>';
+  }
+
+  function wirePanelForm() {
+    const b = state.panel.borrador;
+    const panel = document.getElementById('avzPanel');
+
+    function marcarDirty() { state.panel.dirty = JSON.stringify(b) !== state.panel.original; }
+    function refrescarLigero() {
+      const val = validarBorradorForm(b);
+      const btn = document.getElementById('avzFormPublicar');
+      if (btn) btn.disabled = !val.valido;
+      const prev = document.getElementById('avzPreviewTexto');
+      if (prev) prev.textContent = textoVistaPrevia(b);
+    }
+
+    panel.querySelectorAll('[data-tipo]').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        const nuevoTipo = chip.dataset.tipo;
+        if (nuevoTipo === b.tipo) return;
+        const def = DEFAULTS_POR_TIPO[nuevoTipo];
+        if (b.titulo.trim() === '' || b.titulo === 'LOCAL CERRADO') {
+          b.titulo = nuevoTipo === 'local_cerrado' ? 'LOCAL CERRADO' : '';
+        }
+        b.tipo = nuevoTipo;
+        b.canales = Object.assign({}, def.canales);
+        b.prioridad = def.prioridad;
+        b.destinatarios = clonarDestinatarios(def.destinatarios);
+        marcarDirty();
+        montarPanel();
+      });
+    });
+
+    const inpTitulo = document.getElementById('avzFormTitulo');
+    if (inpTitulo) inpTitulo.addEventListener('input', function () {
+      b.titulo = inpTitulo.value;
+      marcarDirty();
+      refrescarLigero();
+    });
+    const inpMensaje = document.getElementById('avzFormMensaje');
+    if (inpMensaje) inpMensaje.addEventListener('input', function () {
+      b.mensaje = inpMensaje.value;
+      marcarDirty();
+      refrescarLigero();
+    });
+
+    panel.querySelectorAll('input[name="avzDest"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        if (radio.value === 'sucursal') b.destinatarios = { modo: 'sucursal', ids: [] };
+        else if (radio.value === 'empleado') b.destinatarios = { modo: 'empleado', nombres: [], sucursalId: '' };
+        else if (radio.value === 'administracion') b.destinatarios = { modo: 'administracion' };
+        else b.destinatarios = { modo: 'todos' };
+        marcarDirty();
+        montarPanel();
+      });
+    });
+    panel.querySelectorAll('.avz-form-suc').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const ids = b.destinatarios.ids;
+        const idx = ids.indexOf(cb.value);
+        if (cb.checked && idx === -1) ids.push(cb.value);
+        else if (!cb.checked && idx !== -1) ids.splice(idx, 1);
+        marcarDirty();
+        montarPanel();
+      });
+    });
+    const btnSucTodas = document.getElementById('avzFormSucTodas');
+    if (btnSucTodas) btnSucTodas.addEventListener('click', function () {
+      const todasIds = SUCURSALES_SELECCIONABLES.map(function (s) { return s.id; });
+      const todasMarcadas = todasIds.every(function (id) { return b.destinatarios.ids.indexOf(id) !== -1; });
+      b.destinatarios.ids = todasMarcadas ? [] : todasIds.slice();
+      marcarDirty();
+      montarPanel();
+    });
+    panel.querySelectorAll('.avz-form-emp').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const nombres = b.destinatarios.nombres;
+        const idx = nombres.indexOf(cb.value);
+        if (cb.checked && idx === -1) nombres.push(cb.value);
+        else if (!cb.checked && idx !== -1) nombres.splice(idx, 1);
+        const emp = empleadosMock().find(function (e) { return e.nombre === cb.value; });
+        if (cb.checked && emp) b.destinatarios.sucursalId = emp.sucursalId;
+        marcarDirty();
+        montarPanel();
+      });
+    });
+
+    const desde = document.getElementById('avzFormDesde');
+    const hasta = document.getElementById('avzFormHasta');
+    if (desde) desde.addEventListener('input', function () {
+      b.fechaDesde = desde.value;
+      if (hasta && hasta.value < desde.value) hasta.value = desde.value;
+      if (hasta) b.fechaHasta = hasta.value;
+      marcarDirty();
+      refrescarLigero();
+    });
+    if (hasta) hasta.addEventListener('input', function () {
+      b.fechaHasta = hasta.value;
+      marcarDirty();
+      refrescarLigero();
+    });
+
+    const btnMas = document.getElementById('avzFormMasOpciones');
+    if (btnMas) btnMas.addEventListener('click', function () {
+      state.panel.masOpcionesAbiertas = !state.panel.masOpcionesAbiertas;
+      montarPanel();
+    });
+    panel.querySelectorAll('input[name="avzPrioridad"]').forEach(function (radio) {
+      radio.addEventListener('change', function () { b.prioridad = radio.value; marcarDirty(); });
+    });
+    panel.querySelectorAll('.avz-form-canal').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        b.canales[cb.dataset.canal] = cb.checked;
+        marcarDirty();
+        refrescarLigero();
+      });
+    });
+
+    const btnCancelar = document.getElementById('avzFormCancelar');
+    if (btnCancelar) btnCancelar.addEventListener('click', function () { cerrarPanel(); });
+    const btnPublicar = document.getElementById('avzFormPublicar');
+    if (btnPublicar) btnPublicar.addEventListener('click', function () {
+      state.panel.intentoPublicar = true;
+      const val = validarBorradorForm(b);
+      if (!val.valido) { montarPanel(); return; }
+      const esEdicion = !!state.panel.avisoId;
+      const datos = {
+        tipo: b.tipo, titulo: b.titulo.trim(), mensaje: b.mensaje.trim(),
+        fechaDesde: b.fechaDesde, fechaHasta: b.fechaHasta || b.fechaDesde,
+        destinatarios: clonarDestinatarios(b.destinatarios),
+        canales: Object.assign({}, b.canales),
+        prioridad: b.prioridad,
+      };
+      if (esEdicion) actualizarAviso(state.panel.avisoId, datos);
+      else crearAviso(datos);
+      cerrarPanel(true);
+      showToast(esEdicion ? 'Aviso actualizado.' : 'Aviso publicado.');
+    });
+  }
+
   // ── Integración con la navegación existente ───────────
-  // No se toca app.js: el botón "Avisos · Beta" usa una clase propia
-  // (no ".nav-btn"/".drawer-nav-btn") para no engancharse al router
-  // genérico de setView(). Activamos la vista a mano y corregimos el
-  // único efecto colateral que setView() hubiera dejado mal si
-  // reusáramos ese router: la .controls-bar (semana/mes/filtros)
-  // quedando visible porque 'avisos' no existe en su lista sinControls.
   function activar() {
     document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
     document.querySelectorAll('.nav-btn, .drawer-nav-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -447,18 +1318,18 @@
     const statsRow = document.querySelector('.stats-row');
     if (statsRow) statsRow.style.display = 'none';
     localStorage.setItem('croma_vista', 'avisos');
+
+    if (!state.avisos.length) {
+      state.avisos = (window.CROMA_AVISOS_MOCK || []).map(clonarAviso);
+    }
     render();
+
     const drawerOverlay = document.getElementById('drawerOverlay');
     const drawerMenu = document.getElementById('drawerMenu');
     if (drawerOverlay) drawerOverlay.classList.remove('open');
     if (drawerMenu) drawerMenu.classList.remove('open');
   }
 
-  // El acceso "Avisos · Beta" debe verse únicamente para rol admin.
-  // En vez de reimplementar esa lógica de permisos (que ya existe en
-  // app.js), la espejamos: el botón nativo #navBtnAdmin solo se hace
-  // visible ahí para admin (iniciarAppConSesion), así que seguimos
-  // exactamente su mismo estado en vez de duplicar la condición.
   function sincronizarVisibilidadAdmin() {
     const ref = document.getElementById('navBtnAdmin');
     const btnTop = document.getElementById('avzNavBtn');

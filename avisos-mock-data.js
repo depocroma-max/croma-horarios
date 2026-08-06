@@ -154,5 +154,17 @@
     },
   ];
 
+  // Lista mínima de empleados para el selector de destinatarios
+  // "Empleado(s)" del formulario (Fase 2) — no existía ninguna fuente
+  // de empleados en el contrato de Fase 1, hacía falta para poder
+  // probar ese modo de destinatario con datos mock coherentes.
+  const EMPLEADOS = [
+    { nombre: 'Juan Pérez',    sucursalId: '09' },
+    { nombre: 'Lucía Gómez',   sucursalId: '01' },
+    { nombre: 'Martín Silva',  sucursalId: '05' },
+    { nombre: 'Ana Torres',    sucursalId: '12' },
+  ];
+
   window.CROMA_AVISOS_MOCK = MOCK;
+  window.CROMA_EMPLEADOS_MOCK = EMPLEADOS;
 })();
