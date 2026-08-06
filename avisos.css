@@ -1,0 +1,424 @@
+/* =====================================================
+   AVISOS · Fase 1 — shell visual (sin datos reales)
+   Usa exclusivamente tokens de croma-ds.css / style.css.
+   No define colores, radios ni sombras nuevos.
+   ===================================================== */
+
+.avz-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6, 24px);
+  padding: var(--space-6, 24px);
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.avz-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3, 12px);
+}
+.avz-titulo {
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 1px;
+  color: var(--croma-black, var(--black));
+  margin: 0;
+}
+.avz-header-acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+/* Buscador (mismo lenguaje visual que .top-search, pero propio) */
+.avz-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-sunken, var(--gray-50));
+  border: 1px solid var(--border-neutral, var(--gray-200));
+  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  min-width: 220px;
+}
+.avz-search svg { color: var(--text-muted, var(--gray-400)); flex-shrink: 0; }
+.avz-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--gray-800);
+  width: 100%;
+}
+.avz-search input::placeholder { color: var(--text-muted, var(--gray-400)); }
+
+/* ── Toggle de vista (Hoy / Calendario / Lista) — pill tabs ── */
+.avz-view-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-sunken, #f1f5f9);
+  border: 1px solid var(--border-neutral, #e2e8f0);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  width: fit-content;
+}
+.avz-view-btn {
+  padding: 7px 16px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, var(--gray-600));
+  cursor: pointer;
+  border-radius: 7px;
+  transition: background-color .15s, color .15s, box-shadow .15s;
+  white-space: nowrap;
+}
+.avz-view-btn:hover { color: var(--croma-black, var(--black)); background: rgba(255,255,255,.6); }
+.avz-view-btn.active {
+  color: var(--croma-black, var(--black));
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Tabs de sucursal (subrayado, scrolleable) ───────── */
+.avz-suc-tabs {
+  display: flex;
+  gap: var(--space-1, 4px);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-neutral, var(--gray-200));
+  padding-bottom: 0;
+  scrollbar-width: thin;
+}
+.avz-suc-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, var(--gray-600));
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.avz-suc-tab:hover { color: var(--croma-black, var(--black)); }
+.avz-suc-tab.active {
+  color: var(--croma-black, var(--black));
+  border-bottom-color: var(--suc-dot, var(--croma-red));
+  font-weight: 600;
+}
+.avz-suc-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--suc-dot, var(--gray-400));
+  flex-shrink: 0;
+}
+
+/* ── Quick actions ────────────────────────────────────── */
+.avz-quick-actions {
+  display: flex;
+  gap: var(--space-2, 8px);
+  flex-wrap: wrap;
+}
+.avz-btn-beta {
+  position: relative;
+}
+.avz-btn-beta[disabled] {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.avz-beta-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--gray-100);
+  color: var(--text-secondary, var(--gray-600));
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+/* ── Cuerpo ───────────────────────────────────────────── */
+.avz-body { min-height: 320px; }
+
+/* ── Vista Hoy ────────────────────────────────────────── */
+.avz-hoy-fecha {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: .5px;
+  color: var(--croma-black, var(--black));
+  margin: 0 0 var(--space-4, 16px);
+}
+.avz-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: #fff;
+  border: 1px solid var(--border-neutral, var(--gray-200));
+}
+.avz-card-cierre {
+  background: var(--suc-bg, var(--gray-50));
+  border-color: transparent;
+}
+.avz-card-urgente {
+  border-left: 3px solid var(--danger, var(--croma-red));
+}
+.avz-card-icono { font-size: 14px; line-height: 1.4; flex-shrink: 0; margin-top: 1px; }
+.avz-card-texto { flex: 1; min-width: 0; }
+.avz-card-titulo { font-size: 14px; font-weight: 600; color: var(--croma-black, var(--black)); }
+.avz-card-sub { font-size: 12px; color: var(--text-secondary, var(--gray-600)); margin-top: 2px; }
+.avz-card-fecha { font-size: 12px; color: var(--text-muted, var(--gray-400)); white-space: nowrap; flex-shrink: 0; }
+
+.avz-proximos-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-muted, var(--gray-400));
+  margin: var(--space-5, 20px) 0 8px;
+}
+.avz-proximo-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-neutral, var(--gray-100));
+}
+.avz-proximo-fila .avz-card-icono { font-size: 12px; }
+.avz-proximo-fecha { color: var(--text-muted, var(--gray-400)); width: 70px; flex-shrink: 0; }
+.avz-proximo-titulo { flex: 1; color: var(--gray-800); }
+.avz-proximo-dest { color: var(--text-secondary, var(--gray-600)); font-size: 12px; }
+
+/* ── Estado vacío ─────────────────────────────────────── */
+.avz-vacio {
+  text-align: center;
+  padding: 56px 20px;
+  color: var(--text-secondary, var(--gray-600));
+}
+.avz-vacio-titulo { font-size: 14px; font-weight: 600; color: var(--gray-800); margin-bottom: 4px; }
+.avz-vacio-sub { font-size: 13px; color: var(--text-muted, var(--gray-400)); margin-bottom: 16px; }
+
+/* ── Vista Calendario ─────────────────────────────────── */
+.avz-cal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4, 16px);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.avz-cal-nav { display: flex; align-items: center; gap: 6px; }
+.avz-cal-nav-btn {
+  width: 30px; height: 30px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-neutral, var(--gray-200));
+  background: #fff;
+  color: var(--gray-600);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background-color .15s;
+}
+.avz-cal-nav-btn:hover { background: var(--gray-50); }
+.avz-cal-mes {
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: .5px;
+  min-width: 160px;
+  text-align: center;
+}
+.avz-cal-hoy-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-neutral, var(--gray-200));
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-600);
+  cursor: pointer;
+}
+.avz-cal-hoy-btn:hover { background: var(--gray-50); }
+
+.avz-cal-grid {
+  border: 1px solid var(--border-neutral, var(--gray-200));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.avz-cal-dias-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: var(--surface-sunken, var(--gray-50));
+}
+.avz-cal-dias-header span {
+  padding: 8px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--text-muted, var(--gray-400));
+}
+.avz-cal-semanas { display: flex; flex-direction: column; }
+.avz-cal-semana { display: grid; grid-template-columns: repeat(7, 1fr); }
+.avz-cal-celda {
+  min-height: 92px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-neutral, var(--gray-200));
+  border-left: 1px solid var(--border-neutral, var(--gray-200));
+}
+.avz-cal-celda:nth-child(7n+1) { border-left: none; }
+.avz-cal-celda.fuera-de-mes { background: var(--surface-sunken, #fafaf8); }
+.avz-cal-celda.fuera-de-mes .avz-cal-num { color: var(--text-muted, var(--gray-300)); }
+.avz-cal-celda.es-hoy { background: var(--gray-50); }
+.avz-cal-num {
+  font-size: 12px;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+.avz-cal-celda.es-hoy .avz-cal-num {
+  color: var(--danger, var(--croma-red));
+  font-weight: 700;
+}
+
+.avz-cal-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: var(--space-4, 16px);
+  font-size: 12px;
+  color: var(--text-secondary, var(--gray-600));
+}
+.avz-cal-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Vista Lista ──────────────────────────────────────── */
+.avz-lista-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4, 16px);
+}
+.avz-select {
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-neutral, var(--gray-200));
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--gray-600);
+}
+.avz-lista-grupo-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-muted, var(--gray-400));
+  margin: var(--space-4, 16px) 0 6px;
+}
+.avz-lista-grupo-label:first-child { margin-top: 0; }
+.avz-fila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: var(--radius-md);
+  transition: background-color .12s;
+}
+.avz-fila:hover { background: var(--gray-50); }
+.avz-fila-icono { font-size: 13px; width: 18px; text-align: center; flex-shrink: 0; }
+.avz-fila-info { flex: 1; min-width: 0; }
+.avz-fila-titulo {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--croma-black, var(--black));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.avz-fila-dest { font-size: 12px; color: var(--text-secondary, var(--gray-600)); margin-top: 1px; }
+.avz-fila-fecha { font-size: 12px; color: var(--text-muted, var(--gray-400)); flex-shrink: 0; white-space: nowrap; }
+.avz-fila-acciones {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity .12s;
+  flex-shrink: 0;
+}
+.avz-fila:hover .avz-fila-acciones { opacity: 1; }
+.avz-fila-accion-btn {
+  width: 26px; height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--gray-400);
+  cursor: not-allowed;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+}
+.avz-fila-accion-btn:hover { background: var(--gray-100); }
+
+.avz-archivados-toggle {
+  margin-top: var(--space-4, 16px);
+  font-size: 12px;
+  color: var(--text-muted, var(--gray-400));
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+.avz-archivados-toggle:hover { color: var(--gray-600); }
+
+/* Badges de estado / prioridad — reusan .badge del design system,
+   solo agregamos el modificador de urgente (punto rojo) */
+.avz-urgente-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--danger, var(--croma-red));
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ── Botones de navegación propios (no ".nav-btn"/".drawer-nav-btn"
+   a propósito: esas clases están enganchadas al router genérico
+   setView() de app.js, que no debe tocarse en esta fase) ────── */
+.avz-nav-btn {
+  padding: 6px 14px; border: none; background: transparent;
+  color: var(--gray-400); font-family: var(--font-body);
+  font-size: 13px; font-weight: 400; cursor: pointer;
+  border-radius: var(--radius-sm); letter-spacing: .3px;
+  transition: background-color .15s, color .15s;
+}
+.avz-nav-btn:hover { color: var(--white); background: rgba(255,255,255,.08); }
+.avz-nav-btn.active { color: var(--white); background: rgba(255,255,255,.12); font-weight: 500; }
+
+.avz-drawer-nav-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border: none; background: transparent;
+  color: var(--gray-400); font-family: var(--font-body);
+  font-size: 15px; font-weight: 400; cursor: pointer;
+  border-radius: var(--radius-md); text-align: left; width: 100%;
+  transition: background-color .15s, color .15s;
+}
+.avz-drawer-nav-btn:hover { background: rgba(255,255,255,.06); color: var(--white); }
+.avz-drawer-nav-btn.active { background: rgba(255,255,255,.1); color: var(--white); font-weight: 500; }
+
+/* ── Responsive (tablet) ──────────────────────────────── */
+@media (max-width: 900px) {
+  .avz-shell { padding: var(--space-4, 16px); }
+  .avz-header { flex-direction: column; align-items: flex-start; }
+  .avz-search { min-width: 0; width: 100%; }
+  .avz-cal-celda { min-height: 72px; }
+}
