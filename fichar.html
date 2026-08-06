@@ -593,7 +593,6 @@
     <div class="geo-dist" id="geoDist" style="display:none"></div>
     <div class="geo-msg"  id="geoMsg">Asegurate de tener el GPS activado y dar permiso cuando te lo pida el navegador.</div>
     <button class="btn-primary" id="geoBtn" style="display:none" onclick="reintentarGeo()">Reintentar</button>
-    <button class="btn-primary" style="display:none;margin-top:10px" id="geoBtnContinuar" onclick="mostrarFormulario()">Continuar de todas formas</button>
   </div>
 </section>
 
@@ -959,7 +958,26 @@ async function cargarSucursalYGeo() {
   });
 
   await Promise.all([pPerfil, pGeo, pGps]);
+
+  if (!geoPos) {
+    mostrarGeoRequerido();
+    return;
+  }
   mostrarSelectorSucursal();
+}
+
+function mostrarGeoRequerido() {
+  mostrarScreen('screenGeo');
+  document.getElementById('geoSpinner').style.display = 'none';
+  const icon = document.getElementById('geoIcon');
+  icon.style.display = 'flex'; icon.className = 'geo-icon err';
+  document.getElementById('geoTitle').textContent = 'Ubicación requerida';
+  document.getElementById('geoDist').style.display = 'none';
+  document.getElementById('geoMsg').textContent =
+    'No pudimos obtener tu ubicación. Activá el GPS y dale permiso de ubicación a esta página para poder fichar.';
+  document.getElementById('geoBtn').style.display = '';
+  document.getElementById('geoBtn').textContent = 'Reintentar';
+  document.getElementById('geoBtn').onclick = reintentarGeo;
 }
 
 // ── SELECTOR DE SUCURSAL ──
@@ -979,11 +997,7 @@ function mostrarSelectorSucursal() {
   const list = document.getElementById('sucList');
   list.innerHTML = '';
 
-  if (!geoPos) {
-    document.getElementById('sucSelSub').textContent = 'GPS no disponible — elegí igual y podrás continuar.';
-  } else {
-    document.getElementById('sucSelSub').textContent = 'Seleccioná el local donde vas a cargar el turno.';
-  }
+  document.getElementById('sucSelSub').textContent = 'Seleccioná el local donde vas a cargar el turno.';
 
   SUCURSALES.forEach(suc => {
     const geo = sucursalesGeo.find(g => g.local.toUpperCase() === suc.nombre.toUpperCase());
@@ -1065,7 +1079,20 @@ async function elegirSucursal(suc, geo, dist, dentro) {
 }
 
 function reintentarGeo() {
-  mostrarSelectorSucursal();
+  mostrarScreen('screenGeo');
+  document.getElementById('geoSpinner').style.display = '';
+  document.getElementById('geoIcon').style.display = 'none';
+  document.getElementById('geoTitle').textContent = 'Verificando ubicación';
+  document.getElementById('geoMsg').textContent = 'Asegurate de tener el GPS activado y dar permiso cuando te lo pida el navegador.';
+  document.getElementById('geoBtn').style.display = 'none';
+
+  if (!navigator.geolocation) { geoPos = null; mostrarGeoRequerido(); return; }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => { geoPos = { lat: pos.coords.latitude, lon: pos.coords.longitude }; mostrarSelectorSucursal(); },
+    () => { geoPos = null; mostrarGeoRequerido(); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
 }
 
 // ── MODAL DE CONFIRMACIÓN (estilo Croma) ──
