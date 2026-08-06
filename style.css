@@ -1145,6 +1145,10 @@ body {
   font-size: 13px; width: 100%;
 }
 .top-search input::placeholder { color: var(--gray-600); }
+/* input type="search" trae su propio botón nativo de limpiar (la "x" del
+   navegador) además del #btnClearSearch propio de Croma — se veían los
+   dos juntos. Se oculta el nativo, se deja solo el nuestro. */
+.top-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 #btnClearSearch {
   background: transparent; border: none; color: var(--gray-600);
   cursor: pointer; font-size: 12px; padding: 0; line-height: 1;
