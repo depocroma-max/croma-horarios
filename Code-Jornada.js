@@ -4606,11 +4606,16 @@ function accionEditarAviso(datos) {
     if (!encontrado) return _resp({ ok: false, error: 'Aviso no encontrado' });
 
     const antes = _avisoAObjeto(encontrado.headers, encontrado.fila);
-    const cambios = {
-      titulo: datos.titulo, mensaje: datos.mensaje, tipo: datos.tipo,
-      fecha_desde: datos.fecha_desde, fecha_hasta: datos.fecha_hasta,
-      destinatarios: datos.destinatarios, canales: datos.canales, prioridad: datos.prioridad,
-    };
+    // Importante: solo se incluyen acá las claves que realmente vinieron en
+    // `datos` — un objeto con claves explícitas en `undefined` (ej.
+    // { titulo: datos.titulo } cuando datos.titulo no vino) pisaría los
+    // valores reales de `antes` al mergear en _validarDatosAviso, porque
+    // Object.assign SÍ copia propiedades con valor undefined. Bug real
+    // encontrado en el smoke test de Fase 3A (editar_aviso parcial fallaba
+    // la validación como si el aviso no tuviera título/tipo/destinatarios).
+    const cambios = {};
+    ['titulo', 'mensaje', 'tipo', 'fecha_desde', 'fecha_hasta', 'destinatarios', 'canales', 'prioridad']
+      .forEach(function (campo) { if (datos[campo] !== undefined) cambios[campo] = datos[campo]; });
     const val = _validarDatosAviso(cambios, antes);
     if (!val.valido) return _resp({ ok: false, error: 'Datos inválidos', errores: val.errores });
 
