@@ -1185,6 +1185,15 @@ function despacharAccionSegura(envelope) {
   if (accion === 'obtener_recibo_archivo')    return accionObtenerReciboArchivo(datos);
   if (accion === 'reemplazar_recibo')         return accionReemplazarRecibo(datos);
 
+  // AVISOS (Fase 3A) — lectura y escritura, todo por acá, nunca por doGet.
+  if (accion === 'get_avisos')                return accionGetAvisos();
+  if (accion === 'get_aviso')                 return accionGetAviso(datos);
+  if (accion === 'guardar_aviso')             return accionGuardarAviso(datos);
+  if (accion === 'editar_aviso')              return accionEditarAviso(datos);
+  if (accion === 'archivar_aviso')            return accionArchivarAviso(datos);
+  if (accion === 'restaurar_aviso')           return accionRestaurarAviso(datos);
+  if (accion === 'debug_resolver_destinatarios') return accionDebugResolverDestinatarios(datos);
+
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
 
@@ -4339,4 +4348,336 @@ function accionReemplazarRecibo(datos) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// =====================================================
+//  AVISOS — Fase 3A (backend y modelo de datos)
+// =====================================================
+// Reemplaza a futuro a EVENTOS + ANUNCIOS bajo una sola entidad. A
+// diferencia de esas dos (patrón legado: doGet, sin secreto, actor fijo
+// 'Admin'), AVISOS nace enteramente sobre el patrón seguro: las 6 acciones
+// (lectura Y escritura) viajan únicamente vía despacharAccionSegura — nunca
+// se agrega una acción nueva de AVISOS a doGet. Es una decisión de
+// arquitectura, no solo de seguridad puntual: todo lo nuevo de acá en
+// adelante entra por Frontend → Node → GAS, dejando lugar en Node para
+// filtrado por rol/sucursal, paginación, cache y observabilidad futuros sin
+// tener que volver a tocar este archivo.
+//
+// EVENTOS y ANUNCIOS no se tocan — siguen funcionando exactamente igual,
+// en paralelo, hasta que una fase de migración posterior los reemplace.
+//
+// Hoja AVISOS: ID | TITULO | MENSAJE | TIPO | FECHA_DESDE | FECHA_HASTA |
+//              DESTINATARIOS | CANALES | PRIORIDAD | ARCHIVADO | AUTOR |
+//              FECHA_CREACION | MODIFICADO_POR | FECHA_MODIFICACION | VERSION
+//
+// ESTADO (activo/programado/vencido) NO se persiste — se deriva de las
+// fechas en el momento de leer, igual criterio que ya usa el frontend mock
+// de Fase 1/2 (evita que el dato guardado se desincronice del real).
+//
+// VERSION: entero, arranca en 1, se incrementa en cada escritura sobre una
+// fila existente (editar/archivar/restaurar). Todavía NO se usa para
+// optimistic locking ni ninguna validación — es preparación para el futuro
+// (auditoría rápida, comparación de registros), tal como se aprobó.
+
+const AVISOS_TIPOS_VALIDOS = ['informacion', 'evento', 'local_cerrado'];
+const AVISOS_DEST_MODOS_VALIDOS = ['todos', 'sucursal', 'empleado', 'administracion'];
+const AVISOS_CANALES_VALIDOS = ['calendario', 'banner', 'email', 'whatsapp'];
+const AVISOS_SUCURSALES_VALIDAS = ['01', '05', '09', '10', '12', '14', 'DEPO', 'OFICINA'];
+
+function _asegurarHojaAvisos() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('AVISOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('AVISOS');
+    hoja.getRange(1, 1, 1, 15).setValues([[
+      'ID', 'TITULO', 'MENSAJE', 'TIPO', 'FECHA_DESDE', 'FECHA_HASTA',
+      'DESTINATARIOS', 'CANALES', 'PRIORIDAD', 'ARCHIVADO', 'AUTOR',
+      'FECHA_CREACION', 'MODIFICADO_POR', 'FECHA_MODIFICACION', 'VERSION',
+    ]]);
+  }
+  return hoja;
+}
+
+function _avisosNuevoId() {
+  return 'AVI-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+}
+
+// ── Helpers puros de resolución (sin efectos secundarios, testeables
+//    de forma aislada — ver accionDebugResolverDestinatarios) ─────────
+function _resolverVisibleEnSucursal(destinatarios, sucId) {
+  const modo = destinatarios && destinatarios.modo;
+  if (modo === 'administracion') return true; // por rol, no por ubicación — visible siempre
+  if (!sucId || sucId === 'todas') return true;
+  if (modo === 'todos') return true;
+  if (modo === 'sucursal') return Array.isArray(destinatarios.ids) && destinatarios.ids.indexOf(sucId) !== -1;
+  if (modo === 'empleado') return destinatarios.sucursal_id === sucId;
+  return false;
+}
+
+function _resolverCanalesActivos(canales) {
+  if (!canales || typeof canales !== 'object') return [];
+  return AVISOS_CANALES_VALIDOS.filter(function (c) { return canales[c] === true; });
+}
+
+// ── Validación (server-side — nunca confiar solo en Node ni en el
+//    navegador). `existente` opcional: si viene, valida el resultado
+//    MERGEADO (existente + datos), no solo el diff, para que editar_aviso
+//    nunca pueda dejar una fila en un estado inconsistente. ─────────────
+function _validarDatosAviso(datos, existente) {
+  const base = existente ? Object.assign({}, existente, datos) : datos;
+  const errores = {};
+
+  if (!base.titulo || !String(base.titulo).trim()) errores.titulo = 'El título es obligatorio.';
+  if (!base.mensaje || !String(base.mensaje).trim()) errores.mensaje = 'El mensaje es obligatorio.';
+  if (AVISOS_TIPOS_VALIDOS.indexOf(base.tipo) === -1) errores.tipo = 'Tipo inválido.';
+
+  const destinatarios = base.destinatarios || {};
+  if (AVISOS_DEST_MODOS_VALIDOS.indexOf(destinatarios.modo) === -1) {
+    errores.destinatarios = 'Modo de destinatarios inválido.';
+  } else if (destinatarios.modo === 'sucursal') {
+    const ids = destinatarios.ids;
+    if (!Array.isArray(ids) || !ids.length) {
+      errores.destinatarios = 'Elegí al menos una sucursal.';
+    } else if (ids.some(function (id) { return AVISOS_SUCURSALES_VALIDAS.indexOf(id) === -1; })) {
+      errores.destinatarios = 'Hay una sucursal inválida en la selección.';
+    } else if (base.tipo === 'local_cerrado' && destinatarios.ids.length === 0) {
+      errores.destinatarios = 'Local cerrado requiere al menos una sucursal.';
+    }
+  } else if (destinatarios.modo === 'empleado') {
+    if (!Array.isArray(destinatarios.nombres) || !destinatarios.nombres.length) {
+      errores.destinatarios = 'Elegí al menos un empleado.';
+    }
+  }
+  if (base.tipo === 'local_cerrado' && destinatarios.modo !== 'sucursal') {
+    errores.destinatarios = 'Local cerrado debe tener destinatario Sucursal(es).';
+  }
+
+  const canales = base.canales || {};
+  const requiereFecha = base.tipo !== 'informacion' || canales.calendario === true || !!base.fecha_desde;
+  if (requiereFecha) {
+    if (!base.fecha_desde) errores.fecha = 'La fecha es obligatoria para este tipo de aviso.';
+    else if (base.fecha_hasta && base.fecha_hasta < base.fecha_desde) {
+      errores.fecha = 'La fecha "hasta" no puede ser anterior a "desde".';
+    }
+  }
+
+  if (base.prioridad && ['normal', 'urgente'].indexOf(base.prioridad) === -1) {
+    errores.prioridad = 'Prioridad inválida.';
+  }
+
+  return { valido: Object.keys(errores).length === 0, errores: errores };
+}
+
+// ── Conversión fila ↔ objeto ───────────────────────────────────────────
+function _avisoAObjeto(headers, fila) {
+  const col = function (name) { return headers.indexOf(name); };
+  const fechaStr = function (v) {
+    if (!v) return '';
+    if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    return String(v).trim();
+  };
+  const fechaHoraStr = function (v) {
+    if (!v) return '';
+    if (v instanceof Date) return v.toISOString();
+    return String(v).trim();
+  };
+  let destinatarios = { modo: 'todos' };
+  let canales = { calendario: false, banner: false, email: false, whatsapp: false };
+  try { destinatarios = JSON.parse(fila[col('DESTINATARIOS')] || '{}'); } catch (e) {}
+  try { canales = JSON.parse(fila[col('CANALES')] || '{}'); } catch (e) {}
+
+  return {
+    id: String(fila[col('ID')] || ''),
+    titulo: String(fila[col('TITULO')] || ''),
+    mensaje: String(fila[col('MENSAJE')] || ''),
+    tipo: String(fila[col('TIPO')] || ''),
+    fecha_desde: fechaStr(fila[col('FECHA_DESDE')]),
+    fecha_hasta: fechaStr(fila[col('FECHA_HASTA')]),
+    destinatarios: destinatarios,
+    canales: canales,
+    prioridad: String(fila[col('PRIORIDAD')] || 'normal'),
+    archivado: fila[col('ARCHIVADO')] === true || fila[col('ARCHIVADO')] === 'TRUE',
+    autor: String(fila[col('AUTOR')] || ''),
+    fecha_creacion: fechaHoraStr(fila[col('FECHA_CREACION')]),
+    modificado_por: String(fila[col('MODIFICADO_POR')] || ''),
+    fecha_modificacion: fechaHoraStr(fila[col('FECHA_MODIFICACION')]),
+    version: parseInt(fila[col('VERSION')], 10) || 1,
+  };
+}
+
+function _filaDeAviso(headers, aviso) {
+  const col = function (name) { return headers.indexOf(name); };
+  const fila = new Array(headers.length).fill('');
+  fila[col('ID')] = aviso.id;
+  fila[col('TITULO')] = aviso.titulo;
+  fila[col('MENSAJE')] = aviso.mensaje;
+  fila[col('TIPO')] = aviso.tipo;
+  fila[col('FECHA_DESDE')] = aviso.fecha_desde || '';
+  fila[col('FECHA_HASTA')] = aviso.fecha_hasta || aviso.fecha_desde || '';
+  fila[col('DESTINATARIOS')] = JSON.stringify(aviso.destinatarios || { modo: 'todos' });
+  fila[col('CANALES')] = JSON.stringify(aviso.canales || {});
+  fila[col('PRIORIDAD')] = aviso.prioridad || 'normal';
+  fila[col('ARCHIVADO')] = aviso.archivado === true;
+  fila[col('AUTOR')] = aviso.autor || '';
+  fila[col('FECHA_CREACION')] = aviso.fecha_creacion || '';
+  fila[col('MODIFICADO_POR')] = aviso.modificado_por || '';
+  fila[col('FECHA_MODIFICACION')] = aviso.fecha_modificacion || '';
+  fila[col('VERSION')] = aviso.version || 1;
+  return fila;
+}
+
+function _buscarFilaAviso(hoja, id) {
+  const vals = hoja.getDataRange().getValues();
+  const headers = vals[0];
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][headers.indexOf('ID')]) === String(id)) {
+      return { headers: headers, fila: vals[i], indice: i };
+    }
+  }
+  return null;
+}
+
+// ── Acciones expuestas (todas vía despacharAccionSegura) ──────────────
+
+function accionGetAvisos() {
+  const hoja = _asegurarHojaAvisos();
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return _resp({ ok: true, avisos: [] });
+  const headers = vals[0];
+  const avisos = vals.slice(1)
+    .filter(function (r) { return r[headers.indexOf('ID')]; })
+    .map(function (r) { return _avisoAObjeto(headers, r); });
+  return _resp({ ok: true, avisos: avisos });
+}
+
+function accionGetAviso(datos) {
+  const hoja = _asegurarHojaAvisos();
+  const encontrado = _buscarFilaAviso(hoja, datos.id);
+  if (!encontrado) return _resp({ ok: false, error: 'Aviso no encontrado' });
+  return _resp({ ok: true, aviso: _avisoAObjeto(encontrado.headers, encontrado.fila) });
+}
+
+function accionGuardarAviso(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const val = _validarDatosAviso(datos);
+    if (!val.valido) return _resp({ ok: false, error: 'Datos inválidos', errores: val.errores });
+
+    const hoja = _asegurarHojaAvisos();
+    const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+    const ahora = new Date();
+    const aviso = {
+      id: _avisosNuevoId(),
+      titulo: String(datos.titulo).trim().substring(0, 80),
+      mensaje: String(datos.mensaje).trim(),
+      tipo: datos.tipo,
+      fecha_desde: datos.fecha_desde || '',
+      fecha_hasta: datos.fecha_hasta || datos.fecha_desde || '',
+      destinatarios: datos.destinatarios,
+      canales: datos.canales || {},
+      prioridad: datos.prioridad || 'normal',
+      archivado: false,
+      autor: actor,
+      fecha_creacion: ahora,
+      modificado_por: actor,
+      fecha_modificacion: ahora,
+      version: 1,
+    };
+    hoja.appendRow(_filaDeAviso(headers, aviso));
+
+    registrarAuditoria(actor, 'AVISO_CREADO', 'AVISO', aviso.id, null, aviso);
+    return _resp({ ok: true, aviso: aviso });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionEditarAviso(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    if (!datos.id) return _resp({ ok: false, error: 'Falta el id del aviso' });
+
+    const hoja = _asegurarHojaAvisos();
+    const encontrado = _buscarFilaAviso(hoja, datos.id);
+    if (!encontrado) return _resp({ ok: false, error: 'Aviso no encontrado' });
+
+    const antes = _avisoAObjeto(encontrado.headers, encontrado.fila);
+    const cambios = {
+      titulo: datos.titulo, mensaje: datos.mensaje, tipo: datos.tipo,
+      fecha_desde: datos.fecha_desde, fecha_hasta: datos.fecha_hasta,
+      destinatarios: datos.destinatarios, canales: datos.canales, prioridad: datos.prioridad,
+    };
+    const val = _validarDatosAviso(cambios, antes);
+    if (!val.valido) return _resp({ ok: false, error: 'Datos inválidos', errores: val.errores });
+
+    const ahora = new Date();
+    const despues = Object.assign({}, antes, {
+      titulo: String(cambios.titulo !== undefined ? cambios.titulo : antes.titulo).trim().substring(0, 80),
+      mensaje: String(cambios.mensaje !== undefined ? cambios.mensaje : antes.mensaje).trim(),
+      tipo: cambios.tipo !== undefined ? cambios.tipo : antes.tipo,
+      fecha_desde: cambios.fecha_desde !== undefined ? cambios.fecha_desde : antes.fecha_desde,
+      fecha_hasta: cambios.fecha_hasta !== undefined ? cambios.fecha_hasta : antes.fecha_hasta,
+      destinatarios: cambios.destinatarios !== undefined ? cambios.destinatarios : antes.destinatarios,
+      canales: cambios.canales !== undefined ? cambios.canales : antes.canales,
+      prioridad: cambios.prioridad !== undefined ? cambios.prioridad : antes.prioridad,
+      modificado_por: actor,
+      fecha_modificacion: ahora,
+      version: (antes.version || 1) + 1,
+    });
+
+    hoja.getRange(encontrado.indice + 1, 1, 1, encontrado.headers.length)
+      .setValues([_filaDeAviso(encontrado.headers, despues)]);
+
+    registrarAuditoria(actor, 'AVISO_EDITADO', 'AVISO', datos.id, antes, despues);
+    return _resp({ ok: true, aviso: despues });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _accionCambiarArchivadoAviso(datos, nuevoValor, nombreAuditoria) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    if (!datos.id) return _resp({ ok: false, error: 'Falta el id del aviso' });
+
+    const hoja = _asegurarHojaAvisos();
+    const encontrado = _buscarFilaAviso(hoja, datos.id);
+    if (!encontrado) return _resp({ ok: false, error: 'Aviso no encontrado' });
+
+    const antes = _avisoAObjeto(encontrado.headers, encontrado.fila);
+    const ahora = new Date();
+    const despues = Object.assign({}, antes, {
+      archivado: nuevoValor,
+      modificado_por: actor,
+      fecha_modificacion: ahora,
+      version: (antes.version || 1) + 1,
+    });
+
+    hoja.getRange(encontrado.indice + 1, 1, 1, encontrado.headers.length)
+      .setValues([_filaDeAviso(encontrado.headers, despues)]);
+
+    registrarAuditoria(actor, nombreAuditoria, 'AVISO', datos.id, antes, despues);
+    return _resp({ ok: true, aviso: despues });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionArchivarAviso(datos) { return _accionCambiarArchivadoAviso(datos, true, 'AVISO_ARCHIVADO'); }
+function accionRestaurarAviso(datos) { return _accionCambiarArchivadoAviso(datos, false, 'AVISO_RESTAURADO'); }
+
+// ── QA: helper de resolución probable de forma aislada, sin frontend ni
+//    Node — llamar por POST directo con el sobre {accion, clave_backend,
+//    datos:{destinatarios, canales, sucursal_id}}. Regla del proyecto: todo
+//    helper complejo debe poder validarse independientemente del frontend. ──
+function accionDebugResolverDestinatarios(datos) {
+  const visible = _resolverVisibleEnSucursal(datos.destinatarios || {}, datos.sucursal_id || 'todas');
+  const canalesActivos = _resolverCanalesActivos(datos.canales || {});
+  return _resp({ ok: true, visible_en_sucursal: visible, canales_activos: canalesActivos });
 }
