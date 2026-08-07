@@ -34,6 +34,53 @@
     },
   };
 
+  // ── Normalización de campos API (snake_case) ⇄ frontend (camelCase) ──
+  // Hallazgo de auditoría (Prioridad 0, previo a las mutaciones de 3B.2):
+  // listar() devolvía los avisos de la API tal cual (snake_case), pero
+  // TODO el resto de avisos.js lee fechaDesde/fechaHasta/fechaCreacion/
+  // destinatarios.sucursalId en camelCase (estadoDe, avisosFiltrados,
+  // render de Hoy/Calendario/Lista, el panel de detalle — 42 usos en
+  // total). Sin esta normalización, cualquier aviso real devuelto por la
+  // API se hubiera mostrado con fechas "undefined" y clasificado siempre
+  // como "vencido" en estadoDe(). No se detectó antes porque la hoja
+  // AVISOS estaba vacía durante todo el QA de 3B.1 — el bug nunca se
+  // ejerció visualmente. Corregido acá, antes de tocar ninguna mutación.
+  function desdeApiDestinatarios(d) {
+    if (!d) return { modo: 'todos' };
+    if (d.modo === 'sucursal') return { modo: 'sucursal', ids: (d.ids || []).slice() };
+    if (d.modo === 'empleado') return { modo: 'empleado', nombres: (d.nombres || []).slice(), sucursalId: d.sucursal_id || '' };
+    if (d.modo === 'administracion') return { modo: 'administracion' };
+    return { modo: 'todos' };
+  }
+  // fmtCorta()/fmtRango() en avisos.js esperan fecha simple "yyyy-mm-dd"
+  // (así vienen fechaDesde/fechaHasta). fecha_creacion/fecha_modificacion
+  // de la API viajan como datetime ISO completo ("...T12:30:57.141Z") —
+  // se recorta acá a los primeros 10 caracteres, el único formato que
+  // avisos.js sabe mostrar hoy (fmtCorta(a.fechaCreacion) en el panel de
+  // detalle). Encontrado en el mismo QA de esta auditoría, junto con el
+  // mapeo de campos.
+  function soloFecha(iso) { return iso ? String(iso).slice(0, 10) : ''; }
+
+  function desdeApi(a) {
+    return {
+      id: a.id,
+      titulo: a.titulo,
+      mensaje: a.mensaje,
+      tipo: a.tipo,
+      fechaDesde: a.fecha_desde || '',
+      fechaHasta: a.fecha_hasta || a.fecha_desde || '',
+      destinatarios: desdeApiDestinatarios(a.destinatarios),
+      canales: Object.assign({}, a.canales),
+      prioridad: a.prioridad || 'normal',
+      archivado: a.archivado === true,
+      autor: a.autor || '',
+      fechaCreacion: soloFecha(a.fecha_creacion),
+      modificadoPor: a.modificado_por || '',
+      fechaModificacion: soloFecha(a.fecha_modificacion),
+      version: a.version || 1,
+    };
+  }
+
   // ── ApiRepository — croma-backend → Apps Script → Sheets ─────────────
   const MENSAJES_POR_STATUS = {
     400: 'Los datos enviados no son válidos.',
@@ -75,7 +122,7 @@
     listar: async function () {
       const data = await fetchAvisosApi('', { method: 'GET' });
       if (!data.ok) return data;
-      return { ok: true, avisos: data.avisos || [] };
+      return { ok: true, avisos: (data.avisos || []).map(desdeApi) };
     },
   };
 
