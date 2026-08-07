@@ -205,7 +205,7 @@
       return { ok: false, status: resp.status, error: (data && data.error) || mensajePorStatus(resp.status), errores: data && data.errores };
     }
     if (!data || data.ok !== true) {
-      return { ok: false, status: resp.status, error: (data && data.error) || 'Respuesta inválida del servidor.' };
+      return { ok: false, status: resp.status, error: (data && data.error) || 'Respuesta inválida del servidor.', errores: data && data.errores };
     }
     return data;
   }
