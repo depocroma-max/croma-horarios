@@ -72,6 +72,7 @@
       estado: 'idle',
       error: null,      // { status, mensaje } | null
       generacion: 0,    // anti-carrera: descarta respuestas obsoletas
+      ultimaCarga: null, // Date | null — para CromaAvisos.debug()
     },
 
     // Panel lateral único (detalle / form / cerrar-local / resumen-dia)
@@ -86,7 +87,13 @@
       intentoPublicar: false,
       masOpcionesAbiertas: false,
       elementoOrigen: null,
+      guardando: false,      // true mientras se espera confirmación real del servidor (Fase 3B.2)
+      errorGuardado: null,   // { mensaje, errores? } | null
     },
+
+    // ids de fila (Lista) con una mutación en curso — deshabilita solo esa
+    // fila, no toda la lista (Fase 3B.2).
+    filasEnCurso: new Set(),
   };
 
   let inicializado = false;
@@ -132,16 +139,6 @@
   function sucursalPorId(id) { return SUCURSALES.find(function (s) { return s.id === id; }); }
   function empleadosMock() { return window.CROMA_EMPLEADOS_MOCK || []; }
 
-  // ── Fase 3B.1: solo lectura contra la API real ─────────
-  // Las mutaciones (crear/editar/duplicar/archivar/restaurar/cerrar local)
-  // quedan para la Fase 3B.2 — en modo 'api' todavía no hay ningún backend
-  // de escritura conectado, así que esos controles quedan deshabilitados
-  // (mismo patrón visual "Disponible en la próxima fase" ya usado en
-  // Fase 1). En modo 'mock' (activación explícita, ver avisos-repository.js)
-  // siguen 100% funcionales como en Fase 2, para QA local sin backend.
-  function mutacionesHabilitadas() {
-    return !!(window.CromaAvisosConfig && window.CromaAvisosConfig.modo === 'mock');
-  }
 
   // ── Carga inicial (una sola vez por sesión, ver activar()) ─────────────
   function cargarAvisosIniciales() {
@@ -154,6 +151,7 @@
 
     window.CromaAvisosRepository.listar().then(function (resultado) {
       if (generacion !== state.carga.generacion) return; // respuesta obsoleta, se descarta
+      state.carga.ultimaCarga = new Date();
       if (resultado.ok) {
         state.avisos = resultado.avisos;
         state.carga.estado = 'listo';
@@ -180,6 +178,55 @@
   }
   function nuevoId() { return 'AVI-' + Date.now() + '-' + Math.floor(Math.random() * 1000); }
   function obtenerAviso(id) { return state.avisos.find(function (a) { return a.id === id; }); }
+
+  // ── Sincronización tras una mutación confirmada por el servidor
+  //    (Fase 3B.2) — nunca se vuelve a pedir GET /api/avisos completo:
+  //    se usa directo el objeto que devolvió la propia mutación. ────────
+  function aplicarAvisoEnMemoria(aviso) {
+    const idx = state.avisos.findIndex(function (a) { return a.id === aviso.id; });
+    if (idx === -1) state.avisos.push(aviso);
+    else state.avisos[idx] = aviso;
+    render();
+  }
+
+  // ── Mutaciones compartidas (panel de detalle Y fila de Lista) ─────────
+  // Duplicar: excluye explícitamente id/version/archivado/autor/
+  // fechaCreacion/modificadoPor/fechaModificacion — esos los pone el
+  // servidor al crear. Fechas se copian tal cual, incluso si están
+  // vencidas (sin UX nueva de "correr fechas"). Sufijo " (copia)" en el
+  // título, igual que en Fase 2.
+  function ejecutarDuplicar(id) {
+    const original = obtenerAviso(id);
+    if (!original) return Promise.resolve({ ok: false, error: 'Este aviso ya no existe.' });
+    const datos = {
+      tipo: original.tipo,
+      titulo: original.titulo + ' (copia)',
+      mensaje: original.mensaje,
+      fechaDesde: original.fechaDesde,
+      fechaHasta: original.fechaHasta,
+      destinatarios: clonarDestinatarios(original.destinatarios),
+      canales: Object.assign({}, original.canales),
+      prioridad: original.prioridad,
+    };
+    return window.CromaAvisosRepository.crear(datos).then(function (resultado) {
+      if (resultado.ok) aplicarAvisoEnMemoria(resultado.aviso);
+      return resultado;
+    });
+  }
+  function ejecutarArchivar(id) {
+    const actual = obtenerAviso(id);
+    return window.CromaAvisosRepository.archivar(id, actual).then(function (resultado) {
+      if (resultado.ok) aplicarAvisoEnMemoria(resultado.aviso);
+      return resultado;
+    });
+  }
+  function ejecutarRestaurar(id) {
+    const actual = obtenerAviso(id);
+    return window.CromaAvisosRepository.restaurar(id, actual).then(function (resultado) {
+      if (resultado.ok) aplicarAvisoEnMemoria(resultado.aviso);
+      return resultado;
+    });
+  }
 
   function crearAviso(datos) {
     const nuevo = Object.assign({}, datos, {
@@ -303,7 +350,12 @@
   }
 
   // ── Toasts ──────────────────────────────────────────────
-  function mostrarToastDeshacer(mensaje, onDeshacer) {
+  // Fase 3B.2: "Deshacer" ya no es una reversión en memoria — dispara la
+  // mutación inversa real (restaurar_aviso vía el repository) y espera su
+  // confirmación antes de dar el archivado por deshecho. Si esa mutación
+  // inversa falla, el estado remoto (archivado) es la verdad: no se
+  // revierte nada localmente sin confirmación, se avisa con mensajeError.
+  function mostrarToastDeshacer(mensaje, onDeshacerAsync, mensajeError) {
     const existing = document.getElementById('avzToast');
     if (existing) existing.remove();
     const el = document.createElement('div');
@@ -315,8 +367,15 @@
     const t = setTimeout(function () { el.remove(); }, 5000);
     el.querySelector('#avzToastDeshacer').addEventListener('click', function () {
       clearTimeout(t);
-      el.remove();
-      onDeshacer();
+      const btn = el.querySelector('#avzToastDeshacer');
+      btn.disabled = true;
+      btn.textContent = 'Deshaciendo…';
+      onDeshacerAsync().then(function (resultado) {
+        el.remove();
+        if (resultado && resultado.ok === false) {
+          showToast(mensajeError || 'No se pudo deshacer.');
+        }
+      });
     });
   }
 
@@ -344,14 +403,14 @@
               '<label class="avz-visually-hidden" for="avzBuscar">Buscar avisos</label>' +
               '<input type="search" id="avzBuscar" placeholder="Buscar avisos..." value="' + escapeAttr(state.busqueda) + '" />' +
             '</div>' +
-            '<button class="btn btn-primary" id="avzBtnNuevo" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>' +
+            '<button class="btn btn-primary" id="avzBtnNuevo" type="button">' +
               icon('plus', 'icon-16') + ' Nuevo aviso' +
             '</button>' +
           '</div>' +
         '</div>' +
         '<div class="avz-suc-tabs" id="avzSucTabs" role="tablist" aria-label="Sucursal">' + sucOpts + '</div>' +
         '<div class="avz-quick-actions">' +
-          '<button class="btn btn-outline" id="avzBtnCerrarLocal" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>🔒 Cerrar local</button>' +
+          '<button class="btn btn-outline" id="avzBtnCerrarLocal" type="button">🔒 Cerrar local</button>' +
           '<button class="btn btn-outline avz-btn-beta" disabled title="Disponible en una próxima fase">⧉ Duplicar último</button>' +
         '</div>' +
         '<div class="avz-body" id="avzBody"></div>' +
@@ -544,10 +603,10 @@
   }
 
   function botonFilaAccion(accion, id, label, iconoHtml) {
-    const habilitado = mutacionesHabilitadas();
+    const enCurso = state.filasEnCurso.has(id);
     return '<button class="avz-fila-accion-btn" type="button" data-fila-accion="' + accion + '" data-id="' + id + '"' +
-      (habilitado ? '' : ' disabled') +
-      ' title="' + (habilitado ? label : 'Disponible en la próxima fase') + '" aria-label="' + label + ' aviso">' + iconoHtml + '</button>';
+      (enCurso ? ' disabled' : '') +
+      ' title="' + (enCurso ? 'Procesando…' : label) + '" aria-label="' + label + ' aviso">' + iconoHtml + '</button>';
   }
 
   function renderGrupo(label, avisos) {
@@ -589,10 +648,37 @@
         e.stopPropagation();
         const id = btn.dataset.id;
         const accion = btn.dataset.filaAccion;
-        if (accion === 'editar') abrirPanel('form', { avisoId: id, elementoOrigen: btn });
-        else if (accion === 'duplicar') { duplicarAviso(id); showToast('Aviso duplicado.'); }
-        else if (accion === 'archivar') archivarAviso(id);
-        else if (accion === 'restaurar') restaurarAviso(id);
+        if (state.filasEnCurso.has(id)) return; // doble submit
+
+        if (accion === 'editar') { abrirPanel('form', { avisoId: id, elementoOrigen: btn }); return; }
+
+        state.filasEnCurso.add(id);
+        renderBody();
+
+        if (accion === 'duplicar') {
+          ejecutarDuplicar(id).then(function (resultado) {
+            state.filasEnCurso.delete(id);
+            renderBody();
+            if (resultado.ok) showToast('Aviso duplicado.');
+            else showToast(resultado.error);
+          });
+        } else if (accion === 'archivar') {
+          ejecutarArchivar(id).then(function (resultado) {
+            state.filasEnCurso.delete(id);
+            renderBody();
+            if (resultado.ok) {
+              mostrarToastDeshacer('Aviso archivado.', function () { return ejecutarRestaurar(id); },
+                'No se pudo deshacer. El aviso sigue archivado.');
+            } else showToast(resultado.error);
+          });
+        } else if (accion === 'restaurar') {
+          ejecutarRestaurar(id).then(function (resultado) {
+            state.filasEnCurso.delete(id);
+            renderBody();
+            if (resultado.ok) showToast('Aviso restaurado.');
+            else showToast(resultado.error);
+          });
+        }
       });
     });
   }
@@ -693,7 +779,7 @@
       const masBtn = e.target.closest('.avz-cal-mas');
       if (masBtn) { abrirPanel('resumen-dia', { fecha: masBtn.dataset.resumenDia, elementoOrigen: masBtn }); return; }
       const celda = e.target.closest('.avz-cal-celda');
-      if (celda && mutacionesHabilitadas()) { abrirPanel('form', { fecha: celda.dataset.celdaFecha, elementoOrigen: celda }); }
+      if (celda) { abrirPanel('form', { fecha: celda.dataset.celdaFecha, elementoOrigen: celda }); }
     });
   }
 
@@ -759,6 +845,8 @@
     state.panel.dirty = false;
     state.panel.intentoPublicar = false;
     state.panel.masOpcionesAbiertas = false;
+    state.panel.guardando = false;
+    state.panel.errorGuardado = null;
 
     if (modo === 'form') {
       state.panel.borrador = nuevoBorradorForm(opts);
@@ -776,6 +864,11 @@
   }
 
   function cerrarPanel(force) {
+    // Nunca se cierra mientras hay una mutación esperando confirmación del
+    // servidor — ni por Cancelar, ni por Escape, ni por clic afuera (Fase
+    // 3B.2). "force" es de uso interno (después de una mutación EXITOSA),
+    // nunca lo dispara directamente una interacción del usuario.
+    if (!force && state.panel.guardando) return;
     if (!force && state.panel.dirty) {
       mostrarConfirm({
         titulo: '¿Descartar cambios?',
@@ -795,13 +888,17 @@
       abierto: false, modo: null, avisoId: null, fechaPrecargada: null,
       borrador: null, original: null, dirty: false, intentoPublicar: false,
       masOpcionesAbiertas: false, elementoOrigen: null,
+      guardando: false, errorGuardado: null,
     };
     if (origen && typeof origen.focus === 'function') origen.focus();
   }
 
   function onPanelKeydown(e) {
     if (!state.panel.abierto) return;
-    if (e.key === 'Escape') { e.preventDefault(); cerrarPanel(); return; }
+    if (e.key === 'Escape') {
+      if (state.panel.guardando) { e.preventDefault(); return; } // ignorado mientras se guarda
+      e.preventDefault(); cerrarPanel(); return;
+    }
     if (e.key === 'Tab') {
       const panel = document.getElementById('avzPanel');
       if (!panel) return;
@@ -826,7 +923,7 @@
     overlay.innerHTML = '<div class="avz-panel" id="avzPanel" role="dialog" aria-modal="true" aria-label="' + escapeAttr(tituloPanelActual()) + '">' + renderPanelContenido() + '</div>';
     document.body.appendChild(overlay);
     overlay.addEventListener('mousedown', function (e) {
-      if (e.target === overlay) cerrarPanel();
+      if (e.target === overlay && !state.panel.guardando) cerrarPanel();
     });
     wirePanelContenido();
     const panelEl = document.getElementById('avzPanel');
@@ -879,12 +976,13 @@
     const canalesActivos = Object.keys(a.canales).filter(function (k) { return a.canales[k]; });
     const canalesLabel = { calendario: 'Calendario', banner: 'Novedades', email: 'Email', whatsapp: 'WhatsApp' };
 
+    const g = state.panel.guardando;
     return headerPanel(tituloPanelActual()) +
       '<div class="avz-panel-body">' +
         '<div class="avz-detalle-tipo">' + TIPO_META[a.tipo].icono + ' ' + TIPO_META[a.tipo].label + '</div>' +
         '<h3 class="avz-detalle-titulo">' + escapeHtml(a.titulo) + '</h3>' +
         '<div class="avz-detalle-meta">' +
-          '<span class="badge badge-neutral">' + labelEstado(st) + '</span>' +
+          '<span class="badge badge-neutral" title="Versión ' + (a.version || 1) + '">' + labelEstado(st) + '</span>' +
           (a.prioridad === 'urgente' ? '<span class="badge badge-danger">Urgente</span>' : '') +
         '</div>' +
         '<div class="avz-detalle-fecha">' + fmtRango(a.fechaDesde, a.fechaHasta) + '</div>' +
@@ -893,13 +991,14 @@
         '<div class="avz-detalle-fila"><span>Canales</span><strong>' + (canalesActivos.length ? canalesActivos.map(function (c) { return canalesLabel[c]; }).join(', ') : 'Ninguno') + '</strong></div>' +
         '<div class="avz-detalle-fila"><span>Autor</span><strong>' + escapeHtml(a.autor) + '</strong></div>' +
         '<div class="avz-detalle-fila"><span>Creado</span><strong>' + fmtCorta(a.fechaCreacion) + '</strong></div>' +
+        (state.panel.errorGuardado ? '<div class="avz-field-error" style="margin-top:8px">' + escapeHtml(state.panel.errorGuardado.mensaje) + '</div>' : '') +
       '</div>' +
       '<div class="avz-panel-footer">' +
-        '<button class="btn btn-outline" id="avzDetEditar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Editar</button>' +
-        '<button class="btn btn-outline" id="avzDetDuplicar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Duplicar</button>' +
+        '<button class="btn btn-outline" id="avzDetEditar" type="button"' + (g ? ' disabled' : '') + '>Editar</button>' +
+        '<button class="btn btn-outline" id="avzDetDuplicar" type="button"' + (g ? ' disabled' : '') + '>' + (g ? 'Duplicando…' : 'Duplicar') + '</button>' +
         (a.archivado
-          ? '<button class="btn btn-primary" id="avzDetRestaurar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Restaurar</button>'
-          : '<button class="btn btn-danger" id="avzDetArchivar" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>Archivar</button>') +
+          ? '<button class="btn btn-primary" id="avzDetRestaurar" type="button"' + (g ? ' disabled' : '') + '>' + (g ? 'Restaurando…' : 'Restaurar') + '</button>'
+          : '<button class="btn btn-danger" id="avzDetArchivar" type="button"' + (g ? ' disabled' : '') + '>' + (g ? 'Archivando…' : 'Archivar') + '</button>') +
       '</div>';
   }
 
@@ -914,21 +1013,61 @@
     const btnArch = document.getElementById('avzDetArchivar');
     const btnRest = document.getElementById('avzDetRestaurar');
     if (btnEditar) btnEditar.addEventListener('click', function () {
+      if (state.panel.guardando) return;
       const origen = state.panel.elementoOrigen;
       abrirPanel('form', { avisoId: id, elementoOrigen: origen });
     });
     if (btnDup) btnDup.addEventListener('click', function () {
-      duplicarAviso(id);
-      cerrarPanel(true);
-      showToast('Aviso duplicado.');
+      if (state.panel.guardando) return;
+      state.panel.guardando = true;
+      state.panel.errorGuardado = null;
+      montarPanel();
+      ejecutarDuplicar(id).then(function (resultado) {
+        if (!state.panel.abierto) return;
+        state.panel.guardando = false;
+        if (resultado.ok) {
+          cerrarPanel(true);
+          showToast('Aviso duplicado.');
+        } else {
+          state.panel.errorGuardado = { mensaje: resultado.error };
+          montarPanel();
+        }
+      });
     });
     if (btnArch) btnArch.addEventListener('click', function () {
-      archivarAviso(id);
-      cerrarPanel(true);
+      if (state.panel.guardando) return;
+      state.panel.guardando = true;
+      state.panel.errorGuardado = null;
+      montarPanel();
+      ejecutarArchivar(id).then(function (resultado) {
+        if (!state.panel.abierto) return;
+        state.panel.guardando = false;
+        if (resultado.ok) {
+          cerrarPanel(true);
+          mostrarToastDeshacer('Aviso archivado.', function () { return ejecutarRestaurar(id); },
+            'No se pudo deshacer. El aviso sigue archivado.');
+        } else {
+          state.panel.errorGuardado = { mensaje: resultado.error };
+          montarPanel();
+        }
+      });
     });
     if (btnRest) btnRest.addEventListener('click', function () {
-      restaurarAviso(id);
-      cerrarPanel(true);
+      if (state.panel.guardando) return;
+      state.panel.guardando = true;
+      state.panel.errorGuardado = null;
+      montarPanel();
+      ejecutarRestaurar(id).then(function (resultado) {
+        if (!state.panel.abierto) return;
+        state.panel.guardando = false;
+        if (resultado.ok) {
+          cerrarPanel(true);
+          showToast('Aviso restaurado.');
+        } else {
+          state.panel.errorGuardado = { mensaje: resultado.error };
+          montarPanel();
+        }
+      });
     });
   }
 
@@ -947,7 +1086,7 @@
     return headerPanel(fechaLarga(fecha)) +
       '<div class="avz-panel-body">' + (items || '<div class="avz-vacio-sub">No hay avisos este día.</div>') + '</div>' +
       '<div class="avz-panel-footer">' +
-        '<button class="btn btn-primary" id="avzResumenNuevo" type="button"' + (mutacionesHabilitadas() ? '' : ' disabled title="Disponible en la próxima fase"') + '>' + icon('plus', 'icon-16') + ' Nuevo aviso</button>' +
+        '<button class="btn btn-primary" id="avzResumenNuevo" type="button">' + icon('plus', 'icon-16') + ' Nuevo aviso</button>' +
       '</div>';
   }
 
@@ -1002,11 +1141,14 @@
           '<textarea class="form-textarea" id="avzClMotivo" rows="2" placeholder="Ej: refacciones">' + escapeHtml(b.motivo) + '</textarea>' +
         '</div>' +
         '<div class="avz-resumen-canales">Se va a mostrar en <strong>Calendario, Novedades y Email</strong> de la sucursal seleccionada.</div>' +
-        '<button class="avz-link-btn" type="button" id="avzClMasOpciones">Más opciones →</button>' +
+        '<button class="avz-link-btn" type="button" id="avzClMasOpciones"' + (state.panel.guardando ? ' disabled' : '') + '>Más opciones →</button>' +
+        (state.panel.errorGuardado ? '<div class="avz-field-error" style="margin-top:8px">' + escapeHtml(state.panel.errorGuardado.mensaje) + '</div>' : '') +
       '</div>' +
       '<div class="avz-panel-footer">' +
-        '<button class="btn btn-outline" id="avzClCancelar" type="button">Cancelar</button>' +
-        '<button class="btn btn-danger" id="avzClConfirmar" type="button"' + (val.valido ? '' : ' disabled') + '>Cerrar local</button>' +
+        '<button class="btn btn-outline" id="avzClCancelar" type="button"' + (state.panel.guardando ? ' disabled' : '') + '>Cancelar</button>' +
+        '<button class="btn btn-danger" id="avzClConfirmar" type="button"' + (val.valido && !state.panel.guardando ? '' : ' disabled') + '>' +
+          (state.panel.guardando ? 'Cerrando…' : 'Cerrar local') +
+        '</button>' +
       '</div>';
   }
 
@@ -1068,15 +1210,27 @@
       marcarDirty();
     });
     const btnMas = document.getElementById('avzClMasOpciones');
-    if (btnMas) btnMas.addEventListener('click', function () { convertirCerrarLocalAForm(); });
+    if (btnMas) btnMas.addEventListener('click', function () {
+      if (state.panel.guardando) return;
+      convertirCerrarLocalAForm();
+    });
     const btnCancelar = document.getElementById('avzClCancelar');
-    if (btnCancelar) btnCancelar.addEventListener('click', function () { cerrarPanel(); });
+    if (btnCancelar) btnCancelar.addEventListener('click', function () {
+      if (state.panel.guardando) return;
+      cerrarPanel();
+    });
     const btnConfirmar = document.getElementById('avzClConfirmar');
     if (btnConfirmar) btnConfirmar.addEventListener('click', function () {
+      if (state.panel.guardando) return; // doble submit
       state.panel.intentoPublicar = true;
       const val = validarCerrarLocal(b);
       if (!val.valido) { montarPanel(); return; }
-      crearAviso({
+
+      state.panel.guardando = true;
+      state.panel.errorGuardado = null;
+      montarPanel();
+
+      window.CromaAvisosRepository.crear({
         tipo: 'local_cerrado',
         titulo: 'LOCAL CERRADO',
         mensaje: b.motivo.trim() || 'El local permanecerá cerrado.',
@@ -1085,9 +1239,18 @@
         destinatarios: { modo: 'sucursal', ids: b.sucursalIds.slice() },
         canales: Object.assign({}, DEFAULTS_POR_TIPO.local_cerrado.canales),
         prioridad: 'normal',
+      }).then(function (resultado) {
+        if (!state.panel.abierto) return;
+        state.panel.guardando = false;
+        if (resultado.ok) {
+          aplicarAvisoEnMemoria(resultado.aviso);
+          cerrarPanel(true);
+          showToast('Local cerrado publicado.');
+        } else {
+          state.panel.errorGuardado = { mensaje: resultado.error };
+          montarPanel();
+        }
       });
-      cerrarPanel(true);
-      showToast('Local cerrado publicado.');
     });
   }
 
@@ -1150,7 +1313,14 @@
   function renderPanelForm() {
     const b = state.panel.borrador;
     const val = validarBorradorForm(b);
-    const err = state.panel.intentoPublicar ? val.errores : {};
+    // Errores de servidor (400 real) se fusionan con los de validación
+    // local — mismos nombres de campo de un lado y del otro (confirmado
+    // contra _validarDatosAviso en Code-Jornada.js: titulo/mensaje/tipo/
+    // destinatarios/fecha/prioridad), así que se muestran en el mismo
+    // lugar sin distinguir origen.
+    const erroresServidor = (state.panel.errorGuardado && state.panel.errorGuardado.errores) || {};
+    const err = Object.assign({}, state.panel.intentoPublicar ? val.errores : {}, erroresServidor);
+    const errorGeneral = state.panel.errorGuardado && !Object.keys(erroresServidor).length ? state.panel.errorGuardado.mensaje : null;
     const esEdicion = !!state.panel.avisoId;
 
     const tipoChips = Object.keys(TIPO_META).map(function (t) {
@@ -1236,10 +1406,13 @@
           '</div>'
         ) : '') +
         '<div class="avz-preview-box"><strong>Vista previa:</strong> <span id="avzPreviewTexto">' + escapeHtml(textoVistaPrevia(b)) + '</span></div>' +
+        (errorGeneral ? '<div class="avz-field-error" id="avzFormErrorGeneral" style="margin-top:8px">' + escapeHtml(errorGeneral) + '</div>' : '') +
       '</div>' +
       '<div class="avz-panel-footer">' +
-        '<button class="btn btn-outline" id="avzFormCancelar" type="button">Cancelar</button>' +
-        '<button class="btn btn-primary" id="avzFormPublicar" type="button"' + (val.valido ? '' : ' disabled') + '>' + (esEdicion ? 'Guardar cambios' : 'Publicar aviso') + '</button>' +
+        '<button class="btn btn-outline" id="avzFormCancelar" type="button"' + (state.panel.guardando ? ' disabled' : '') + '>Cancelar</button>' +
+        '<button class="btn btn-primary" id="avzFormPublicar" type="button"' + (val.valido && !state.panel.guardando ? '' : ' disabled') + '>' +
+          (state.panel.guardando ? 'Guardando…' : (esEdicion ? 'Guardar cambios' : 'Publicar aviso')) +
+        '</button>' +
       '</div>';
   }
 
@@ -1363,9 +1536,13 @@
     });
 
     const btnCancelar = document.getElementById('avzFormCancelar');
-    if (btnCancelar) btnCancelar.addEventListener('click', function () { cerrarPanel(); });
+    if (btnCancelar) btnCancelar.addEventListener('click', function () {
+      if (state.panel.guardando) return;
+      cerrarPanel();
+    });
     const btnPublicar = document.getElementById('avzFormPublicar');
     if (btnPublicar) btnPublicar.addEventListener('click', function () {
+      if (state.panel.guardando) return; // doble submit
       state.panel.intentoPublicar = true;
       const val = validarBorradorForm(b);
       if (!val.valido) { montarPanel(); return; }
@@ -1377,10 +1554,26 @@
         canales: Object.assign({}, b.canales),
         prioridad: b.prioridad,
       };
-      if (esEdicion) actualizarAviso(state.panel.avisoId, datos);
-      else crearAviso(datos);
-      cerrarPanel(true);
-      showToast(esEdicion ? 'Aviso actualizado.' : 'Aviso publicado.');
+      state.panel.guardando = true;
+      state.panel.errorGuardado = null;
+      montarPanel();
+
+      const promesa = esEdicion
+        ? window.CromaAvisosRepository.editar(state.panel.avisoId, datos, obtenerAviso(state.panel.avisoId))
+        : window.CromaAvisosRepository.crear(datos);
+
+      promesa.then(function (resultado) {
+        if (!state.panel.abierto) return; // el panel ya se cerró (no debería pasar, pero por las dudas)
+        state.panel.guardando = false;
+        if (resultado.ok) {
+          aplicarAvisoEnMemoria(resultado.aviso);
+          cerrarPanel(true);
+          showToast(esEdicion ? 'Aviso actualizado.' : 'Aviso publicado.');
+        } else {
+          state.panel.errorGuardado = { mensaje: resultado.error, errores: resultado.errores };
+          montarPanel();
+        }
+      });
     });
   }
 
@@ -1460,6 +1653,27 @@
     cargarAvisosIniciales();
   }
 
+  // Herramienta de debugging (Fase 3B.2) — solo consola, sin UI. Muestra
+  // el estado interno relevante para diagnosticar sin tener que inspeccionar
+  // el closure a mano.
+  function debug() {
+    const info = {
+      repository: window.CromaAvisosRepository === window.CromaAvisosRepository
+        ? (window.CromaAvisosConfig && window.CromaAvisosConfig.modo === 'mock' ? 'MockRepository' : 'ApiRepository')
+        : 'desconocido',
+      modo: window.CromaAvisosConfig ? window.CromaAvisosConfig.modo : 'desconocido',
+      estadoCarga: state.carga.estado,
+      cantidadAvisos: state.avisos.length,
+      ultimaCarga: state.carga.ultimaCarga ? state.carga.ultimaCarga.toISOString() : null,
+      panelAbierto: state.panel.abierto,
+      panelGuardando: state.panel.guardando,
+      sucursalActual: state.sucursal,
+      vistaActual: state.vista,
+    };
+    console.table ? console.table(info) : console.log(info);
+    return info;
+  }
+
   // Exposición mínima para integración/debug — el resto queda privado.
-  window.CromaAvisos = { activar: activar, reload: reload };
+  window.CromaAvisos = { activar: activar, reload: reload, debug: debug };
 })();
