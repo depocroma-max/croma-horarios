@@ -154,10 +154,11 @@
       aplicaAlConsultante: _eventoAplica(crudo.destinatarios || 'todos', empleado, sucursalId),
       superficies: { calendario: true, banner: false },
       estado: _calcularEstado(fechaDesde, fechaHasta),
-      // EVENTOS nunca tuvo concepto de "leído" — no participa de la
-      // superficie banner, así que se marca leído por default para que
-      // nunca infle un conteo de no-leídos.
-      leido: true,
+      // Contrato v1.1 (ADR-CONTRATO-PROVIDER): leido solo es aplicable a
+      // items con superficies.banner=true. EVENTOS nunca participa de esa
+      // superficie, así que acá es siempre null — "no aplica", no una
+      // afirmación de que fue leído.
+      leido: null,
     };
   }
 

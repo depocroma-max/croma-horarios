@@ -102,11 +102,16 @@
 
   // ── API pública — contrato oficial (ADR-CONTRATO-PROVIDER) ─────────
 
-  async function consultar(entrada) {
+  // Ejecuta una Strategy puntual POR NOMBRE, sin leer ni mutar
+  // _strategyActivaNombre — usada tanto por consultar() (con el nombre de
+  // la Strategy activa) como por el Provider Sandbox (con cualquier
+  // nombre, para comparar Strategies sin tocar configuración de
+  // producción). Misma observabilidad y manejo de errores en ambos casos.
+  async function _consultarConStrategyEspecifica(nombre, entrada) {
     const errorEntrada = _validarEntrada(entrada);
     if (errorEntrada) return { ok: false, error: errorEntrada };
 
-    const strategy = _strategies[_strategyActivaNombre];
+    const strategy = _strategies[nombre];
     if (!strategy) return { ok: false, error: 'No hay ninguna Strategy activa.' };
 
     const t0 = _ahora();
@@ -121,7 +126,7 @@
     const tiempoNormalizacionMs = resultado && typeof resultado._tiempoNormalizacionMs === 'number'
       ? resultado._tiempoNormalizacionMs
       : undefined;
-    _registrarConsulta(_strategyActivaNombre, resultado, t1 - t0, tiempoNormalizacionMs);
+    _registrarConsulta(nombre, resultado, t1 - t0, tiempoNormalizacionMs);
 
     // El timing de normalización es una señal de observabilidad interna,
     // nunca parte del contrato de salida expuesto al consumidor (ADR,
@@ -130,6 +135,10 @@
       delete resultado._tiempoNormalizacionMs;
     }
     return resultado;
+  }
+
+  async function consultar(entrada) {
+    return _consultarConStrategyEspecifica(_strategyActivaNombre, entrada);
   }
 
   async function marcarLeido(empleado, itemId) {
@@ -169,6 +178,7 @@
     // público consumido por pantallas.
     _setStrategyActiva,
     _getStrategyActivaNombre,
+    _consultarConStrategyEspecifica,
   };
 
   // ── Provider Sandbox ────────────────────────────────────────────────
@@ -178,15 +188,34 @@
   // esta etapa puntual) — sirve tanto para la Validación real de la
   // Etapa 1 como para comparar Strategies entre sí más adelante.
   const ProviderSandbox = {
-    // Ejecuta una consulta real y devuelve la respuesta tal cual la
-    // recibiría cualquier pantalla futura.
+    // Ejecuta una consulta real contra la Strategy ACTIVA (la misma que
+    // usaría cualquier pantalla futura) y devuelve la respuesta tal cual.
     consultar: function (empleado, sucursalId, rango) {
       return CromaAvisosProvider.consultar({ empleado: empleado, sucursalId: sucursalId, rango: rango });
     },
-    // Trae, en un solo llamado, lo que devuelve el Provider Y los datos
-    // crudos de las fuentes legacy, para comparar a simple vista en la
-    // consola durante QA técnico / Validación real. No es parte del
-    // contrato — es exclusivamente una herramienta de diagnóstico.
+    // Ejecuta una Strategy puntual POR NOMBRE ('legacy' | 'avisos'), sin
+    // tocar cuál está activa en producción. Para QA comparativo — nunca
+    // usar cambiarStrategy() con este fin.
+    consultarCon: function (nombreStrategy, empleado, sucursalId, rango) {
+      return CromaAvisosProvider._consultarConStrategyEspecifica(nombreStrategy, {
+        empleado: empleado, sucursalId: sucursalId, rango: rango,
+      });
+    },
+    // Corre 'legacy' y 'avisos' para el mismo caso, en paralelo, sin
+    // mutar la Strategy activa — pensado para el QA comparativo de la
+    // Etapa 2 y para reutilizarse en cualquier etapa futura que necesite
+    // comparar Strategies entre sí.
+    compararStrategies: async function (empleado, sucursalId, rango) {
+      const entrada = { empleado: empleado, sucursalId: sucursalId, rango: rango };
+      const [legacy, avisos] = await Promise.all([
+        CromaAvisosProvider._consultarConStrategyEspecifica('legacy', entrada),
+        CromaAvisosProvider._consultarConStrategyEspecifica('avisos', entrada),
+      ]);
+      return { legacy: legacy, avisos: avisos };
+    },
+    // Trae, en un solo llamado, lo que devuelve la Strategy activa Y sus
+    // datos crudos, para comparar a simple vista en la consola. No es
+    // parte del contrato — exclusivamente diagnóstico.
     diagnostico: async function (empleado, sucursalId) {
       const strategy = _strategies[_strategyActivaNombre];
       const viaProvider = await CromaAvisosProvider.consultar({ empleado: empleado, sucursalId: sucursalId });
@@ -195,6 +224,10 @@
         : null;
       return { strategyActiva: _strategyActivaNombre, viaProvider: viaProvider, crudo: crudo };
     },
+    // Cambia la Strategy activa de PRODUCCIÓN — reservado exclusivamente
+    // para los cortes reales de etapa (Etapas 6/9). Nunca usar esto para
+    // comparar Strategies en QA: para eso están consultarCon() y
+    // compararStrategies(), que no tocan este estado.
     cambiarStrategy: function (nombre) { CromaAvisosProvider._setStrategyActiva(nombre); },
     strategyActiva: function () { return CromaAvisosProvider._getStrategyActivaNombre(); },
     debug: function () { return CromaAvisosProvider.debug(); },

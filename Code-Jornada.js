@@ -1193,6 +1193,7 @@ function despacharAccionSegura(envelope) {
   if (accion === 'archivar_aviso')            return accionArchivarAviso(datos);
   if (accion === 'restaurar_aviso')           return accionRestaurarAviso(datos);
   if (accion === 'debug_resolver_destinatarios') return accionDebugResolverDestinatarios(datos);
+  if (accion === 'get_avisos_visibles_usuario') return accionGetAvisosVisiblesUsuario(datos);
 
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
@@ -4409,9 +4410,16 @@ function _avisosNuevoId() {
 
 // ── Helpers puros de resolución (sin efectos secundarios, testeables
 //    de forma aislada — ver accionDebugResolverDestinatarios) ─────────
-function _resolverVisibleEnSucursal(destinatarios, sucId) {
+// `rol`: agregado en la Etapa 2 de la transición AVISOS. 'administracion'
+// pasa a depender del rol de quien consulta (antes era "visible siempre",
+// pensado únicamente para el panel admin) — necesario para que
+// accionGetAvisosVisiblesUsuario() nunca muestre avisos de Administración
+// a un empleado. Único caller existente antes de este cambio:
+// accionDebugResolverDestinatarios (herramienta de debug, sin uso en
+// ningún flujo real de producción) — se actualizó en el mismo commit.
+function _resolverVisibleEnSucursal(destinatarios, sucId, rol) {
   const modo = destinatarios && destinatarios.modo;
-  if (modo === 'administracion') return true; // por rol, no por ubicación — visible siempre
+  if (modo === 'administracion') return rol === 'admin' || rol === 'jefe';
   if (!sucId || sucId === 'todas') return true;
   if (modo === 'todos') return true;
   if (modo === 'sucursal') return Array.isArray(destinatarios.ids) && destinatarios.ids.indexOf(sucId) !== -1;
@@ -4687,7 +4695,126 @@ function accionRestaurarAviso(datos) { return _accionCambiarArchivadoAviso(datos
 //    datos:{destinatarios, canales, sucursal_id}}. Regla del proyecto: todo
 //    helper complejo debe poder validarse independientemente del frontend. ──
 function accionDebugResolverDestinatarios(datos) {
-  const visible = _resolverVisibleEnSucursal(datos.destinatarios || {}, datos.sucursal_id || 'todas');
+  const visible = _resolverVisibleEnSucursal(datos.destinatarios || {}, datos.sucursal_id || 'todas', datos.rol || '');
   const canalesActivos = _resolverCanalesActivos(datos.canales || {});
   return _resp({ ok: true, visible_en_sucursal: visible, canales_activos: canalesActivos });
+}
+
+// ── Resolución segura de identidad para "mis avisos" (Etapa 2 de la
+//    transición) — nunca confía en nombre/sucursal enviados por el
+//    navegador; usuario/rol llegan del JWT ya verificado en Node, y acá se
+//    resuelve el empleado real y su sucursal contra USUARIOS/EMPLEADOS
+//    (mismo mapeo 1-a-1 de ADR-035), sin duplicar esa lógica en Node. ────
+function _buscarEmpleadoPorNombre(nombreEmpleado) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('EMPLEADOS');
+  if (!hoja) return null;
+  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim().toUpperCase(); });
+  const vals = hoja.getDataRange().getValues();
+  const nombreNorm = _normalizarNombreEmpleado(nombreEmpleado);
+  for (let i = 1; i < vals.length; i++) {
+    if (_normalizarNombreEmpleado(vals[i][0]) === nombreNorm) return _filaEmpleadoAObjeto(headers, vals[i]);
+  }
+  return null;
+}
+
+// ── Visibilidad para "mis avisos" — semántica propia de este endpoint,
+//    deliberadamente NO reutiliza _resolverVisibleEnSucursal (esa está
+//    pensada para el panel admin navegando "todas" las sucursales, con un
+//    atajo "sin sucursal = ver todo" que acá sería una fuga de datos). No
+//    amplía visibilidad solo porque rol=admin/jefe: este endpoint es "mis
+//    avisos", no un listado administrativo — para eso sigue existiendo
+//    GET /api/avisos con requiereRol('admin','jefe').
+//    - todos           → visible para cualquiera.
+//    - administracion   → visible solo si rol es admin/jefe.
+//    - sucursal         → visible solo si la sucursal de la identidad
+//                          resuelta (nunca "todas" como atajo) está en la
+//                          lista del aviso. Sin sucursal en el contexto
+//                          autenticado → no visible, no "ver todo".
+//    - empleado         → visible solo para rol='empleado', y solo con
+//                          coincidencia exacta de nombre. Nunca se asume
+//                          que un aviso dirigido a un empleado específico
+//                          le corresponde a un admin/jefe.
+function _resolverVisibleParaMisAvisos(destinatarios, identidad) {
+  const modo = destinatarios && destinatarios.modo;
+  if (modo === 'todos') return true;
+  if (modo === 'administracion') return identidad.rol === 'admin' || identidad.rol === 'jefe';
+  if (modo === 'sucursal') {
+    if (!identidad.sucursalId) return false;
+    return Array.isArray(destinatarios.ids) && destinatarios.ids.indexOf(identidad.sucursalId) !== -1;
+  }
+  if (modo === 'empleado') {
+    if (identidad.rol !== 'empleado') return false;
+    const nombres = (destinatarios.nombres || []).map(_normalizarNombreEmpleado);
+    return !!identidad.empleadoNombreNorm && nombres.indexOf(identidad.empleadoNombreNorm) !== -1;
+  }
+  return false;
+}
+
+// accion: get_avisos_visibles_usuario — datos: { usuario, rol, sucursal }.
+// Los tres llegan como claims confiables desde Node (ya verificó la firma
+// del JWT antes de llamar acá, y esta llamada además viaja protegida por
+// el secreto Node→GAS) — nunca se leen desde query/body del navegador.
+//
+// PRINCIPIO: cada identidad se valida en su fuente de verdad. Empleado se
+// resuelve contra USUARIOS/EMPLEADOS de GAS — esa hoja es la única fuente
+// real para ese rol, así que se re-resuelve acá igual (defensa en
+// profundidad: no alcanza con que Node diga "es empleado", GAS confirma
+// contra su propia hoja). Admin y jefe se autentican contra el SQLite de
+// croma-backend, que GAS no tiene ni puede tener — para esos roles NO se
+// busca nada en USUARIOS (esa cuenta estructuralmente no está ahí); se
+// usan los claims que Node ya verificó. Ninguna capa revalida una
+// identidad usando una fuente que no la contiene.
+function accionGetAvisosVisiblesUsuario(datos) {
+  const usuario = String(datos.usuario || '').trim();
+  const rol = String(datos.rol || '').trim();
+  if (!usuario) return _resp({ ok: false, error: 'Falta usuario.' });
+  if (['empleado', 'admin', 'jefe'].indexOf(rol) === -1) {
+    return _resp({ ok: false, error: 'Rol no reconocido.' });
+  }
+
+  let identidad;
+  if (rol === 'empleado') {
+    const hojaUsuarios = _asegurarHojaUsuarios();
+    const leidoUsuarios = _leerUsuariosCrudo(hojaUsuarios);
+    const idxUsuario = _buscarFilaUsuarioPorUsername(leidoUsuarios.headers, leidoUsuarios.vals, usuario.toLowerCase(), -1);
+    if (idxUsuario < 0) return _resp({ ok: false, error: 'Usuario sin acceso configurado.' });
+
+    const usuarioObj = _usuarioAObjeto(leidoUsuarios.headers, leidoUsuarios.vals[idxUsuario]);
+    if (usuarioObj.estado !== 'activo') return _resp({ ok: false, error: 'Acceso inactivo.' });
+
+    let sucursalId = '';
+    if (usuarioObj.empleadoNombre) {
+      const perfil = _buscarEmpleadoPorNombre(usuarioObj.empleadoNombre);
+      sucursalId = perfil ? String(perfil.sucursal_id || '') : '';
+    }
+    identidad = {
+      rol: 'empleado',
+      sucursalId: sucursalId,
+      empleadoNombreNorm: usuarioObj.empleadoNombre ? _normalizarNombreEmpleado(usuarioObj.empleadoNombre) : '',
+    };
+  } else {
+    // admin/jefe: esa cuenta no vive en USUARIOS de GAS — no se busca acá.
+    identidad = {
+      rol: rol,
+      sucursalId: String(datos.sucursal || '').trim(),
+      empleadoNombreNorm: '',
+    };
+  }
+
+  const hoja = _asegurarHojaAvisos();
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return _resp({ ok: true, avisos: [] });
+  const headers = vals[0];
+
+  const avisos = vals.slice(1)
+    .filter(function (r) { return r[headers.indexOf('ID')]; })
+    .map(function (r) { return _avisoAObjeto(headers, r); })
+    .filter(function (aviso) {
+      if (aviso.archivado) return false;
+      return _resolverVisibleParaMisAvisos(aviso.destinatarios, identidad);
+    });
+
+  return _resp({ ok: true, avisos: avisos });
 }
