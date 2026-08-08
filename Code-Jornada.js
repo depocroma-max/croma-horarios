@@ -3648,12 +3648,17 @@ function _asegurarHojaRecibos() {
     // sin reordenar ni tocar las que ya estén. Mismo patrón que _upsertEmpleado.
     RECIBOS_HEADERS.forEach(function(h) { _asegurarColumna(hoja, h); });
   }
-  // Defensa adicional: toda la columna PERIODO en texto plano, no solo la
-  // celda que se escribe en el momento — cubre ediciones manuales futuras
-  // en la hoja y no depende de que _crearMetadataRecibo sea el único
-  // camino de escritura.
-  const colPeriodo = RECIBOS_HEADERS.indexOf('PERIODO') + 1;
-  hoja.getRange(1, colPeriodo, hoja.getMaxRows(), 1).setNumberFormat('@');
+  // El forzado de formato de texto en toda la columna PERIODO (que vivía
+  // acá) se sacó por rendimiento: _asegurarHojaRecibos() se llama en TODA
+  // acción de Recibos (listar, descargar, subir, reemplazar — incluso más
+  // de una vez por request), y un setNumberFormat sobre hoja.getMaxRows()
+  // filas es una operación cara que se pagaba en cada una de esas
+  // llamadas, incluidas las de solo lectura. Es redundante: la protección
+  // real contra el problema de PERIODO-como-Date ya está cubierta en los
+  // dos lugares que importan — _crearMetadataRecibo() formatea la celda
+  // puntual ANTES de escribir cada fila nueva, y _normalizarPeriodoCelda()
+  // normaliza cualquier valor en la LECTURA, sin importar el formato de la
+  // celda. Ver esos dos para el detalle del bug original (2026-08).
   return hoja;
 }
 
