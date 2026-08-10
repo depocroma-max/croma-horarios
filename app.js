@@ -3323,14 +3323,20 @@ function mostrarVistaEmpleado() {
   _empMisRegistros  = misRegistros;
   renderVistaEmpleado(nombreEmp, sucId, misRegistros);
   // Verificar anuncios y eventos nuevos (sin bloquear)
-  setTimeout(() => verificarAnunciosEmpleado(nombreEmp), 1200);
-  // Etapa 3.1 (transición AVISOS): Banner migrado al Provider, en paralelo
-  // al camino legacy de arriba (que sigue alimentando Campana sin cambios).
-  // sucId ya está resuelto acá mismo (línea de arriba) — se pasa explícito,
-  // sin volver a descubrirlo dentro de la función nueva.
+  // Etapa 3.3 (transición AVISOS): verificarAnunciosEmpleado() (fetch
+  // legacy de ANUNCIOS) deja de invocarse acá — Banner (3.1), Novedades
+  // (3.2) y Campana (3.3, línea de abajo) ya cubren sus tres consumidores
+  // reales vía Provider. La función NO se borra en esta etapa (queda como
+  // código sin caller, ver inventario de la Etapa 3.3) — solo se retira
+  // esta invocación.
+  // Etapa 3.1 (transición AVISOS): Banner migrado al Provider. sucId ya
+  // está resuelto acá mismo (línea de arriba) — se pasa explícito, sin
+  // volver a descubrirlo dentro de la función nueva.
   setTimeout(() => verificarBannerViaProvider(nombreEmp, sucId), 1200);
   // Etapa 3.2: mismo patrón para Novedades.
   setTimeout(() => verificarNovedadesViaProvider(nombreEmp, sucId), 1200);
+  // Etapa 3.3: mismo patrón para Campana (último consumidor directo).
+  setTimeout(() => verificarCampanaViaProvider(nombreEmp, sucId), 1200);
   setTimeout(() => cargarEventosEmpleado(nombreEmp), 1400);
 }
 
@@ -9004,16 +9010,32 @@ async function verificarBannerViaProvider(nombreEmp, sucursalId) {
   } catch (e) {}
 }
 
+// Adaptador compartido: item normalizado del Provider → shape legacy
+// (id/titulo/mensaje/fecha/vigencia) que ya consumen renderAnunciosSeccion()
+// y actualizarBadgeAnunciosEmp() sin cambios. Extraído acá para no
+// duplicarlo entre Novedades (Etapa 3.2) y Campana (Etapa 3.3) — ninguna
+// función legacy se toca, esto es exclusivamente código nuevo de esta
+// transición. vigencia solo se completa cuando fechaHastaExplicita===true
+// (contrato v1.3), igual criterio en ambos consumidores.
+function _adaptarItemsParaAnunciosLegacy(items) {
+  return items.map(function (item) {
+    return {
+      id: item.id,
+      titulo: item.titulo,
+      mensaje: item.mensaje,
+      fecha: item.fechaPublicacion || item.fechaDesde,
+      vigencia: item.fechaHastaExplicita === true ? item.fechaHasta : '',
+    };
+  });
+}
+
 // ── Novedades vía Provider (Etapa 3.2, transición AVISOS) ─────────────
 // Único camino que dispara Novedades — separado de verificarAnunciosEmpleado()
-// de arriba, que sigue sirviendo exclusivamente Campana por su fetch legacy
-// propio, sin ningún cambio. renderAnunciosSeccion() no se modifica: recibe
-// el mismo shape de siempre (id/titulo/mensaje/fecha/vigencia), armado acá.
-// vigencia solo se completa cuando fechaHastaExplicita===true (contrato
-// v1.3) — así renderAnunciosSeccion() nunca muestra "· hasta FECHA" para
-// avisos que legacy tampoco lo mostraría (los que caen al fallback de 30
-// días). Sin fallback a get_anuncios si el Provider falla — Novedades
-// simplemente no se actualiza, sin romper el resto del Portal.
+// de arriba (que a partir de la Etapa 3.3 ya no se invoca desde ningún
+// flujo activo, ver más abajo). renderAnunciosSeccion() no se modifica:
+// recibe el mismo shape de siempre, armado por el adaptador compartido.
+// Sin fallback a get_anuncios si el Provider falla — Novedades simplemente
+// no se actualiza, sin romper el resto del Portal.
 async function verificarNovedadesViaProvider(nombreEmp, sucursalId) {
   try {
     const resp = await CromaAvisosProvider.consultar({ empleado: nombreEmp, sucursalId: sucursalId });
@@ -9021,15 +9043,29 @@ async function verificarNovedadesViaProvider(nombreEmp, sucursalId) {
     const paraNovedades = resp.items.filter(function (item) {
       return item.superficies.banner === true;
     });
-    renderAnunciosSeccion(paraNovedades.map(function (item) {
-      return {
-        id: item.id,
-        titulo: item.titulo,
-        mensaje: item.mensaje,
-        fecha: item.fechaPublicacion || item.fechaDesde,
-        vigencia: item.fechaHastaExplicita === true ? item.fechaHasta : '',
-      };
-    }), nombreEmp);
+    renderAnunciosSeccion(_adaptarItemsParaAnunciosLegacy(paraNovedades), nombreEmp);
+  } catch (e) {}
+}
+
+// ── Campana vía Provider (Etapa 3.3, transición AVISOS) ────────────────
+// Único camino que alimenta el badge de anuncios en #bellBadgeEmp — último
+// consumidor directo del fetch legacy de ANUNCIOS. Con esto,
+// verificarAnunciosEmpleado() queda sin ningún caller activo (no se borra
+// en esta etapa, ver inventario de código sin uso en el informe).
+// actualizarBadgeAnunciosEmp() no se modifica: sigue calculando ella misma
+// leído/vencido/cantidad y sumando con el badge de vacaciones ya escrito
+// (incluida la condición de carrera preexistente con
+// actualizarBadgeCampanaEmp, que esta etapa no corrige). Por eso acá NO se
+// prefiltra por leído/vigente — solo el filtro estructural de superficie
+// (igual que Novedades), dejando el cálculo de negocio donde ya vivía.
+async function verificarCampanaViaProvider(nombreEmp, sucursalId) {
+  try {
+    const resp = await CromaAvisosProvider.consultar({ empleado: nombreEmp, sucursalId: sucursalId });
+    if (!resp.ok) return;
+    const paraCampana = resp.items.filter(function (item) {
+      return item.superficies.banner === true;
+    });
+    actualizarBadgeAnunciosEmp(_adaptarItemsParaAnunciosLegacy(paraCampana));
   } catch (e) {}
 }
 
