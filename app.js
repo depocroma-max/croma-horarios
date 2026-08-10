@@ -3657,33 +3657,6 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         </div>
       </section>
 
-      <section class="portal-summary-grid">
-        <div class="portal-summary-card">
-          <span>Días</span>
-          <strong id="inicioDias">${diasUnicos}</strong>
-        </div>
-        <div class="portal-summary-card">
-          <span>Hs totales</span>
-          <strong id="inicioHoras">${totalHoras.toFixed(1)}</strong>
-        </div>
-        <div class="portal-summary-card">
-          <span>Hs extra</span>
-          <strong id="inicioExtra">${totalHsExtra.toFixed(1)}</strong>
-        </div>
-        <div class="portal-summary-card">
-          <span>Hs feriado</span>
-          <strong id="inicioFeriado">${totalHsFeriado.toFixed(1)}</strong>
-        </div>
-        <div class="portal-summary-card">
-          <span>Sábados</span>
-          <strong id="inicioSabs">${totalSabs}</strong>
-        </div>
-        <div class="portal-summary-card" style="display:none">
-          <span>Saldo banco</span>
-          <strong id="inicioBanco">—</strong>
-        </div>
-      </section>
-
       <!-- SECCIÓN ANUNCIOS (historial) -->
       <div id="anunciosSectionWrap" style="display:none">
         <section class="portal-section portal-anuncios-section">
