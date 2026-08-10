@@ -87,13 +87,26 @@
 
   // ANUNCIOS: 'todos' | '["Nombre",...]' | (soporte legado, nunca escrito
   // por la UI actual pero sí leído por getAnuncios) 'suc_XX' / array suc_.
+  //
+  // Detección de "es un array de sucursales" replicada EXACTAMENTE como
+  // hace hoy verificarAnunciosEmpleado() en app.js: `lista[0].startsWith
+  // ('suc_')`, case-SENSIBLE. Encontrado en QA de la Etapa 3.1: esta
+  // Strategy tenía antes `.toLowerCase()` en esa detección, lo cual la
+  // volvía más permisiva que el legacy real (ej. ["SUC_09"] pasaba acá
+  // pero no en app.js). Corregido para ser una réplica fiel, no una
+  // versión mejorada — un array como ["SUC_09"] cae al branch de
+  // nombres de empleado (igual que en app.js) y no matchea a nadie. La
+  // comparación DENTRO del branch de sucursales sigue siendo
+  // case-insensible porque así es como ya la hace app.js una vez que
+  // detecta el array (ver comentario "Comparación case-insensitive
+  // como fallback" en la función original).
   function _anuncioAplica(destinatariosStr, empleado, sucursalId) {
     if (destinatariosStr === 'todos') return true;
     if (destinatariosStr.toLowerCase() === ('suc_' + sucursalId).toLowerCase()) return true;
     try {
       const lista = JSON.parse(destinatariosStr);
       if (!Array.isArray(lista)) return false;
-      if (lista.length && String(lista[0]).toLowerCase().indexOf('suc_') === 0) {
+      if (lista.length && String(lista[0]).indexOf('suc_') === 0) {
         return lista.some(function (s) { return String(s).toLowerCase() === ('suc_' + sucursalId).toLowerCase(); });
       }
       return lista.some(function (n) { return String(n).toLowerCase() === String(empleado).toLowerCase(); });
@@ -159,6 +172,10 @@
       // superficie, así que acá es siempre null — "no aplica", no una
       // afirmación de que fue leído.
       leido: null,
+      // Contrato v1.2: EVENTOS no tiene un datetime de publicación
+      // distinto de su propia fecha (que ya es solo fecha, sin hora) —
+      // null es correcto acá, no una omisión.
+      fechaPublicacion: null,
     };
   }
 
@@ -176,6 +193,10 @@
       superficies: { calendario: false, banner: true },
       estado: _calcularEstado(fechaDesde, fechaHasta),
       leido: _estaLeido(crudo.id),
+      // Contrato v1.2: ANUNCIOS sí tiene fecha+hora real de publicación
+      // (crudo.fecha, sin truncar) — es exactamente lo que el Banner
+      // legacy mostraba antes de la Etapa 3.1.
+      fechaPublicacion: crudo.fecha || null,
     };
   }
 

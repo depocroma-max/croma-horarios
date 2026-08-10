@@ -73,6 +73,8 @@
       },
       estado: _calcularEstado(fechaDesde, fechaHasta),
       leido: null, // ver nota de cabecera — provisional para banner:true
+      // Contrato v1.2: AVISOS sí tiene fecha+hora real de creación.
+      fechaPublicacion: crudo.fecha_creacion || null,
     };
   }
 

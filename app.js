@@ -3323,6 +3323,11 @@ function mostrarVistaEmpleado() {
   renderVistaEmpleado(nombreEmp, sucId, misRegistros);
   // Verificar anuncios y eventos nuevos (sin bloquear)
   setTimeout(() => verificarAnunciosEmpleado(nombreEmp), 1200);
+  // Etapa 3.1 (transición AVISOS): Banner migrado al Provider, en paralelo
+  // al camino legacy de arriba (que sigue alimentando Novedades/Campana
+  // sin cambios). sucId ya está resuelto acá mismo (línea de arriba) —
+  // se pasa explícito, sin volver a descubrirlo dentro de la función nueva.
+  setTimeout(() => verificarBannerViaProvider(nombreEmp, sucId), 1200);
   setTimeout(() => cargarEventosEmpleado(nombreEmp), 1400);
 }
 
@@ -8987,11 +8992,34 @@ async function verificarAnunciosEmpleado(nombreEmp) {
     _anunciosEmpActual  = nombreEmp;
     // Siempre poblar la seccion historial (con o sin no leidos)
     renderAnunciosSeccion(todos, nombreEmp);
-    // Banner y badge solo para los no leidos Y no vencidos
-    const nuevos = todos.filter(a => !_anunciosLeidosEmp.has(a.id) && !anuncioVencido(a));
-    if (nuevos.length) mostrarBannerAnuncios(nuevos, nombreEmp);
+    // El disparo de Banner se sacó de acá en la Etapa 3.1 de la
+    // transición AVISOS — ver verificarBannerViaProvider(). Esta función
+    // sigue siendo responsable exclusiva de Novedades y Campana.
     actualizarBadgeAnunciosEmp(todos);
   } catch(e) {}
+}
+
+// ── Banner vía Provider (Etapa 3.1, transición AVISOS) ────────────────
+// Único camino que dispara el Banner — separado a propósito de
+// verificarAnunciosEmpleado() de arriba, que sigue sirviendo Novedades y
+// Campana por su fetch legacy propio, sin ningún cambio. Este camino
+// nunca hace fallback a get_anuncios si el Provider falla: si falla,
+// Banner simplemente no aparece, y Novedades/Campana no se enteran.
+async function verificarBannerViaProvider(nombreEmp, sucursalId) {
+  try {
+    const resp = await CromaAvisosProvider.consultar({ empleado: nombreEmp, sucursalId: sucursalId });
+    if (!resp.ok) return;
+    const paraBanner = resp.items.filter(function (item) {
+      return item.superficies.banner === true && item.estado === 'vigente' && item.leido === false;
+    });
+    if (!paraBanner.length) return;
+    // fechaPublicacion (contrato v1.2) conserva fecha+hora real cuando la
+    // fuente la tiene (igual que mostraba el Banner legacy) — fallback a
+    // fechaDesde (solo fecha) para el caso null, nunca se deja sin fecha.
+    mostrarBannerAnuncios(paraBanner.map(function (item) {
+      return { id: item.id, titulo: item.titulo, mensaje: item.mensaje, fecha: item.fechaPublicacion || item.fechaDesde };
+    }), nombreEmp);
+  } catch (e) {}
 }
 
 function renderAnunciosSeccion(anuncios, nombreEmp) {
