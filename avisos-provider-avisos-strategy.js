@@ -75,6 +75,19 @@
       leido: null, // ver nota de cabecera — provisional para banner:true
       // Contrato v1.2: AVISOS sí tiene fecha+hora real de creación.
       fechaPublicacion: crudo.fecha_creacion || null,
+      // Contrato v1.3 (fechaHastaExplicita) — LIMITACIÓN REAL, no
+      // heurística inventada: tanto el POST de croma-backend
+      // (routes/avisos.js: `fecha_hasta: req.body.fecha_hasta ||
+      // req.body.fecha_desde || ''`) como accionGuardarAviso en GAS
+      // colapsan "sin fecha_hasta" contra fecha_desde ANTES de guardar —
+      // para cuando este adaptador lee el aviso, el dato de si el admin
+      // cargó una fecha_hasta explícita ya se perdió, no existe forma de
+      // recuperarlo desde acá. false es el valor conservador (nunca
+      // muestra "hasta" de más), no una inferencia real. No bloquea esta
+      // etapa (AvisosStrategy no alimenta Novedades mientras
+      // Strategy activa = legacy) — a resolver en el backend de AVISOS
+      // el día que una superficie real dependa de este campo para AVISOS.
+      fechaHastaExplicita: false,
     };
   }
 

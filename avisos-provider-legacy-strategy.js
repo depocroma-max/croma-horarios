@@ -157,6 +157,17 @@
     const tipo = crudo.tipo === 'local_cerrado' ? 'local_cerrado' : 'evento';
     const fechaDesde = crudo.fecha || '';
     const fechaHasta = crudo.fecha_fin || fechaDesde;
+    // Contrato v1.3 (fechaHastaExplicita): GAS (getEventos) ya resuelve el
+    // fallback `fecha_fin: fechaFinVal || fechaVal` ANTES de que el crudo
+    // llegue acá — para cuando este adaptador lo ve, ya no puede distinguir
+    // con certeza "FECHA_FIN se cargó igual a FECHA a propósito" de
+    // "FECHA_FIN estaba vacía y cayó al fallback". Mejor esfuerzo posible
+    // sin ese dato: si difieren, es inequívocamente explícita; si son
+    // iguales, se trata como no-explícita (mismo criterio conservador que
+    // ya se usó para no inventar "· hasta" de más en Novedades). No afecta
+    // hoy a Novedades (solo consume ANUNCIOS), documentado para cuando
+    // Mi Semana/AVISOS calendario lo necesiten.
+    const fechaHastaExplicita = !!(crudo.fecha_fin && crudo.fecha_fin !== fechaDesde);
     return {
       id: crudo.id,
       titulo: crudo.titulo || '',
@@ -176,6 +187,7 @@
       // distinto de su propia fecha (que ya es solo fecha, sin hora) —
       // null es correcto acá, no una omisión.
       fechaPublicacion: null,
+      fechaHastaExplicita: fechaHastaExplicita,
     };
   }
 
@@ -197,6 +209,11 @@
       // (crudo.fecha, sin truncar) — es exactamente lo que el Banner
       // legacy mostraba antes de la Etapa 3.1.
       fechaPublicacion: crudo.fecha || null,
+      // Contrato v1.3: acá SÍ se puede distinguir con precisión — crudo.
+      // vigencia es el campo crudo de la hoja (vacío si el admin no la
+      // definió). true solo si vino con valor explícito; false si
+      // fechaHasta salió del fallback de 30 días (_anuncioFechaHasta).
+      fechaHastaExplicita: !!crudo.vigencia,
     };
   }
 

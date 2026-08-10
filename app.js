@@ -3319,15 +3319,18 @@ function mostrarVistaEmpleado() {
   }
   _empSemanaOffset  = 0;
   _empPortalActual  = nombreEmp;
+  _empSucIdActual   = sucId;
   _empMisRegistros  = misRegistros;
   renderVistaEmpleado(nombreEmp, sucId, misRegistros);
   // Verificar anuncios y eventos nuevos (sin bloquear)
   setTimeout(() => verificarAnunciosEmpleado(nombreEmp), 1200);
   // Etapa 3.1 (transición AVISOS): Banner migrado al Provider, en paralelo
-  // al camino legacy de arriba (que sigue alimentando Novedades/Campana
-  // sin cambios). sucId ya está resuelto acá mismo (línea de arriba) —
-  // se pasa explícito, sin volver a descubrirlo dentro de la función nueva.
+  // al camino legacy de arriba (que sigue alimentando Campana sin cambios).
+  // sucId ya está resuelto acá mismo (línea de arriba) — se pasa explícito,
+  // sin volver a descubrirlo dentro de la función nueva.
   setTimeout(() => verificarBannerViaProvider(nombreEmp, sucId), 1200);
+  // Etapa 3.2: mismo patrón para Novedades.
+  setTimeout(() => verificarNovedadesViaProvider(nombreEmp, sucId), 1200);
   setTimeout(() => cargarEventosEmpleado(nombreEmp), 1400);
 }
 
@@ -8933,6 +8936,13 @@ async function eliminarAnuncioAdmin(id) {
 var _anunciosTodosCache = [];  // cache para refrescar la seccion al cerrar banner
 var _empSemanaOffset   = 0;   // semanas adelante/atrás en el portal empleado
 var _empPortalActual   = '';  // nombre del empleado activo en el portal
+var _empSucIdActual    = '';  // Etapa 3.2 (transición AVISOS): sucursal ya
+                               // resuelta del empleado activo — mismo valor
+                               // que calcula mostrarVistaEmpleado(), guardado
+                               // ahí mismo para que marcarAnuncioLeido() no
+                               // tenga que volver a resolverla. Se sincroniza
+                               // siempre junto con _empPortalActual (mismo y
+                               // único punto de asignación de ambos).
 var _empMisRegistros   = [];  // registros del empleado activo (para re-render semana)
 var _anunciosEmpActual  = '';
 
@@ -8963,11 +8973,10 @@ async function verificarAnunciosEmpleado(nombreEmp) {
     });
     _anunciosTodosCache = todos;
     _anunciosEmpActual  = nombreEmp;
-    // Siempre poblar la seccion historial (con o sin no leidos)
-    renderAnunciosSeccion(todos, nombreEmp);
-    // El disparo de Banner se sacó de acá en la Etapa 3.1 de la
-    // transición AVISOS — ver verificarBannerViaProvider(). Esta función
-    // sigue siendo responsable exclusiva de Novedades y Campana.
+    // El disparo de Banner (Etapa 3.1) y de Novedades (Etapa 3.2) se
+    // sacaron de acá — ver verificarBannerViaProvider() y
+    // verificarNovedadesViaProvider(). Esta función sigue siendo
+    // responsable exclusiva de Campana.
     actualizarBadgeAnunciosEmp(todos);
   } catch(e) {}
 }
@@ -8991,6 +9000,35 @@ async function verificarBannerViaProvider(nombreEmp, sucursalId) {
     // fechaDesde (solo fecha) para el caso null, nunca se deja sin fecha.
     mostrarBannerAnuncios(paraBanner.map(function (item) {
       return { id: item.id, titulo: item.titulo, mensaje: item.mensaje, fecha: item.fechaPublicacion || item.fechaDesde };
+    }), nombreEmp);
+  } catch (e) {}
+}
+
+// ── Novedades vía Provider (Etapa 3.2, transición AVISOS) ─────────────
+// Único camino que dispara Novedades — separado de verificarAnunciosEmpleado()
+// de arriba, que sigue sirviendo exclusivamente Campana por su fetch legacy
+// propio, sin ningún cambio. renderAnunciosSeccion() no se modifica: recibe
+// el mismo shape de siempre (id/titulo/mensaje/fecha/vigencia), armado acá.
+// vigencia solo se completa cuando fechaHastaExplicita===true (contrato
+// v1.3) — así renderAnunciosSeccion() nunca muestra "· hasta FECHA" para
+// avisos que legacy tampoco lo mostraría (los que caen al fallback de 30
+// días). Sin fallback a get_anuncios si el Provider falla — Novedades
+// simplemente no se actualiza, sin romper el resto del Portal.
+async function verificarNovedadesViaProvider(nombreEmp, sucursalId) {
+  try {
+    const resp = await CromaAvisosProvider.consultar({ empleado: nombreEmp, sucursalId: sucursalId });
+    if (!resp.ok) return;
+    const paraNovedades = resp.items.filter(function (item) {
+      return item.superficies.banner === true;
+    });
+    renderAnunciosSeccion(paraNovedades.map(function (item) {
+      return {
+        id: item.id,
+        titulo: item.titulo,
+        mensaje: item.mensaje,
+        fecha: item.fechaPublicacion || item.fechaDesde,
+        vigencia: item.fechaHastaExplicita === true ? item.fechaHasta : '',
+      };
     }), nombreEmp);
   } catch (e) {}
 }
@@ -9084,9 +9122,23 @@ function marcarAnuncioLeido(id, idx, empEnc) {
       if (wrap && !wrap.querySelector('.anuncio-banner-card')) wrap.remove();
     }, 250);
   }
-  // Refrescar la seccion historial para que el item pase a gris
-  if (_anunciosTodosCache.length) {
-    renderAnunciosSeccion(_anunciosTodosCache, _anunciosEmpActual);
+  // Etapa 3.2 (transición AVISOS): refrescar Novedades vía Provider,
+  // nunca desde _anunciosTodosCache (fuente legacy — dejaría a Novedades
+  // desalineada de lo que ya migró a mostrarse vía Provider). Usa el
+  // contexto ya resuelto por mostrarVistaEmpleado() (_empPortalActual/
+  // _empSucIdActual) sin volver a calcular sucursal acá. Si ese contexto
+  // no existe o no corresponde al empleado del banner que se está
+  // cerrando (comparado contra empEnc, que sí llega como parámetro), no
+  // se inventa ni se hace fallback a legacy — se registra y no se
+  // refresca en este ciclo; el próximo montaje del Portal trae Novedades
+  // correcta igual.
+  const nombreEmpBanner = decodeURIComponent(empEnc || '');
+  if (_empSucIdActual && _empPortalActual && _empPortalActual === nombreEmpBanner) {
+    verificarNovedadesViaProvider(_empPortalActual, _empSucIdActual);
+  } else {
+    console.warn('marcarAnuncioLeido: contexto de Portal no disponible o no coincide, Novedades no se refrescó', {
+      empEnc: nombreEmpBanner, _empPortalActual, _empSucIdActual,
+    });
   }
 }
 
