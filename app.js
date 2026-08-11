@@ -3337,7 +3337,11 @@ function mostrarVistaEmpleado() {
   setTimeout(() => verificarNovedadesViaProvider(nombreEmp, sucId), 1200);
   // Etapa 3.3: mismo patrón para Campana (último consumidor directo).
   setTimeout(() => verificarCampanaViaProvider(nombreEmp, sucId), 1200);
-  setTimeout(() => cargarEventosEmpleado(nombreEmp), 1400);
+  // Etapa 3.4: Mi Semana + Local Cerrado vía Provider. cargarEventosEmpleado()
+  // deja de invocarse acá (queda como código sin caller, no se borra). Sin
+  // rango: una sola consulta, igual patrón de tráfico que antes — la
+  // navegación de semanas sigue sin generar fetches nuevos.
+  setTimeout(() => cargarEventosViaProvider(nombreEmp, sucId), 1400);
 }
 
 function mostrarVistaEmpleadoSinDatos(nombreEmp) {
@@ -8219,6 +8223,50 @@ async function cargarEventosEmpleado(nombreEmp) {
   } catch(e) {}
 }
 
+// ── Mi Semana + Local Cerrado vía Provider (Etapa 3.4, transición AVISOS) ──
+// Cache activa única para renderEventosEnSemana() a partir de esta etapa —
+// _eventosEmpCache (arriba) queda como variable legacy sin escritor activo
+// (cargarEventosEmpleado ya no se invoca), igual patrón que
+// _anunciosTodosCache en la Etapa 3.2. No se mantienen dos caches vivas
+// para la misma responsabilidad.
+var _eventosEmpProviderCache = [];
+
+// Deliberadamente SIN `rango`: se consulta una sola vez todo lo aplicable
+// al empleado (igual que get_eventos&empleado=X hoy) y el filtrado por día/
+// semana visible sigue siendo 100% responsabilidad de renderEventosEnSemana()
+// y empNavSemana(), sin tocar su lógica — así se preserva el patrón de
+// tráfico actual (1 consulta al montar, cero fetches al navegar semanas).
+// Ante error del Provider: nunca fallback a get_eventos, nunca se pisa una
+// cache válida anterior con un resultado vacío — si nunca hubo carga
+// exitosa, _eventosEmpProviderCache simplemente queda en su default []
+// (ya manejado sin romper nada por renderEventosEnSemana, que corta temprano
+// si length===0). Error registrado por consola (diagnóstico), nunca alert().
+async function cargarEventosViaProvider(nombreEmp, sucursalId) {
+  try {
+    const resp = await CromaAvisosProvider.consultar({ empleado: nombreEmp, sucursalId: sucursalId });
+    if (!resp.ok) {
+      console.warn('cargarEventosViaProvider: Provider no disponible, se conserva la última cache válida.', resp.error);
+      return;
+    }
+    const paraSemana = resp.items.filter(function (item) {
+      return item.superficies.calendario === true;
+    });
+    _eventosEmpProviderCache = paraSemana.map(function (item) {
+      return {
+        id: item.id,
+        titulo: item.titulo,
+        fecha: item.fechaDesde,
+        fecha_fin: item.fechaHasta,
+        descripcion: item.mensaje,
+        tipo: item.tipo,
+      };
+    });
+    renderEventosEnSemana(nombreEmp);
+  } catch (e) {
+    console.warn('cargarEventosViaProvider: error inesperado, se conserva la última cache válida.', e);
+  }
+}
+
 function descargarICS(ev) {
   const toICS = function(iso) { return (iso || '').replace(/-/g, ''); };
   const fechaInicio = toICS(ev.fecha);
@@ -8257,14 +8305,14 @@ function renderEventosEnSemana(nombreEmp) {
     card.classList.remove('is-cerrado');
     card.querySelectorAll('.evento-semana-chip').forEach(function(chip) { chip.remove(); });
   });
-  if (!_eventosEmpCache.length) return;
+  if (!_eventosEmpProviderCache.length) return;
   // Para cada card de la semana del empleado, inyectar eventos del día
   const lunes = getLunes(_empSemanaOffset);
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   for (let i = 0; i < 7; i++) {
     const f = new Date(lunes); f.setDate(lunes.getDate() + i);
     const isoFecha = f.getFullYear() + '-' + String(f.getMonth()+1).padStart(2,'0') + '-' + String(f.getDate()).padStart(2,'0');
-    const eventosDelDia = _eventosEmpCache.filter(function(ev) {
+    const eventosDelDia = _eventosEmpProviderCache.filter(function(ev) {
       const fin = ev.fecha_fin || ev.fecha;
       return isoFecha >= ev.fecha && isoFecha <= fin;
     });
