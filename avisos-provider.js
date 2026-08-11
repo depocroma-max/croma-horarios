@@ -142,7 +142,18 @@
   }
 
   async function marcarLeido(empleado, itemId) {
-    const strategy = _strategies[_strategyActivaNombre];
+    return _marcarLeidoConStrategyEspecifica(_strategyActivaNombre, empleado, itemId);
+  }
+
+  // Ejecuta marcarLeido() de una Strategy puntual POR NOMBRE, sin leer
+  // ni mutar _strategyActivaNombre — mismo criterio que
+  // _consultarConStrategyEspecifica. Agregado para DualStrategy (Etapa
+  // DualStrategy): necesita delegar marcarLeido EXCLUSIVAMENTE a
+  // 'legacy' sin importar cuál sea la Strategy activa real, y no existía
+  // ningún camino para invocar una Strategy de escritura por nombre
+  // hasta ahora.
+  async function _marcarLeidoConStrategyEspecifica(nombre, empleado, itemId) {
+    const strategy = _strategies[nombre];
     if (!strategy || typeof strategy.marcarLeido !== 'function') {
       return { ok: false, error: 'No disponible.' };
     }
@@ -179,6 +190,7 @@
     _setStrategyActiva,
     _getStrategyActivaNombre,
     _consultarConStrategyEspecifica,
+    _marcarLeidoConStrategyEspecifica,
   };
 
   // ── Provider Sandbox ────────────────────────────────────────────────
