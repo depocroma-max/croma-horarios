@@ -1194,6 +1194,7 @@ function despacharAccionSegura(envelope) {
   if (accion === 'restaurar_aviso')           return accionRestaurarAviso(datos);
   if (accion === 'debug_resolver_destinatarios') return accionDebugResolverDestinatarios(datos);
   if (accion === 'get_avisos_visibles_usuario') return accionGetAvisosVisiblesUsuario(datos);
+  if (accion === 'marcar_aviso_leido')          return accionMarcarAvisoLeido(datos);
 
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
@@ -4752,10 +4753,13 @@ function _resolverVisibleParaMisAvisos(destinatarios, identidad) {
   return false;
 }
 
-// accion: get_avisos_visibles_usuario — datos: { usuario, rol, sucursal }.
-// Los tres llegan como claims confiables desde Node (ya verificó la firma
-// del JWT antes de llamar acá, y esta llamada además viaja protegida por
-// el secreto Node→GAS) — nunca se leen desde query/body del navegador.
+// Resolución de identidad autenticada — ÚNICA fuente de esta lógica,
+// extraída de accionGetAvisosVisiblesUsuario (Etapa "Leídos" de la
+// transición AVISOS) para que accionMarcarAvisoLeido() la reutilice sin
+// duplicar reglas. datos de entrada: usuario/rol/sucursal, los tres como
+// claims confiables desde Node (ya verificó la firma del JWT antes de
+// llamar acá, y esta llamada además viaja protegida por el secreto
+// Node→GAS) — nunca se leen desde query/body del navegador.
 //
 // PRINCIPIO: cada identidad se valida en su fuente de verdad. Empleado se
 // resuelve contra USUARIOS/EMPLEADOS de GAS — esa hoja es la única fuente
@@ -4766,42 +4770,119 @@ function _resolverVisibleParaMisAvisos(destinatarios, identidad) {
 // busca nada en USUARIOS (esa cuenta estructuralmente no está ahí); se
 // usan los claims que Node ya verificó. Ninguna capa revalida una
 // identidad usando una fuente que no la contiene.
-function accionGetAvisosVisiblesUsuario(datos) {
-  const usuario = String(datos.usuario || '').trim();
-  const rol = String(datos.rol || '').trim();
-  if (!usuario) return _resp({ ok: false, error: 'Falta usuario.' });
+//
+// Devuelve { error } o { identidad }. `identidad.rol` e `identidad.usuario`
+// (agregados en esta etapa) son, juntos, la identidad canónica persistida
+// en AVISOS_LEIDOS — nunca `empleadoNombreNorm`, que solo sirve para
+// resolver destinatarios modo 'empleado', no como clave de lectura.
+function _resolverIdentidadAutenticada(usuario, rol, sucursalNode) {
+  if (!usuario) return { error: 'Falta usuario.' };
   if (['empleado', 'admin', 'jefe'].indexOf(rol) === -1) {
-    return _resp({ ok: false, error: 'Rol no reconocido.' });
+    return { error: 'Rol no reconocido.' };
   }
 
-  let identidad;
   if (rol === 'empleado') {
     const hojaUsuarios = _asegurarHojaUsuarios();
     const leidoUsuarios = _leerUsuariosCrudo(hojaUsuarios);
     const idxUsuario = _buscarFilaUsuarioPorUsername(leidoUsuarios.headers, leidoUsuarios.vals, usuario.toLowerCase(), -1);
-    if (idxUsuario < 0) return _resp({ ok: false, error: 'Usuario sin acceso configurado.' });
+    if (idxUsuario < 0) return { error: 'Usuario sin acceso configurado.' };
 
     const usuarioObj = _usuarioAObjeto(leidoUsuarios.headers, leidoUsuarios.vals[idxUsuario]);
-    if (usuarioObj.estado !== 'activo') return _resp({ ok: false, error: 'Acceso inactivo.' });
+    if (usuarioObj.estado !== 'activo') return { error: 'Acceso inactivo.' };
 
     let sucursalId = '';
     if (usuarioObj.empleadoNombre) {
       const perfil = _buscarEmpleadoPorNombre(usuarioObj.empleadoNombre);
       sucursalId = perfil ? String(perfil.sucursal_id || '') : '';
     }
-    identidad = {
-      rol: 'empleado',
-      sucursalId: sucursalId,
-      empleadoNombreNorm: usuarioObj.empleadoNombre ? _normalizarNombreEmpleado(usuarioObj.empleadoNombre) : '',
-    };
-  } else {
-    // admin/jefe: esa cuenta no vive en USUARIOS de GAS — no se busca acá.
-    identidad = {
-      rol: rol,
-      sucursalId: String(datos.sucursal || '').trim(),
-      empleadoNombreNorm: '',
+    return {
+      identidad: {
+        rol: 'empleado',
+        usuario: usuario,
+        sucursalId: sucursalId,
+        empleadoNombreNorm: usuarioObj.empleadoNombre ? _normalizarNombreEmpleado(usuarioObj.empleadoNombre) : '',
+      },
     };
   }
+  // admin/jefe: esa cuenta no vive en USUARIOS de GAS — no se busca acá.
+  return {
+    identidad: {
+      rol: rol,
+      usuario: usuario,
+      sucursalId: String(sucursalNode || '').trim(),
+      empleadoNombreNorm: '',
+    },
+  };
+}
+
+// ── AVISOS_LEIDOS — Etapa "Leídos" de la transición AVISOS ─────────────
+// Hoja AVISOS_LEIDOS: AVISO_ID | IDENTIDAD_TIPO | IDENTIDAD_ID | FECHA_LECTURA
+//
+// Identidad canónica: IDENTIDAD_TIPO = rol ('empleado'|'admin'|'jefe'),
+// IDENTIDAD_ID = usuario (username — la clave de la cuenta de acceso real,
+// NUNCA EMPLEADO_NOMBRE, que es texto libre en EMPLEADOS sin garantía de
+// inmutabilidad, ver ADR-035). Clave única conceptual: (AVISO_ID,
+// IDENTIDAD_TIPO, IDENTIDAD_ID) — nunca se duplica una fila para la misma
+// combinación; marcar leído dos veces actualiza FECHA_LECTURA, no inserta.
+function _asegurarHojaAvisosLeidos() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('AVISOS_LEIDOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('AVISOS_LEIDOS');
+    hoja.getRange(1, 1, 1, 4).setValues([['AVISO_ID', 'IDENTIDAD_TIPO', 'IDENTIDAD_ID', 'FECHA_LECTURA']]);
+  }
+  return hoja;
+}
+
+function _buscarFilaAvisoLeido(headers, vals, avisoId, identidadTipo, identidadId) {
+  const cAviso = headers.indexOf('AVISO_ID');
+  const cTipo = headers.indexOf('IDENTIDAD_TIPO');
+  const cId = headers.indexOf('IDENTIDAD_ID');
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][cAviso]) === avisoId &&
+        String(vals[i][cTipo]) === identidadTipo &&
+        String(vals[i][cId]).toLowerCase() === identidadId.toLowerCase()) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function _estaAvisoLeido(avisoId, identidadTipo, identidadId) {
+  const hoja = _asegurarHojaAvisosLeidos();
+  const vals = hoja.getDataRange().getValues();
+  if (vals.length < 2) return false;
+  return _buscarFilaAvisoLeido(vals[0], vals, avisoId, identidadTipo, identidadId) !== -1;
+}
+
+// Upsert idempotente con lock — dos marcados simultáneos del mismo
+// (aviso, identidad) nunca duplican fila, solo actualizan FECHA_LECTURA.
+function _marcarAvisoLeidoEnHoja(avisoId, identidadTipo, identidadId) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('Sistema ocupado, reintentá en unos segundos');
+  try {
+    const hoja = _asegurarHojaAvisosLeidos();
+    const vals = hoja.getDataRange().getValues();
+    const headers = vals[0];
+    const idx = vals.length > 1 ? _buscarFilaAvisoLeido(headers, vals, avisoId, identidadTipo, identidadId) : -1;
+    const ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    if (idx === -1) {
+      hoja.appendRow([avisoId, identidadTipo, identidadId, ahora]);
+    } else {
+      hoja.getRange(idx + 1, headers.indexOf('FECHA_LECTURA') + 1).setValue(ahora);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// accion: get_avisos_visibles_usuario — datos: { usuario, rol, sucursal }.
+function accionGetAvisosVisiblesUsuario(datos) {
+  const usuario = String(datos.usuario || '').trim();
+  const rol = String(datos.rol || '').trim();
+  const resuelta = _resolverIdentidadAutenticada(usuario, rol, datos.sucursal);
+  if (resuelta.error) return _resp({ ok: false, error: resuelta.error });
+  const identidad = resuelta.identidad;
 
   const hoja = _asegurarHojaAvisos();
   const vals = hoja.getDataRange().getValues();
@@ -4814,7 +4895,47 @@ function accionGetAvisosVisiblesUsuario(datos) {
     .filter(function (aviso) {
       if (aviso.archivado) return false;
       return _resolverVisibleParaMisAvisos(aviso.destinatarios, identidad);
+    })
+    .map(function (aviso) {
+      // Estado de lectura real, resuelto server-side contra AVISOS_LEIDOS
+      // — Etapa "Leídos". Nunca depende de localStorage ni de nada que
+      // el cliente pueda haber enviado.
+      aviso.leido = _estaAvisoLeido(aviso.id, identidad.rol, identidad.usuario);
+      return aviso;
     });
 
   return _resp({ ok: true, avisos: avisos });
+}
+
+// accion: marcar_aviso_leido — datos: { usuario, rol, sucursal, aviso_id }.
+// Reutiliza _resolverIdentidadAutenticada() y _resolverVisibleParaMisAvisos()
+// — misma regla de visibilidad que get_avisos_visibles_usuario, nunca
+// duplicada. Un usuario nunca puede marcar leído un aviso que no puede ver,
+// ni uno archivado, ni uno inexistente (no crea fila basura en ninguno de
+// esos casos).
+function accionMarcarAvisoLeido(datos) {
+  const usuario = String(datos.usuario || '').trim();
+  const rol = String(datos.rol || '').trim();
+  const avisoId = String(datos.aviso_id || '').trim();
+  if (!avisoId) return _resp({ ok: false, error: 'Falta aviso_id.' });
+
+  const resuelta = _resolverIdentidadAutenticada(usuario, rol, datos.sucursal);
+  if (resuelta.error) return _resp({ ok: false, error: resuelta.error });
+  const identidad = resuelta.identidad;
+
+  const hoja = _asegurarHojaAvisos();
+  const encontrado = _buscarFilaAviso(hoja, avisoId);
+  if (!encontrado) return _resp({ ok: false, error: 'Aviso no encontrado' });
+  const aviso = _avisoAObjeto(encontrado.headers, encontrado.fila);
+
+  if (aviso.archivado || !_resolverVisibleParaMisAvisos(aviso.destinatarios, identidad)) {
+    return _resp({ ok: false, error: 'No autorizado para marcar este aviso.' });
+  }
+
+  try {
+    _marcarAvisoLeidoEnHoja(avisoId, identidad.rol, identidad.usuario);
+  } catch (e) {
+    return _resp({ ok: false, error: e.message });
+  }
+  return _resp({ ok: true });
 }

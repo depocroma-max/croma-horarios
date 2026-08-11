@@ -9192,11 +9192,48 @@ function mostrarBannerAnuncios(anuncios, nombreEmp) {
   sonarNotificacion();
 }
 
-function marcarAnuncioLeido(id, idx, empEnc) {
-  _anunciosLeidosEmp.add(id);
-  localStorage.setItem('croma_anuncios_leidos', JSON.stringify([..._anunciosLeidosEmp]));
-  // Animar y remover el banner
+// Etapa "Leídos" (transición AVISOS): la escritura directa a
+// localStorage.croma_anuncios_leidos desapareció de acá — la pantalla
+// delega exclusivamente al Provider, que decide (según la Strategy
+// activa) dónde persistir. Con Strategy=legacy, el resultado observable
+// es idéntico a antes (Provider → LegacyStrategy → mismo localStorage).
+//
+// Sin optimistic success: se espera la confirmación real de
+// CromaAvisosProvider.marcarLeido() antes de tocar cualquier estado
+// local. Si falla, la card NO se remueve y nada se marca — se registra
+// el error por consola, sin alert(), el Portal sigue funcionando.
+//
+// _anunciosLeidosEmp SÍ se actualiza acá tras el éxito — no es
+// persistencia duplicada (nunca se vuelve a llamar localStorage.setItem,
+// eso ya lo hizo la Strategy dentro del Provider). Es el cache de sesión
+// que renderAnunciosSeccion()/actualizarBadgeAnunciosEmp() (Novedades/
+// Campana, sin modificar en esta etapa) siguen leyendo directo — sin
+// este paso, esas dos pantallas protegidas no se enterarían del cambio
+// hasta el próximo reload completo.
+async function marcarAnuncioLeido(id, idx, empEnc) {
   const card = document.getElementById('anuncioBanner' + idx);
+  if (card) {
+    if (card.dataset.marcandoLeido === '1') return; // evita doble click en curso
+    card.dataset.marcandoLeido = '1';
+  }
+
+  const nombreEmpBanner = decodeURIComponent(empEnc || '');
+  let resultado;
+  try {
+    resultado = await CromaAvisosProvider.marcarLeido(nombreEmpBanner, id);
+  } catch (e) {
+    resultado = { ok: false, error: e && e.message };
+  }
+
+  if (!resultado || !resultado.ok) {
+    console.warn('marcarAnuncioLeido: no se pudo persistir el estado de leído, se conserva el banner.', resultado && resultado.error);
+    if (card) delete card.dataset.marcandoLeido;
+    return;
+  }
+
+  _anunciosLeidosEmp.add(id);
+
+  // Animar y remover el banner — solo tras éxito confirmado.
   if (card) {
     card.style.opacity = '0';
     card.style.transform = 'translateY(-8px)';
@@ -9206,17 +9243,13 @@ function marcarAnuncioLeido(id, idx, empEnc) {
       if (wrap && !wrap.querySelector('.anuncio-banner-card')) wrap.remove();
     }, 250);
   }
-  // Etapa 3.2 (transición AVISOS): refrescar Novedades vía Provider,
-  // nunca desde _anunciosTodosCache (fuente legacy — dejaría a Novedades
-  // desalineada de lo que ya migró a mostrarse vía Provider). Usa el
-  // contexto ya resuelto por mostrarVistaEmpleado() (_empPortalActual/
-  // _empSucIdActual) sin volver a calcular sucursal acá. Si ese contexto
-  // no existe o no corresponde al empleado del banner que se está
-  // cerrando (comparado contra empEnc, que sí llega como parámetro), no
-  // se inventa ni se hace fallback a legacy — se registra y no se
-  // refresca en este ciclo; el próximo montaje del Portal trae Novedades
-  // correcta igual.
-  const nombreEmpBanner = decodeURIComponent(empEnc || '');
+
+  // Refrescar Novedades vía Provider — mismo patrón ya establecido desde
+  // la Etapa 3.2: usa el contexto ya resuelto por mostrarVistaEmpleado()
+  // (_empPortalActual/_empSucIdActual), sin volver a calcular sucursal
+  // acá. Si el contexto no existe o no corresponde al empleado del banner
+  // que se está cerrando, no se inventa ni se hace fallback legacy — se
+  // registra y no se refresca en este ciclo.
   if (_empSucIdActual && _empPortalActual && _empPortalActual === nombreEmpBanner) {
     verificarNovedadesViaProvider(_empPortalActual, _empSucIdActual);
   } else {

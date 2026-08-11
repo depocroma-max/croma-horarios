@@ -13,15 +13,13 @@
 //  Jornada.js, accionGetAvisosVisiblesUsuario). Este archivo confía en
 //  ese filtrado y solo normaliza al formato del contrato.
 //
-//  ESTADO DE LEÍDOS (Etapa 2, provisional — documentado, no silencioso):
-//  Por contrato v1.1, banner:false → leido:null (correcto y definitivo).
-//  Para banner:true, el contrato exige true/false real, pero AVISOS
-//  todavía no tiene mecanismo de lectura implementado (eso es Etapa 3).
-//  Esta Strategy devuelve leido:null también para banner:true en esta
-//  etapa — una aproximación provisional que diverge de la letra estricta
-//  del contrato, aceptada porque el alcance de Etapa 2 (Mi Semana +
-//  Local Cerrado) nunca consume items con banner:true. Debe resolverse
-//  antes de que Etapa 3 conecte Banner/Novedades/Campana sobre AVISOS.
+//  ESTADO DE LEÍDOS (Etapa "Leídos" — cierra lo que Etapa 2 dejó
+//  provisional): banner:true ahora usa el `leido` real que ya resuelve
+//  GET /api/avisos/mios server-side (GAS, contra la hoja AVISOS_LEIDOS —
+//  ver accionGetAvisosVisiblesUsuario). banner:false sigue siendo
+//  leido:null, sin cambios. marcarLeido() hace el POST real contra
+//  /api/avisos/mios/:id/marcar-leido. Cumple el contrato v1.1 completo,
+//  sin ninguna divergencia pendiente.
 // =====================================================
 
 (function () {
@@ -57,6 +55,7 @@
   function adaptarAviso(crudo) {
     const fechaDesde = crudo.fecha_desde || '';
     const fechaHasta = crudo.fecha_hasta || fechaDesde;
+    const banner = !!(crudo.canales && crudo.canales.banner === true);
     return {
       id: crudo.id,
       titulo: crudo.titulo || '',
@@ -69,10 +68,15 @@
       aplicaAlConsultante: true,
       superficies: {
         calendario: !!(crudo.canales && crudo.canales.calendario === true),
-        banner: !!(crudo.canales && crudo.canales.banner === true),
+        banner: banner,
       },
       estado: _calcularEstado(fechaDesde, fechaHasta),
-      leido: null, // ver nota de cabecera — provisional para banner:true
+      // Etapa "Leídos": crudo.leido ya viene resuelto server-side (GAS,
+      // contra AVISOS_LEIDOS) para TODO aviso, sin importar canal — es
+      // este adaptador quien aplica la regla del contrato v1.1: solo
+      // banner:true tiene un leído real, el resto es null ("no aplica").
+      // Ya no es provisional — cumple el contrato completo.
+      leido: banner ? (crudo.leido === true) : null,
       // Contrato v1.2: AVISOS sí tiene fecha+hora real de creación.
       fechaPublicacion: crudo.fecha_creacion || null,
       // Contrato v1.3 (fechaHastaExplicita) — LIMITACIÓN REAL, no
@@ -127,13 +131,33 @@
       return { ok: true, items: items, _tiempoNormalizacionMs: tNormFin - tNormInicio };
     },
 
-    // Leídos real de AVISOS es Etapa 3 — acá se declara explícitamente no
-    // disponible en vez de simular un éxito que no hace nada.
-    marcarLeido: async function () {
-      return { ok: false, error: 'No disponible todavía — leídos de AVISOS es Etapa 3.' };
+    // Etapa "Leídos": POST real contra el backend seguro. `empleado` (1er
+    // parámetro de la interfaz común del Provider) no se usa acá —la
+    // identidad la resuelve el backend desde el JWT, nunca desde acá— se
+    // mantiene solo para cumplir la misma firma que LegacyStrategy.
+    marcarLeido: async function (empleado, itemId) {
+      const token = (typeof _getToken === 'function') ? _getToken() : null;
+      let resp;
+      try {
+        resp = await fetch(_apiUrl() + '/' + encodeURIComponent(itemId) + '/marcar-leido', {
+          method: 'POST',
+          headers: token ? { Authorization: 'Bearer ' + token } : {},
+        });
+      } catch (e) {
+        return { ok: false, error: 'No pudimos conectarnos a AVISOS.' };
+      }
+      let data = null;
+      try { data = await resp.json(); } catch (e) {}
+      if (!resp.ok || !data || data.ok !== true) {
+        return { ok: false, error: (data && data.error) || 'No se pudo marcar como leído.' };
+      }
+      return { ok: true };
     },
+    // contarNoLeidos: no forma parte del alcance de esta etapa (Campana
+    // sigue calculando su propio conteo, ver actualizarBadgeAnunciosEmp en
+    // app.js) — se deja explícitamente no disponible, sin simular éxito.
     contarNoLeidos: async function () {
-      return { ok: false, error: 'No disponible todavía — leídos de AVISOS es Etapa 3.' };
+      return { ok: false, error: 'No disponible todavía.' };
     },
 
     // Uso exclusivo del Provider Sandbox.
