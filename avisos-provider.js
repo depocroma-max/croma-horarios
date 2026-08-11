@@ -36,6 +36,16 @@
     tiempoConsultaMsTotal: 0,
     tiempoNormalizacionMsTotal: 0,
     porStrategy: {},
+    // Etapa "Deduplicación de montaje": consultasSolicitadas cuenta TODA
+    // llamada a consultar() (la frontera pública), consultasReales cuenta
+    // solo las que efectivamente dispararon una consulta nueva (no
+    // reutilizaron una Promise en vuelo). consultasDeduplicadas e
+    // inFlightActuales son derivados, no contadores propios — ver debug().
+    // Deliberadamente separado de `consultas` (arriba), que sigue
+    // midiendo consultas reales por Strategy vía _registrarConsulta() y
+    // no debe confundirse con esto.
+    consultasSolicitadas: 0,
+    consultasReales: 0,
   };
 
   function _registrarConsulta(strategyNombre, resultado, tiempoConsultaMs, tiempoNormalizacionMs) {
@@ -61,7 +71,10 @@
 
   function debug() {
     // Copia — nadie por fuera del Provider debe poder mutar el contador real.
-    return JSON.parse(JSON.stringify(_obs));
+    const copia = JSON.parse(JSON.stringify(_obs));
+    copia.consultasDeduplicadas = _obs.consultasSolicitadas - _obs.consultasReales;
+    copia.inFlightActuales = _enVuelo.size;
+    return copia;
   }
 
   // ── Registro de Strategies ─────────────────────────────────────────
@@ -137,8 +150,42 @@
     return resultado;
   }
 
+  // ── Deduplicación de montaje (Etapa "Deduplicación de montaje") ────
+  // Únicamente en consultar() — la frontera pública que usan los 4
+  // consumidores reales del Portal (Banner/Novedades/Campana/Mi Semana).
+  // _consultarConStrategyEspecifica NUNCA pasa por acá: el Sandbox y
+  // DualStrategy (que la llaman directo) deben seguir trayendo datos
+  // frescos siempre, sin deduplicar. No es un cache de resultados: la
+  // entrada del Map vive solo mientras la Promise está pendiente, se
+  // borra en el finally sin importar éxito o error — no hay TTL post-
+  // resolución. Ver análisis de la carrera con marcarLeido() en el plan
+  // aprobado: no se agrega invalidación activa a propósito, la ventana
+  // residual es auto-limitada (dura como máximo un round-trip) y no
+  // justifica la complejidad de cancelar Promises.
+  const _enVuelo = new Map();
+
+  function _claveEnVuelo(strategyNombre, entrada) {
+    return [
+      strategyNombre,
+      entrada && entrada.empleado || '',
+      entrada && entrada.sucursalId || '',
+      entrada && entrada.rango && entrada.rango.desde || '',
+      entrada && entrada.rango && entrada.rango.hasta || '',
+    ].join('::');
+  }
+
   async function consultar(entrada) {
-    return _consultarConStrategyEspecifica(_strategyActivaNombre, entrada);
+    _obs.consultasSolicitadas++;
+
+    const clave = _claveEnVuelo(_strategyActivaNombre, entrada);
+    const pendiente = _enVuelo.get(clave);
+    if (pendiente) return pendiente;
+
+    _obs.consultasReales++;
+    const promesa = _consultarConStrategyEspecifica(_strategyActivaNombre, entrada)
+      .finally(function () { _enVuelo.delete(clave); });
+    _enVuelo.set(clave, promesa);
+    return promesa;
   }
 
   async function marcarLeido(empleado, itemId) {
