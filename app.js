@@ -147,6 +147,17 @@ let filtrosDia = {
 // URL fija del Apps Script (no requiere configuración manual)
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
 
+// GAS puede quedar colgado (sin responder ni rechazar) en vez de fallar
+// rápido — un fetch sin timeout deja la pantalla en blanco indefinidamente
+// en vez de caer a la vista de error. 15s alcanza de sobra para una
+// respuesta normal de Apps Script.
+const GAS_FETCH_TIMEOUT_MS = 15000;
+function _fetchConTimeout(url, timeoutMs) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs || GAS_FETCH_TIMEOUT_MS);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+}
+
 // Fetch resistente a los hipos de Apps Script: valida la respuesta y reintenta
 // un par de veces. Google a veces devuelve una página HTML (404/echo) en vez de
 // JSON — típico "Unexpected token '<'" — y un reintento suele resolverlo.
@@ -155,7 +166,7 @@ async function fetchJSONretry(url, intentos) {
   let ultimoError;
   for (let i = 0; i < intentos; i++) {
     try {
-      const resp = await fetch(url);
+      const resp = await _fetchConTimeout(url);
       const txt  = (await resp.text()).trim();
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       if (txt[0] !== '{' && txt[0] !== '[') throw new Error('El servidor no respondió datos válidos');
@@ -3211,7 +3222,7 @@ async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
       cargarPerfiles(),
       cargarCertificados(),
       cargarVacacionesAprobadas(),
-      fetch(urlHorarios).then(r => {
+      _fetchConTimeout(urlHorarios).then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }),
