@@ -4,6 +4,17 @@
 > ejecutar el trabajo en fases (pensado para retomarlo en otra sesión/herramienta,
 > mismo criterio que se usó para AVISOS — ver `AVISOS_API.md`).
 
+## 0. Decisión aceptada — hosting de croma-backend
+
+Migrar estos módulos a croma-backend implica que **todo** (fichadas,
+horarios, panel, los 2 kioscos) pasa a depender de que el proceso Node en
+esta PC esté corriendo — hoy, si esta máquina se cae, esas 4 superficies
+siguen andando igual porque le pegan directo a Google. Esto se evaluó y
+**se decide conscientemente seguir así por ahora** (2026-08-12): croma-backend
+sigue corriendo en esta PC, sin mudarlo a un hosting con más garantías de
+uptime (VPS, Cloud Run, Render, etc.). Se evalúa mudarlo más adelante, por
+separado — no es parte de este plan ni un bloqueante para arrancarlo.
+
 ## 1. Por qué
 
 Hoy un único Apps Script (`Code-Jornada.js`) es el backend de fichadas,
