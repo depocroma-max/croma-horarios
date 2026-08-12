@@ -75,11 +75,13 @@
       ultimaCarga: null, // Date | null — para CromaAvisos.debug()
     },
 
-    // Panel lateral único (detalle / form / cerrar-local / resumen-dia)
+    // Panel lateral único (detalle / form / cerrar-local / resumen-dia /
+    // detalle-vacacion)
     panel: {
       abierto: false,
       modo: null,
       avisoId: null,
+      vacacionId: null,   // Fase 5 — nunca comparte lógica con avisoId/obtenerAviso()
       fechaPrecargada: null,
       borrador: null,
       original: null,       // JSON.stringify del borrador al abrir, para dirty-check
@@ -94,6 +96,18 @@
     // ids de fila (Lista) con una mutación en curso — deshabilita solo esa
     // fila, no toda la lista (Fase 3B.2).
     filasEnCurso: new Set(),
+
+    // Vacaciones aprobadas (Fase 3, calendario nuevo) — colección
+    // independiente de `avisos`, nunca mezclada en memoria. GAS ya
+    // resuelve sucursalId contra EMPLEADOS — acá solo se consume tal
+    // cual, nunca se recalcula. Se combina con `avisos` únicamente al
+    // momento de renderizar (Fase 4), no acá.
+    vacaciones: [],
+    cargaVacaciones: {
+      estado: 'idle',   // 'idle'|'cargando'|'listo'|'error' — mismo vocabulario que state.carga
+      error: null,
+      generacion: 0,    // anti-carrera, mismo patrón que state.carga.generacion
+    },
   };
 
   let inicializado = false;
@@ -159,6 +173,85 @@
         state.carga.estado = 'error';
         state.carga.error = { status: resultado.status, mensaje: resultado.error };
       }
+      render();
+    });
+  }
+
+  // ── Vacaciones — carga de la capa visual (Fase 3, calendario nuevo) ────
+  // Colección deliberadamente aparte de CromaAvisosRepository/state.avisos:
+  // una vacación no es un aviso, y forzarla por ese repository implicaría
+  // fingir que lo es. Función de lectura chica y propia, mismo patrón de
+  // fetch (BACKEND_URL + _getToken + Authorization Bearer) que ya usa
+  // fetchAvisosApi en avisos-repository.js, sin duplicar su normalización
+  // snake_case↔camelCase (no hace falta acá: el endpoint ya devuelve el
+  // shape final tal cual lo necesita el calendario).
+  async function fetchVacacionesAprobadas() {
+    const token = typeof _getToken === 'function' ? _getToken() : null;
+    let resp;
+    try {
+      resp = await fetch((typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : '') + '/api/avisos/vacaciones-aprobadas', {
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+    } catch (e) {
+      return { ok: false, error: 'No pudimos conectarnos. Probá de nuevo.' };
+    }
+    let data = null;
+    try { data = await resp.json(); } catch (e) {}
+    if (!resp.ok || !data || data.ok !== true || !Array.isArray(data.solicitudes)) {
+      return { ok: false, error: (data && data.error) || 'Respuesta inválida del servidor.' };
+    }
+    return data;
+  }
+
+  // Carga única por sesión (ver activar()), en paralelo con
+  // cargarAvisosIniciales — no hay dependencia entre ambas cargas. Mismo
+  // patrón de anti-carrera (`generacion`) que cargarAvisosIniciales.
+  // sucursalId vacío (GAS no pudo resolver el empleado contra EMPLEADOS,
+  // ver Code-Jornada.js) se descarta acá — nunca se muestra, ni siquiera
+  // en "Todas" (decisión de producto ya cerrada: preferir omitir un
+  // registro antes que mostrar una sucursal potencialmente incorrecta).
+  // Error de red/servidor: se conserva la última carga válida de
+  // state.vacaciones (si existía) — nunca se vacía en silencio, y nunca
+  // rompe la carga de AVISOS (colecciones independientes, error de una no
+  // afecta a la otra). Sin fallback a APPS_SCRIPT_URL, sin alert().
+  function cargarVacacionesIniciales() {
+    if (state.cargaVacaciones.estado === 'cargando') return;
+    state.cargaVacaciones.estado = 'cargando';
+    state.cargaVacaciones.error = null;
+    const generacion = ++state.cargaVacaciones.generacion;
+
+    fetchVacacionesAprobadas().then(function (resultado) {
+      if (generacion !== state.cargaVacaciones.generacion) return; // respuesta obsoleta, se descarta
+
+      if (!resultado.ok) {
+        state.cargaVacaciones.estado = 'error';
+        state.cargaVacaciones.error = resultado.error;
+        // No hay pantalla global de error por Vacaciones (a diferencia de
+        // AVISOS) — el calendario ya renderizado sigue mostrando AVISOS
+        // igual; re-renderizar acá solo asegura que ningún indicador de
+        // vacación quede a medio pintar si esto llegó después del primer
+        // render.
+        render();
+        return;
+      }
+
+      const descartadasPorSucursal = [];
+      state.vacaciones = resultado.solicitudes.filter(function (v) {
+        if (!v || !v.sucursalId) { descartadasPorSucursal.push(v && v.id); return false; }
+        return true;
+      });
+      state.cargaVacaciones.estado = 'listo';
+
+      // Señal diagnóstica simple (consola) — mismo criterio que ya usa
+      // GAS con Logger.log para el mismo caso: no es un error fatal, solo
+      // evidencia para QA. No se agrega ningún sistema de logging nuevo.
+      if (descartadasPorSucursal.length) {
+        console.warn('cargarVacacionesIniciales: vacaciones excluidas por sucursalId vacío (no se muestran en ningún filtro):', descartadasPorSucursal);
+      }
+
+      // Re-render — si Vacaciones resuelve después de que AVISOS ya se
+      // pintó (carga en paralelo, sin orden garantizado), el calendario
+      // necesita este segundo pintado para incorporarlas.
       render();
     });
   }
@@ -335,6 +428,21 @@
         const pb = b.prioridad === 'urgente' ? 0 : 1;
         return pa - pb;
       });
+  }
+
+  // Vacaciones aprobadas del día (Fase 4, calendario nuevo) — lee
+  // ÚNICAMENTE state.vacaciones, nunca EMPLEADOS_PERFILES ni recalcula
+  // sucursal: GAS ya la resolvió (ver Code-Jornada.js) y Fase 3 ya
+  // descartó al cargar cualquier registro con sucursalId vacío, así que
+  // acá no hace falta re-chequear esa invariante. Mismo criterio de rango
+  // que avisosDelDia. Filtro de sucursal: 'todas' muestra todo lo que ya
+  // quedó en state.vacaciones (con sucursal resuelta); una tab específica
+  // exige coincidencia exacta — nunca "sin sucursal = ver todo".
+  function vacacionesDelDia(iso) {
+    return state.vacaciones.filter(function (v) {
+      if (state.sucursal !== 'todas' && v.sucursalId !== state.sucursal) return false;
+      return v.fechaDesde <= iso && v.fechaHasta >= iso;
+    });
   }
 
   function colorSucursalDeAviso(aviso) {
@@ -735,10 +843,34 @@
         const c = celdas[i];
         const esHoy = !c.fuera && c.iso === hoy;
         const avisosDia = avisosDelDia(c.iso);
-        const visibles = avisosDia.slice(0, MAX_INDICADORES_POR_CELDA);
-        const restantes = avisosDia.length - visibles.length;
+        const vacacionesDia = vacacionesDelDia(c.iso);
 
-        const itemsHtml = visibles.map(function (a) {
+        // Prioridad visual (Fase 4, aprobada): Local Cerrado primero —
+        // nunca debe quedar oculto detrás de Vacaciones por overflow —
+        // después el resto de avisos, y por último Vacaciones. Partición
+        // ESTABLE: avisosDelDia() no se toca ni se reordena, solo se
+        // antepone local_cerrado — el orden urgente-primero ya existente
+        // entre "otros avisos" queda intacto.
+        const localCerrado = avisosDia.filter(function (a) { return a.tipo === 'local_cerrado'; });
+        const otrosAvisos = avisosDia.filter(function (a) { return a.tipo !== 'local_cerrado'; });
+        const itemsCelda = localCerrado.concat(otrosAvisos)
+          .map(function (a) { return { esVacacion: false, aviso: a }; })
+          .concat(vacacionesDia.map(function (v) { return { esVacacion: true, vacacion: v }; }));
+
+        // MAX_INDICADORES_POR_CELDA se aplica al total combinado
+        // (avisos + vacaciones), nunca solo a avisos.
+        const visibles = itemsCelda.slice(0, MAX_INDICADORES_POR_CELDA);
+        const restantes = itemsCelda.length - visibles.length;
+
+        const itemsHtml = visibles.map(function (it) {
+          if (it.esVacacion) {
+            const v = it.vacacion;
+            return '<div class="avz-cal-vacacion-item" data-vacacion-id="' + v.id + '" tabindex="0" role="button" title="' + escapeAttr(v.empleado + ' — ' + fmtRango(v.fechaDesde, v.fechaHasta)) + '">' +
+              '<span class="avz-cal-aviso-icono">' + icon('palmtree', 'icon-10') + '</span>' +
+              '<span class="avz-cal-aviso-titulo">' + escapeHtml(v.empleado) + '</span>' +
+            '</div>';
+          }
+          const a = it.aviso;
           return '<div class="avz-cal-aviso-item" data-abrir-aviso="' + a.id + '" tabindex="0" role="button" title="' + escapeAttr(a.titulo) + '">' +
             (a.prioridad === 'urgente' ? '<span class="avz-urgente-dot"></span>' : '<span class="avz-cal-aviso-icono">' + TIPO_META[a.tipo].icono + '</span>') +
             '<span class="avz-cal-aviso-titulo">' + escapeHtml(a.titulo) + '</span>' +
@@ -774,6 +906,11 @@
     const semanas = document.getElementById('avzCalSemanas');
     if (!semanas) return;
     semanas.addEventListener('click', function (e) {
+      // Clase separada de ".avz-cal-aviso-item" a propósito, para que no
+      // ambigüe con ese primer chequeo de abajo ni caiga al handler de
+      // ".avz-cal-celda" (que abriría por error el form de "nuevo aviso").
+      const vacItem = e.target.closest('.avz-cal-vacacion-item');
+      if (vacItem) { abrirPanel('detalle-vacacion', { vacacionId: vacItem.dataset.vacacionId, elementoOrigen: vacItem }); return; }
       const item = e.target.closest('.avz-cal-aviso-item');
       if (item) { abrirPanel('detalle', { avisoId: item.dataset.abrirAviso, elementoOrigen: item }); return; }
       const masBtn = e.target.closest('.avz-cal-mas');
@@ -840,6 +977,11 @@
     state.panel.abierto = true;
     state.panel.modo = modo;
     state.panel.avisoId = opts.avisoId || null;
+    // Fase 5: identidad separada de avisoId a propósito — una vacación
+    // nunca se busca con obtenerAviso() ni comparte namespace de ID con
+    // un aviso (los prefijos ya son distintos, "vac_" vs "AVI-", pero
+    // conceptualmente son colecciones independientes y el campo lo refleja).
+    state.panel.vacacionId = opts.vacacionId || null;
     state.panel.fechaPrecargada = opts.fecha || null;
     state.panel.elementoOrigen = opts.elementoOrigen || document.activeElement;
     state.panel.dirty = false;
@@ -885,7 +1027,7 @@
     if (overlay) overlay.remove();
     const origen = state.panel.elementoOrigen;
     state.panel = {
-      abierto: false, modo: null, avisoId: null, fechaPrecargada: null,
+      abierto: false, modo: null, avisoId: null, vacacionId: null, fechaPrecargada: null,
       borrador: null, original: null, dirty: false, intentoPublicar: false,
       masOpcionesAbiertas: false, elementoOrigen: null,
       guardando: false, errorGuardado: null,
@@ -934,6 +1076,7 @@
   function tituloPanelActual() {
     const m = state.panel.modo;
     if (m === 'detalle') return 'Detalle del aviso';
+    if (m === 'detalle-vacacion') return 'Vacación';
     if (m === 'cerrar-local') return 'Cerrar local';
     if (m === 'resumen-dia') return 'Avisos del día';
     return state.panel.avisoId ? 'Editar aviso' : 'Nuevo aviso';
@@ -942,6 +1085,7 @@
   function renderPanelContenido() {
     const m = state.panel.modo;
     if (m === 'detalle') return renderPanelDetalle();
+    if (m === 'detalle-vacacion') return renderPanelDetalleVacacion();
     if (m === 'cerrar-local') return renderPanelCerrarLocal();
     if (m === 'resumen-dia') return renderPanelResumenDia();
     return renderPanelForm();
@@ -953,6 +1097,9 @@
 
     const m = state.panel.modo;
     if (m === 'detalle') wirePanelDetalle();
+    // detalle-vacacion: nada que wire-ar además del botón cerrar (ya
+    // wireado arriba, genérico) — solo lectura, sin campos ni acciones.
+    else if (m === 'detalle-vacacion') { /* no-op a propósito */ }
     else if (m === 'cerrar-local') wirePanelCerrarLocal();
     else if (m === 'resumen-dia') wirePanelResumenDia();
     else wirePanelForm();
@@ -1004,6 +1151,40 @@
 
   function labelEstado(st) {
     return { activo: 'Activo', programado: 'Programado', vencido: 'Vencido', archivado: 'Archivado' }[st] || st;
+  }
+
+  // ── Panel: Detalle de Vacación (Fase 5) — exclusivamente informativo ───
+  // Busca SOLO en state.vacaciones, nunca en obtenerAviso()/state.avisos —
+  // una vacación no es un aviso y no se adapta a su shape acá. Reutiliza
+  // sucursalPorId() (ya existente, mismo array SUCURSALES que usan los
+  // avisos) para el label — sin fetch, sin recalcular sucursal, sin tocar
+  // EMPLEADOS_PERFILES. Sin footer de acciones: el único cierre es el
+  // botón de header + Escape + click afuera, todos ya genéricos del
+  // panel — no se agrega ningún botón nuevo.
+  function obtenerVacacion(id) {
+    return state.vacaciones.find(function (v) { return v.id === id; });
+  }
+
+  function renderPanelDetalleVacacion() {
+    const v = obtenerVacacion(state.panel.vacacionId);
+    if (!v) {
+      return headerPanel('Vacación') +
+        '<div class="avz-panel-body"><div class="avz-vacio-sub">Esta vacación ya no está disponible.</div></div>';
+    }
+    const suc = sucursalPorId(v.sucursalId);
+    const dias = v.dias === 1 ? '1 día' : v.dias + ' días';
+
+    return headerPanel('Vacación') +
+      '<div class="avz-panel-body">' +
+        '<div class="avz-detalle-tipo">' + icon('palmtree', 'icon-16') + ' Vacación</div>' +
+        '<h3 class="avz-detalle-titulo">' + escapeHtml(v.empleado) + '</h3>' +
+        '<div class="avz-detalle-meta">' +
+          '<span class="badge badge-success">Aprobada</span>' +
+        '</div>' +
+        '<div class="avz-detalle-fecha">' + fmtRango(v.fechaDesde, v.fechaHasta) + '</div>' +
+        '<div class="avz-detalle-fila"><span>Días</span><strong>' + dias + '</strong></div>' +
+        '<div class="avz-detalle-fila"><span>Sucursal</span><strong>' + escapeHtml(suc ? suc.label : (v.sucursalId || '—')) + '</strong></div>' +
+      '</div>';
   }
 
   function wirePanelDetalle() {
@@ -1075,7 +1256,8 @@
   function renderPanelResumenDia() {
     const fecha = state.panel.fechaPrecargada;
     const avisos = avisosDelDia(fecha);
-    const items = avisos.map(function (a) {
+    const vacaciones = vacacionesDelDia(fecha);
+    const itemsAvisos = avisos.map(function (a) {
       return '<button class="avz-resumen-item" type="button" data-abrir-aviso="' + a.id + '">' +
         '<span class="avz-fila-icono">' + TIPO_META[a.tipo].icono + '</span>' +
         '<span class="avz-resumen-item-titulo">' + escapeHtml(a.titulo) + (a.prioridad === 'urgente' ? ' <span class="avz-urgente-dot"></span>' : '') + '</span>' +
@@ -1083,8 +1265,27 @@
       '</button>';
     }).join('');
 
+    // Vacaciones: solo lectura, sin acciones — por eso <div>, no <button>
+    // (no hay ningún handler que las escuche; el detalle individual llega
+    // en Fase 5). Bloque separado del de avisos, nunca mezclados en el
+    // mismo array/objeto.
+    const itemsVacaciones = vacaciones.map(function (v) {
+      const dias = v.dias === 1 ? '1 día' : v.dias + ' días';
+      return '<div class="avz-resumen-item avz-resumen-item-vacacion" data-vacacion-id="' + v.id + '" tabindex="0" role="button">' +
+        '<span class="avz-fila-icono">' + icon('palmtree', 'icon-14') + '</span>' +
+        '<span class="avz-resumen-item-titulo">' + escapeHtml(v.empleado) + '</span>' +
+        '<span class="avz-fila-dest">' + fmtRango(v.fechaDesde, v.fechaHasta) + ' · ' + dias + '</span>' +
+      '</div>';
+    }).join('');
+
+    const bloqueAvisos = '<div class="avz-resumen-seccion-titulo">Avisos</div>' +
+      (itemsAvisos || '<div class="avz-vacio-sub">No hay avisos este día.</div>');
+    const bloqueVacaciones = vacaciones.length
+      ? '<div class="avz-resumen-seccion-titulo">Vacaciones</div>' + itemsVacaciones
+      : '';
+
     return headerPanel(fechaLarga(fecha)) +
-      '<div class="avz-panel-body">' + (items || '<div class="avz-vacio-sub">No hay avisos este día.</div>') + '</div>' +
+      '<div class="avz-panel-body">' + bloqueAvisos + bloqueVacaciones + '</div>' +
       '<div class="avz-panel-footer">' +
         '<button class="btn btn-primary" id="avzResumenNuevo" type="button">' + icon('plus', 'icon-16') + ' Nuevo aviso</button>' +
       '</div>';
@@ -1095,6 +1296,13 @@
     panel.querySelectorAll('[data-abrir-aviso]').forEach(function (el) {
       el.addEventListener('click', function () {
         abrirPanel('detalle', { avisoId: el.dataset.abrirAviso });
+      });
+    });
+    // Vacaciones del resumen (Fase 5) — mismo detalle-vacacion que desde
+    // el calendario, no un panel/UI aparte.
+    panel.querySelectorAll('[data-vacacion-id]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        abrirPanel('detalle-vacacion', { vacacionId: el.dataset.vacacionId });
       });
     });
     const btnNuevo = document.getElementById('avzResumenNuevo');
@@ -1595,6 +1803,9 @@
 
     render();
     if (state.carga.estado === 'idle') cargarAvisosIniciales();
+    // En paralelo, sin dependencia entre ambas — Vacaciones no espera a
+    // que AVISOS termine de cargar, ni viceversa.
+    if (state.cargaVacaciones.estado === 'idle') cargarVacacionesIniciales();
 
     const drawerOverlay = document.getElementById('drawerOverlay');
     const drawerMenu = document.getElementById('drawerMenu');
@@ -1669,6 +1880,8 @@
       panelGuardando: state.panel.guardando,
       sucursalActual: state.sucursal,
       vistaActual: state.vista,
+      cantidadVacaciones: state.vacaciones.length,
+      estadoCargaVacaciones: state.cargaVacaciones.estado,
     };
     console.table ? console.table(info) : console.log(info);
     return info;

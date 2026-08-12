@@ -447,6 +447,22 @@
   background: none; border: none; cursor: pointer; padding: 1px 3px; text-align: left;
 }
 .avz-cal-mas:hover { color: var(--gray-600); text-decoration: underline; }
+
+/* Vacaciones (Fase 4) — mismo tamaño/compacidad que .avz-cal-aviso-item
+   (reutiliza .avz-cal-aviso-icono/.avz-cal-aviso-titulo por dentro), pero
+   con su propio color (--success, tokens ya existentes en croma-ds.css) —
+   claramente distinto de informacion/evento/local_cerrado sin agregar
+   paleta nueva. Sin cursor:pointer forzado: en esta fase el click no hace
+   nada (ver wireCalendario), el estilo no debe prometer una acción que
+   todavía no existe. */
+.avz-cal-vacacion-item {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; line-height: 1.3;
+  padding: 1px 3px; border-radius: 4px;
+  background: var(--success-bg, var(--gray-50));
+  color: var(--success, var(--gray-800));
+  border: none; text-align: left; width: 100%;
+}
 .avz-cal-celda { cursor: pointer; }
 .avz-cal-celda:hover { background: var(--gray-50); }
 .avz-cal-celda.es-hoy:hover { background: var(--gray-50); }
@@ -555,6 +571,22 @@
 }
 .avz-resumen-item:hover { background: var(--gray-50); }
 .avz-resumen-item-titulo { flex: 1; font-size: 13.5px; font-weight: 600; color: var(--croma-black, var(--black)); }
+
+/* Vacaciones dentro de resumen-dia — mismo layout de fila que
+   .avz-resumen-item. Fase 5: abre detalle-vacacion (solo lectura) al
+   click, mismo affordance visual que un aviso — no promete ninguna
+   acción de escritura, solo navegación a un detalle. */
+.avz-resumen-seccion-titulo {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
+  color: var(--text-muted, var(--gray-400)); margin: var(--space-3, 12px) 0 4px;
+}
+.avz-resumen-seccion-titulo:first-child { margin-top: 0; }
+.avz-resumen-item-vacacion {
+  cursor: pointer;
+  color: var(--success, var(--gray-800));
+}
+.avz-resumen-item-vacacion:hover { background: var(--gray-50); }
+.avz-resumen-item-vacacion:hover { background: none; }
 
 /* Toast con Deshacer */
 .avz-toast {

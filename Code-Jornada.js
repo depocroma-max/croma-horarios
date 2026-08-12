@@ -1196,6 +1196,12 @@ function despacharAccionSegura(envelope) {
   if (accion === 'get_avisos_visibles_usuario') return accionGetAvisosVisiblesUsuario(datos);
   if (accion === 'marcar_aviso_leido')          return accionMarcarAvisoLeido(datos);
 
+  // Vacaciones aprobadas — lectura segura para el calendario nuevo de
+  // AVISOS (ver accionGetSolicitudesVacAprobadas). No forma parte del
+  // módulo AVISOS ni de su hoja — es Vacaciones, consumida como capa
+  // visual aparte. Solo lectura, nunca escritura.
+  if (accion === 'get_solicitudes_vac_aprobadas') return accionGetSolicitudesVacAprobadas(datos);
+
   return _resp({ ok: false, error: 'Acción no reconocida' });
 }
 
@@ -1819,6 +1825,103 @@ function agregarVacacionAdmin(e) {
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ── Vacaciones aprobadas — lectura segura para el calendario nuevo de
+//    AVISOS (avisos.js). Entra EXCLUSIVAMENTE por despacharAccionSegura,
+//    igual patrón que las acciones de AVISOS — nunca por doGet. Es de
+//    SOLO LECTURA: no crea, edita, aprueba ni rechaza ninguna solicitud.
+//    No toca getSolicitudesVacaciones (doGet legacy, usado por el
+//    calendario administrativo viejo de Vacaciones) — queda intacta, esta
+//    es una función nueva y aparte que lee la misma hoja SOLICITUDES_VAC
+//    con un shape de salida distinto, mínimo, pensado solo para pintar
+//    celdas de calendario (id/empleado/fechaDesde/fechaHasta/dias/
+//    sucursalId/estado), no para el flujo administrativo completo.
+//
+//    Sucursal: se resuelve en GAS contra la fuente real (hoja EMPLEADOS),
+//    nunca confiando en nada enviado por el cliente. Se arma un mapa
+//    empleado→sucursal_id con UNA sola lectura de EMPLEADOS por ejecución
+//    (_mapaSucursalesPorEmpleado) en vez de llamar _buscarEmpleadoPorNombre
+//    una vez por solicitud (que releería toda la hoja cada vez) — mismo
+//    criterio de normalización de nombre y misma columna SUCURSAL_ID que
+//    ya usa _buscarEmpleadoPorNombre/_filaEmpleadoAObjeto, sin modificar
+//    ninguno de los dos.
+//
+//    Regla explícita (decisión de producto, no técnica): un empleado que
+//    no puede resolverse contra EMPLEADOS devuelve sucursalId:'' — nunca
+//    se asume una sucursal, nunca se usa un fallback. Es responsabilidad
+//    del consumidor (avisos.js, etapa futura) decidir qué hacer con
+//    sucursalId:'' (omitir del calendario, no mostrarlo en ninguna tab
+//    incluida "Todas"). Acá solo se reporta el hecho, nunca se inventa
+//    un valor. Un registro no resoluble NUNCA hace fallar la respuesta
+//    completa — se devuelve igual, con sucursalId:''.
+function _mapaSucursalesPorEmpleado() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('EMPLEADOS');
+  const mapa = {};
+  if (!hoja) return mapa;
+  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim().toUpperCase(); });
+  const colSucursal = headers.indexOf('SUCURSAL_ID');
+  if (colSucursal < 0) return mapa;
+  const vals = hoja.getDataRange().getValues();
+  for (let i = 1; i < vals.length; i++) {
+    const nombreNorm = _normalizarNombreEmpleado(vals[i][0]);
+    if (!nombreNorm) continue;
+    mapa[nombreNorm] = String(vals[i][colSucursal] || '');
+  }
+  return mapa;
+}
+
+function accionGetSolicitudesVacAprobadas(datos) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const hoja = ss.getSheetByName('SOLICITUDES_VAC');
+    if (!hoja) return _resp({ ok: true, solicitudes: [], no_resolubles: [] });
+
+    const vals = hoja.getDataRange().getValues();
+    // Mismo criterio de columnas que getSolicitudesVacaciones (legacy, sin
+    // modificar): 0=ID 1=EMPLEADO 2=FECHA_DESDE 3=FECHA_HASTA 4=DIAS
+    // 5=ESTADO 6=FECHA_SOLICITUD 7=NOTA_ADMIN.
+    const filas = vals.slice(1).filter(function (r) { return r[0]; })
+      .filter(function (r) { return String(r[5] || '').trim() === 'aprobada'; });
+
+    const mapaSucursales = _mapaSucursalesPorEmpleado();
+    const noResolubles = [];
+
+    const solicitudes = filas.map(function (r) {
+      const empleado = String(r[1]).trim();
+      const sucursalId = mapaSucursales[_normalizarNombreEmpleado(empleado)] || '';
+      if (!sucursalId) noResolubles.push(empleado);
+      return {
+        id:         String(r[0]).trim(),
+        empleado:   empleado,
+        fechaDesde: r[2] instanceof Date
+          ? Utilities.formatDate(r[2], Session.getScriptTimeZone(), 'yyyy-MM-dd')
+          : String(r[2] || '').trim(),
+        fechaHasta: r[3] instanceof Date
+          ? Utilities.formatDate(r[3], Session.getScriptTimeZone(), 'yyyy-MM-dd')
+          : String(r[3] || '').trim(),
+        dias:       parseInt(r[4]) || 0,
+        sucursalId: sucursalId,
+        estado:     'aprobada',
+      };
+    });
+
+    // Evidencia diagnóstica — mismo patrón ya usado en todo el archivo
+    // (Logger.log, visible en el panel de Ejecuciones de Apps Script), sin
+    // agregar ningún sistema de logging nuevo. Se agrega además como campo
+    // de la respuesta (no por vacación individual — el shape de cada
+    // vacación se mantiene mínimo) para que QA pueda verificarlo sin tener
+    // que abrir los logs de ejecución de GAS.
+    if (noResolubles.length) {
+      Logger.log('get_solicitudes_vac_aprobadas: empleados no resolubles contra EMPLEADOS: ' + noResolubles.join(', '));
+    }
+
+    return _resp({ ok: true, solicitudes: solicitudes, no_resolubles: noResolubles });
+  } catch (err) {
+    return _resp({ ok: false, error: err.message });
   }
 }
 
