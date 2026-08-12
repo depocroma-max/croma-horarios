@@ -1183,6 +1183,7 @@ function despacharAccionSegura(envelope) {
   if (accion === 'subir_recibo')              return accionSubirRecibo(datos);
   if (accion === 'listar_recibos_empleado')   return accionListarRecibosEmpleado(datos);
   if (accion === 'obtener_recibo_archivo')    return accionObtenerReciboArchivo(datos);
+  if (accion === 'obtener_recibo_drive_id')   return accionObtenerReciboDriveId(datos);
   if (accion === 'reemplazar_recibo')         return accionReemplazarRecibo(datos);
 
   // AVISOS (Fase 3A) — lectura y escritura, todo por acá, nunca por doGet.
@@ -4335,6 +4336,86 @@ function accionObtenerReciboArchivo(datos) {
     mime_type: mimeReal,
     nombre_archivo: recibo.nombre_archivo,
     tamano_bytes: bytes.length,
+    recibo: _respuestaPublicaRecibo(recibo),
+  });
+}
+
+// ── 3b. obtener_recibo_drive_id ─────────────────────────────────────────
+// Variante liviana de obtener_recibo_archivo() (Drive directo desde
+// croma-backend, para sacar la descarga de la cola de ejecuciones de GAS):
+// mismos chequeos de identidad/permiso, MISMA auditoría, pero nunca toca
+// el contenido del archivo — nada de getBlob()/getBytes()/base64Encode(),
+// que es la parte lenta. Devuelve solo el DRIVE_FILE_ID; croma-backend baja
+// el archivo directo de la API de Drive con una cuenta de servicio.
+// Nunca se expone fuera del backend interno (mismo secreto y mismo "falla
+// igual para ID inexistente/ajeno/no disponible" que la acción original).
+function accionObtenerReciboDriveId(datos) {
+  datos = datos || {};
+  const reciboId  = String(datos.recibo_id || '').trim();
+  const actor     = String(datos.actor || 'desconocido');
+  const contexto  = datos.contexto === 'empleado' ? 'empleado' : 'admin';
+  const empleadoResuelto = String(datos.empleado_resuelto || '').trim();
+  const esEmpleado = contexto === 'empleado';
+
+  function _reciboNoDisponibleParaEmpleado() {
+    return _resp({ ok: false, error: 'RECIBO_NO_DISPONIBLE' });
+  }
+
+  if (!reciboId) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'RECIBO_ID_REQUERIDO' });
+  }
+  if (esEmpleado && !empleadoResuelto) {
+    return _reciboNoDisponibleParaEmpleado();
+  }
+
+  const encontrado = _buscarReciboPorId(reciboId);
+  if (!encontrado) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'RECIBO_NO_ENCONTRADO' });
+  }
+  const recibo = encontrado.objeto;
+
+  if (!recibo.empleado || !recibo.periodo || !recibo.mime_type) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'METADATA_INVALIDA' });
+  }
+
+  if (esEmpleado && _normalizarNombreEmpleado(empleadoResuelto) !== _normalizarNombreEmpleado(recibo.empleado)) {
+    return _reciboNoDisponibleParaEmpleado();
+  }
+
+  const driveFileId = _driveFileIdDeRecibo(encontrado.headers, encontrado.valoresFila);
+  if (!driveFileId) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'METADATA_INVALIDA' });
+  }
+
+  // Chequeo liviano de que el archivo sigue existiendo en Drive —
+  // getFileById()/getMimeType() son metadata, no transfieren contenido.
+  try {
+    const archivoDrive = DriveApp.getFileById(driveFileId);
+    if (archivoDrive.getMimeType() !== RECIBOS_MIME_VALIDO) {
+      return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'MIME_TYPE_INVALIDO' });
+    }
+  } catch (e) {
+    return esEmpleado ? _reciboNoDisponibleParaEmpleado() : _resp({ ok: false, error: 'ARCHIVO_NO_ENCONTRADO' });
+  }
+
+  // Mismo criterio que la acción original: se registra la descarga acá,
+  // en el momento en que se confirmó acceso + existencia del archivo —
+  // croma-backend baja el contenido inmediatamente después de esto.
+  if (esEmpleado) {
+    try { _actualizarFechaDescargaEmpleado(reciboId); } catch (eFecha) { /* no bloquea la respuesta */ }
+  }
+
+  const accionAuditoria = esEmpleado ? 'RECIBO_DESCARGADO_EMPLEADO' : 'RECIBO_DESCARGADO_ADMIN';
+  registrarAuditoria(actor, accionAuditoria, 'RECIBO', reciboId, null, {
+    empleado: recibo.empleado, periodo: recibo.periodo, empresa: recibo.empresa,
+  });
+
+  return _resp({
+    ok: true,
+    drive_file_id: driveFileId,
+    mime_type: recibo.mime_type,
+    nombre_archivo: recibo.nombre_archivo,
+    tamano_bytes: recibo.tamano_bytes,
     recibo: _respuestaPublicaRecibo(recibo),
   });
 }
