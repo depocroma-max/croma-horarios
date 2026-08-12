@@ -4025,7 +4025,12 @@ function _driveFileIdDeRecibo(headers, fila) {
   return c >= 0 ? fila[c] : '';
 }
 
-function _listarRecibosPorEmpleado(nombreOperativo) {
+// incluirDriveFileId: SOLO para accionListarRecibosEmpleado(), que es
+// backend-to-backend (secreto + POST, nunca doGet) — croma-backend cachea
+// este listado y lo reusa para resolver drive_file_id al descargar sin
+// pegarle a GAS de nuevo en cada clic. _filaReciboAObjeto() sigue sin
+// incluirlo (esa sí la reusan lugares que no deberían ver DRIVE_FILE_ID).
+function _listarRecibosPorEmpleado(nombreOperativo, incluirDriveFileId) {
   const hoja = _asegurarHojaRecibos();
   const vals = hoja.getDataRange().getValues();
   if (vals.length < 2) return [];
@@ -4035,7 +4040,9 @@ function _listarRecibosPorEmpleado(nombreOperativo) {
   const resultado = [];
   for (let i = 1; i < vals.length; i++) {
     if (_normalizarNombreEmpleado(vals[i][iEmp]) === nombreNorm) {
-      resultado.push(_filaReciboAObjeto(headers, vals[i]));
+      const obj = _filaReciboAObjeto(headers, vals[i]);
+      if (incluirDriveFileId) obj.drive_file_id = _driveFileIdDeRecibo(headers, vals[i]);
+      resultado.push(obj);
     }
   }
   return resultado;
@@ -4278,7 +4285,12 @@ function accionListarRecibosEmpleado(datos) {
   const empleado = _resolverEmpleadoRecibo(empleadoInput);
   if (!empleado) return _resp({ ok: false, error: 'EMPLEADO_NO_ENCONTRADO' });
 
-  let recibos = _listarRecibosPorEmpleado(empleado.nombre);
+  // incluirDriveFileId=true: croma-backend cachea este listado y lo reusa
+  // para resolver drive_file_id al descargar, sin pegarle a GAS de nuevo
+  // en cada clic (ver nota en _listarRecibosPorEmpleado). Sigue siendo
+  // backend-to-backend únicamente — nunca llega crudo al navegador, Node
+  // lo descarta antes de responder al Portal (_reciboEmpleado/_reciboAdmin).
+  let recibos = _listarRecibosPorEmpleado(empleado.nombre, true);
 
   // Por defecto (Portal Empleado): solo ACTIVO. Como a lo sumo hay una
   // fila ACTIVA por período (invariante del modelo), esto ya es "la
@@ -4294,7 +4306,13 @@ function accionListarRecibosEmpleado(datos) {
 
   // Sin auditoría — es una simple visualización de listado, mismo criterio
   // que getCertificados()/getVacaciones(), que tampoco auditan lectura.
-  return _resp({ ok: true, recibos: recibos.map(_respuestaPublicaRecibo) });
+  return _resp({ ok: true, recibos: recibos.map(function(r) {
+    const pub = _respuestaPublicaRecibo(r);
+    pub.drive_file_id = r.drive_file_id;
+    pub.mime_type      = r.mime_type;
+    pub.tamano_bytes   = r.tamano_bytes;
+    return pub;
+  }) });
 }
 
 // ── 3. obtener_recibo_archivo ───────────────────────────────────────────
