@@ -1,4 +1,4 @@
-const CACHE = 'croma-v5';
+const CACHE = 'croma-v6';
 const ASSETS = [
   '/',
   '/index.html',
