@@ -4856,10 +4856,49 @@ function accionGuardarAviso(datos) {
     hoja.appendRow(_filaDeAviso(headers, aviso));
 
     registrarAuditoria(actor, 'AVISO_CREADO', 'AVISO', aviso.id, null, aviso);
+    enviarEmailsAviso(hoja.getParent(), aviso);
     return _resp({ ok: true, aviso: aviso });
   } finally {
     lock.releaseLock();
   }
+}
+
+// ── Enviar emails de aviso a sucursales (canal 'email') ───────────────
+// Hermana de enviarEmailsEvento() (línea ~100) — mismo mapeo email_suc_<ID>
+// en CONFIG, mismo template buildEmailEvento(). Solo aplica a
+// destinatarios.modo === 'sucursal' (único modo con email de sucursal
+// configurado — local_cerrado ya obliga este modo por _validarDatosAviso).
+// Se llama solo al crear (accionGuardarAviso), no al editar — mismo
+// alcance que tenía el sistema viejo de Eventos.
+function enviarEmailsAviso(ss, aviso) {
+  if (_resolverCanalesActivos(aviso.canales).indexOf('email') === -1) return;
+  const destinatarios = aviso.destinatarios || {};
+  if (destinatarios.modo !== 'sucursal' || !Array.isArray(destinatarios.ids)) return;
+
+  const NOMBRES_SUCURSAL = {
+    '01': '01 PASEO', '05': '05 WAVE', '09': '09 CIPO SAN MARTIN',
+    '10': '10 PERITO MORENO', '12': '12 CENTENARIO', '14': '14 ROCA',
+    'DEPO': 'DEPO', 'OFICINA': 'OFICINA',
+  };
+  const config = getConfigObj(ss);
+  const fechaStr = fmtFecha(aviso.fecha_desde);
+  const fechaFinStr = aviso.fecha_hasta && aviso.fecha_hasta !== aviso.fecha_desde ? fmtFecha(aviso.fecha_hasta) : null;
+  const rangoFechas = fechaFinStr ? fechaStr + ' al ' + fechaFinStr : fechaStr;
+
+  destinatarios.ids.forEach(function (sucId) {
+    const email = config['email_suc_' + sucId] || '';
+    if (!email) return;
+    MailApp.sendEmail({
+      to: email,
+      subject: '📌 ' + aviso.titulo,
+      htmlBody: buildEmailEvento({
+        titulo: aviso.titulo,
+        rangoFechas: rangoFechas,
+        descripcion: aviso.mensaje,
+        destinatarioLabel: NOMBRES_SUCURSAL[sucId] || sucId,
+      }),
+    });
+  });
 }
 
 function accionEditarAviso(datos) {

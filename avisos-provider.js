@@ -1,5 +1,5 @@
 // =====================================================
-//  AVISOS · Transición Legacy → AVISOS — Etapa 1
+//  AVISOS · Transición Legacy → AVISOS — Etapa 6/9 (corte)
 //  AVISOS Provider
 //
 //  Implementa el contrato oficial definido en el ADR-CONTRATO-PROVIDER
@@ -9,9 +9,8 @@
 //  activa, mide observabilidad, y devuelve la salida tal cual la
 //  produjo la Strategy, sin agregar ni quitar nada del contrato.
 //
-//  Ninguna pantalla usa este archivo todavía (Etapa 1 del Plan de
-//  Implementación). Se carga en index.html sin conectarse a ningún
-//  flujo visible — mismo patrón que tuvo avisos.js en su Fase 1.
+//  Corte real hecho: Strategy activa = 'avisos'. Las 4 pantallas del
+//  Portal (Banner/Novedades/Campana/Mi Semana) ya leen de acá.
 // =====================================================
 
 (function () {
@@ -91,11 +90,12 @@
     _strategies[nombre] = impl;
   }
 
-  // Etapa 1: solo existe 'legacy'. No hay ninguna decisión de negocio
-  // codificada acá sobre cuál Strategy usar — es un valor fijo, listo
-  // para que las Etapas 2 y 6 lo cambien sin tocar el resto de este
-  // archivo ni ninguna pantalla.
-  let _strategyActivaNombre = 'legacy';
+  // Etapa 6/9 (corte): Strategy activa en producción = 'avisos'. El
+  // Portal (Banner/Novedades/Campana/Mi Semana) ya no lee EVENTOS/
+  // ANUNCIOS — lee la hoja AVISOS vía AvisosStrategy. 'legacy' y 'dual'
+  // siguen registradas y disponibles por CromaAvisosProviderSandbox para
+  // comparar o revertir sin tocar código, si hiciera falta.
+  let _strategyActivaNombre = 'avisos';
 
   function _setStrategyActiva(nombre) {
     if (!_strategies[nombre]) throw new Error('Strategy no registrada: ' + nombre);

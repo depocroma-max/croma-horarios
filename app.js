@@ -7914,7 +7914,9 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
       '<select class="filter-select" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
-      '<button class="btn-connect" style="width:auto;padding:6px 16px;font-size:12px;margin:0" onclick="abrirNuevoEvento()">＋ Nuevo evento</button>' +
+      // "Nuevo evento" (sistema viejo) jubilado a favor del panel Avisos —
+      // ver avisosProvider Etapa 6/9. Botón oculto, no borrado: revertir
+      // es solo restaurar esta línea.
       '<div class="cal-vac-legend">' +
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#d1fae5;border-left:3px solid #059669"></span>Aprobada</span>' +
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef9c3;border-left:3px solid #f59e0b"></span>Pendiente</span>' +
@@ -8498,7 +8500,8 @@ function renderCalendarioView() {
     '<div id="vacAnunciosContainer" class="admin-tab-content" style="display:none">' +
       '<div class="admin-toolbar">' +
         '<span style="font-size:12px;color:#94a3b8">Enviá mensajes a tus empleados — aparecen en su pantalla con sonido</span>' +
-        '<button class="btn-connect" style="width:auto;padding:8px 16px;font-size:13px;margin:0" onclick="abrirNuevoAnuncio()">+ Nuevo anuncio</button>' +
+        // "Nuevo anuncio" (sistema viejo) jubilado a favor del panel Avisos —
+        // ver avisosProvider Etapa 6/9. Botón oculto, no borrado.
       '</div>' +
       '<div id="adminAnunciosList"><div style="padding:2rem;text-align:center;color:#94a3b8;font-size:13px">Cargando...</div></div>' +
     '</div>' +
