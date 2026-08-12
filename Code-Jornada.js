@@ -190,20 +190,47 @@ function buildEmailEvento({ titulo, rangoFechas, descripcion, destinatarioLabel,
   '</table></td></tr></table></body></html>';
 }
 
+// Caché de lectura (Commit cache-GAS): colapsa ráfagas de pedidos
+// simultáneos al mismo dato (ej. varios empleados abriendo la app a la
+// vez) en UNA sola ejecución real de GAS — el resto de esa ventana se
+// sirve desde CacheService, sin tocar Sheets. TTL corto (20s) a propósito:
+// cualquier cambio (guardar_perfil, guardar_certificado, etc., que NO se
+// tocan acá) se refleja solo en el próximo pedido después de que venza el
+// caché, nunca al instante — tradeoff aceptado por ser casi imperceptible.
+// CacheService tiene un límite de ~100KB por valor: si el JSON no entra,
+// _cacheableTextOutput() simplemente no cachea ese pedido puntual (nunca
+// rompe la respuesta real por un fallo de caché).
+const CACHE_TTL_LECTURA_SEG = 20;
+
+function _cacheableTextOutput(cacheKey, computeFn) {
+  const cache = CacheService.getScriptCache();
+  let cached;
+  try { cached = cache.get(cacheKey); } catch (e) { cached = null; }
+  if (cached) {
+    return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+  }
+  const output = computeFn();
+  try {
+    const content = output.getContent();
+    if (content.length < 95000) cache.put(cacheKey, content, CACHE_TTL_LECTURA_SEG);
+  } catch (e) { /* nunca romper la respuesta real por un fallo de caché */ }
+  return output;
+}
+
 function doGet(e) {
   const accion = e.parameter.accion || '';
 
-  if (accion === 'horarios')            return getHorarios(e);
-  if (accion === 'perfiles')            return getPerfiles();
+  if (accion === 'horarios')            return _cacheableTextOutput('horarios|' + (e.parameter.empleado || ''), function() { return getHorarios(e); });
+  if (accion === 'perfiles')            return _cacheableTextOutput('perfiles', getPerfiles);
   if (accion === 'guardar_perfil')      return guardarPerfil(e);
   if (accion === 'guardar_categoria')   return guardarCategoria(e);
   if (accion === 'cargar_usuarios')     return getUsuarios(e);
   if (accion === 'guardar_usuarios')    return guardarUsuarios(e);
-  if (accion === 'cargar_certificados') return getCertificados();
+  if (accion === 'cargar_certificados') return _cacheableTextOutput('cargar_certificados', getCertificados);
   if (accion === 'guardar_certificado') return guardarCertificado(e);
   if (accion === 'borrar_certificado')  return borrarCertificado(e);
   if (accion === 'guardar_foto_url')    return guardarFotoUrl(e);
-  if (accion === 'get_config')          return getConfig();
+  if (accion === 'get_config')          return _cacheableTextOutput('get_config', getConfig);
   if (accion === 'guardar_config')      return guardarConfig(e);
   if (accion === 'get_vacaciones')      return getVacaciones(e);
   if (accion === 'inicializar_vac')     return inicializarVacacionesAnio(e);
@@ -215,10 +242,10 @@ function doGet(e) {
   if (accion === 'get_anuncios')        return getAnuncios(e);
   if (accion === 'guardar_anuncio')     return guardarAnuncio(e);
   if (accion === 'eliminar_anuncio')    return eliminarAnuncio(e);
-  if (accion === 'get_eventos')           return getEventos(e);
+  if (accion === 'get_eventos')           return _cacheableTextOutput('get_eventos|' + (e.parameter.empleado || ''), function() { return getEventos(e); });
   if (accion === 'guardar_evento')        return guardarEvento(e);
   if (accion === 'eliminar_evento')       return eliminarEvento(e);
-  if (accion === 'get_sucursales_geo')    return getSucursalesGeo();
+  if (accion === 'get_sucursales_geo')    return _cacheableTextOutput('get_sucursales_geo', getSucursalesGeo);
   if (accion === 'get_fichadas_empleado') return getFichadasEmpleado(e);
   if (accion === 'get_banco_horas')       return getBancoHoras(e);
   if (accion === 'get_banco_horas_todos')  return getBancoHorasTodos();
