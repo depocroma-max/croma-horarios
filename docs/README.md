@@ -24,6 +24,8 @@ de esta carpeta son específicos de este repo, no reemplazos de los compartidos.
 |---|---|
 | [ADMIN-EMPLEADOS-ACCESO.md](./ADMIN-EMPLEADOS-ACCESO.md) | Arquitectura, seguridad, operación y despliegue de la administración unificada de empleados + acceso |
 | [DECISIONS.md](./DECISIONS.md) | Extracto versionado: solo el ADR-035 (la decisión específica de este trabajo), no el registro completo de ADRs del ecosistema |
+| [AVISOS_API.md](./AVISOS_API.md) | Referencia técnica del backend de AVISOS (Fase 3A) |
+| [PLAN-SHEETS-API-DIRECTA.md](./PLAN-SHEETS-API-DIRECTA.md) | Propuesta (sin empezar) para sacar a Apps Script del camino crítico, migrando módulo por módulo a Sheets API directa desde croma-backend |
 
 ## Mantenimiento
 
