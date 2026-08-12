@@ -2293,13 +2293,15 @@ function poblarFiltroEmpleados(datos) {
 }
 
 // ── CARGA DE PERFILES DE EMPLEADOS ────────────────────
-async function cargarPerfiles() {
-  const urls = getSavedUrls();
-  const url  = urls['unica'] || APPS_SCRIPT_URL;
-  if (!url) return;
+// prefetched: si ya se tiene el JSON (ej. desde la acción consolidada
+// datos_portal_empleado del Portal), se usa directo sin pegarle a GAS de
+// nuevo — mismo parseo/side-effects de siempre, sin duplicar la lógica.
+async function cargarPerfiles(prefetched) {
+  const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
+  if (!prefetched && !url) return;
 
   try {
-    const json = await fetchJSONretry(`${url}?accion=perfiles`);
+    const json = prefetched || await fetchJSONretry(`${url}?accion=perfiles`);
     if (!json.ok) return;
 
     if (json.categorias?.length) CATEGORIAS_CONFIG = json.categorias;
@@ -2789,9 +2791,10 @@ let sesionActual = null;
 })();
 
 // ── CERTIFICADOS ──────────────────────────────────────
-async function cargarCertificados() {
+// prefetched: ver nota en cargarPerfiles().
+async function cargarCertificados(prefetched) {
   try {
-    const json = await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
+    const json = prefetched || await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
     if (json.ok) {
       CERTIFICADOS_CACHE = (json.certificados || []).map(c => {
         // La fecha puede venir como Date object o string — normalizar a "YYYY-MM-DD"
@@ -2825,9 +2828,10 @@ function getCertificadosDe(nombreEmp) {
 }
 
 // ── VACACIONES APROBADAS (para el historial, igual que certificados) ──
-async function cargarVacacionesAprobadas() {
+// prefetched: ver nota en cargarPerfiles().
+async function cargarVacacionesAprobadas(prefetched) {
   try {
-    const json = await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=get_solicitudes_vac&estado=aprobada`);
+    const json = prefetched || await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=get_solicitudes_vac&estado=aprobada`);
     if (json.ok) VACACIONES_APROBADAS_CACHE = json.solicitudes || [];
     return VACACIONES_APROBADAS_CACHE;
   } catch(e) {
@@ -3217,17 +3221,24 @@ async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
   try {
     // Filtrar por empleado del lado del servidor: baja el payload de "toda
     // la hoja" a solo las filas de este empleado (mucho más rápido).
+    // datos_portal_empleado consolida perfiles+certificados+vacaciones
+    // aprobadas+horarios en un solo viaje a GAS (antes eran 4 separados,
+    // 4 ejecuciones reales de GAS por cada apertura del Portal).
     const nombreEmp = sesionActual?.empleadoNombre || sesionActual?.nombre || '';
-    const urlHorarios = `${url}?accion=horarios` +
+    const urlConsolidada = `${url}?accion=datos_portal_empleado` +
       (nombreEmp ? '&empleado=' + encodeURIComponent(nombreEmp) : '');
 
-    const [, , , horariosResp] = await Promise.allSettled([
-      cargarPerfiles(),
-      cargarCertificados(),
-      cargarVacacionesAprobadas(),
-      _fetchConTimeout(urlHorarios).then(r => {
+    const [horariosResp] = await Promise.allSettled([
+      _fetchConTimeout(urlConsolidada).then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
+        const consolidado = await r.json();
+        if (consolidado.ok === false) throw new Error(consolidado.error || 'Error');
+        await Promise.allSettled([
+          cargarPerfiles(consolidado.perfiles),
+          cargarCertificados(consolidado.certificados),
+          cargarVacacionesAprobadas(consolidado.vacacionesAprobadas),
+        ]);
+        return consolidado.horarios;
       }),
     ]);
 

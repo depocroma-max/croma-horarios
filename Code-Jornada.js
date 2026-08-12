@@ -217,9 +217,34 @@ function _cacheableTextOutput(cacheKey, computeFn) {
   return output;
 }
 
+// Consolida las 4 llamadas que dispara el Portal Empleado al abrir (perfiles,
+// certificados, vacaciones aprobadas, horarios propios) en un solo viaje —
+// antes eran 4 ejecuciones de GAS separadas por cada apertura. Reusa las
+// funciones existentes tal cual (parseando su JSON de vuelta) para no
+// duplicar ninguna lógica ni tocar los otros consumidores de esas acciones.
+function getDatosPortalEmpleado(e) {
+  try {
+    const perfiles     = JSON.parse(getPerfiles().getContent());
+    const certificados = JSON.parse(getCertificados().getContent());
+    const vacaciones    = JSON.parse(getSolicitudesVacaciones({ parameter: { estado: 'aprobada' } }).getContent());
+    const horarios      = JSON.parse(getHorarios(e).getContent());
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      perfiles: perfiles,
+      certificados: certificados,
+      vacacionesAprobadas: vacaciones,
+      horarios: horarios,
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function doGet(e) {
   const accion = e.parameter.accion || '';
 
+  if (accion === 'datos_portal_empleado') return _cacheableTextOutput('datos_portal_empleado|' + (e.parameter.empleado || ''), function() { return getDatosPortalEmpleado(e); });
   if (accion === 'horarios')            return _cacheableTextOutput('horarios|' + (e.parameter.empleado || ''), function() { return getHorarios(e); });
   if (accion === 'perfiles')            return _cacheableTextOutput('perfiles', getPerfiles);
   if (accion === 'guardar_perfil')      return guardarPerfil(e);
