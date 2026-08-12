@@ -155,7 +155,10 @@ const GAS_FETCH_TIMEOUT_MS = 15000;
 function _fetchConTimeout(url, timeoutMs) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs || GAS_FETCH_TIMEOUT_MS);
-  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+  // cache:'no-store' — ver nota de cache-busting en vacApiUrl(): evita que
+  // el navegador reproduzca una 302 de GAS vieja (cacheada de un momento
+  // en que estaba caído) en vez de pedirla de nuevo.
+  return fetch(url, { signal: ctrl.signal, cache: 'no-store' }).finally(() => clearTimeout(t));
 }
 
 // Fetch resistente a los hipos de Apps Script: valida la respuesta y reintenta
@@ -6827,8 +6830,14 @@ let _solicitudesCache = [];  // [ { id, empleado, desde, hasta, dias, estado, fe
 let _configCache = {};       // { email_admin, ... }
 
 // ── HELPERS ───────────────────────────────────────────
+// Cache-busting (_ts): el navegador puede cachear la respuesta 302 de GAS
+// (script.google.com → script.googleusercontent.com/macros/echo?...&lib=…)
+// vía la cache HTTP normal. Si esa 302 quedó cacheada de un momento en que
+// GAS estaba caído, se sigue reproduciendo un 404 aunque GAS ya haya vuelto
+// — como la URL completa es la clave de cache, un parámetro único por
+// request evita que se sirva una respuesta vieja.
 function vacApiUrl(accion, params) {
-  let url = `${APPS_SCRIPT_URL}?accion=${accion}`;
+  let url = `${APPS_SCRIPT_URL}?accion=${accion}&_ts=${Date.now()}`;
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') {
@@ -7042,8 +7051,8 @@ async function cargarVacacionesEmpleado(nombreEmp) {
   const anio = new Date().getFullYear();
   try {
     const [respVac, respSol] = await Promise.all([
-      fetch(vacApiUrl('get_vacaciones', { empleado: nombreEmp, anio })),
-      fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp })),
+      _fetchConTimeout(vacApiUrl('get_vacaciones', { empleado: nombreEmp, anio })),
+      _fetchConTimeout(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp })),
     ]);
     const [jVac, jSol] = await Promise.all([respVac.json(), respSol.json()]);
     const vac  = jVac.ok  ? (jVac.vacaciones?.[0]   || null) : null;
@@ -8681,7 +8690,7 @@ async function cargarBancoHorasEmpleado(nombreEmp) {
   const container = document.getElementById('evTabBancoHoras');
   if (!container) return;
   try {
-    const resp = await fetch(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
+    const resp = await _fetchConTimeout(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error');
     container.innerHTML = renderBancoHorasHTML(json);

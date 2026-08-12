@@ -39,7 +39,10 @@
 
   function _apiUrl(accion, params) {
     const base = (typeof APPS_SCRIPT_URL !== 'undefined') ? APPS_SCRIPT_URL : '';
-    let url = base + '?accion=' + accion;
+    // _ts: evita que el navegador reproduzca una 302 de GAS vieja cacheada
+    // (script.google.com → googleusercontent.com/macros/echo?...&lib=…) de
+    // un momento en que GAS estaba caído — ver misma nota en app.js/vacApiUrl.
+    let url = base + '?accion=' + accion + '&_ts=' + Date.now();
     if (params) {
       Object.entries(params).forEach(function (kv) {
         if (kv[1] !== undefined && kv[1] !== null) url += '&' + kv[0] + '=' + encodeURIComponent(kv[1]);
@@ -51,7 +54,7 @@
   async function _fetchJson(url) {
     let resp;
     try {
-      resp = await fetch(url);
+      resp = await fetch(url, { cache: 'no-store' });
     } catch (e) {
       return { ok: false, error: 'No pudimos conectarnos a la fuente legacy.' };
     }
