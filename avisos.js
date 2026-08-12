@@ -506,6 +506,10 @@
           '<div class="avz-header-acciones">' +
             '<div class="avz-view-toggle">' +
               btnVista('hoy', 'Hoy') + btnVista('calendario', 'Calendario') + btnVista('lista', 'Lista') +
+              // Solicitudes pendientes (mudado desde el viejo menú Calendario
+              // → tab "Solicitudes pendientes") — reusa cargarSolicitudesAdmin()
+              // de app.js tal cual, solo cambia dónde vive el contenedor.
+              '<button class="avz-view-btn' + (state.vista === 'solicitudes' ? ' active' : '') + '" id="avzTabSolicitudes" data-vista="solicitudes" aria-selected="' + (state.vista === 'solicitudes') + '">Solicitudes</button>' +
             '</div>' +
             '<div class="avz-search">' + icon('search', 'icon-16') +
               '<label class="avz-visually-hidden" for="avzBuscar">Buscar avisos</label>' +
@@ -571,6 +575,13 @@
 
     if (state.vista === 'hoy') body.innerHTML = renderHoy();
     else if (state.vista === 'calendario') { body.innerHTML = renderCalendarioShell(); wireCalendario(); }
+    else if (state.vista === 'solicitudes') {
+      body.innerHTML = '<div id="avzSolicitudesContainer"><div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div></div>';
+      // cargarSolicitudesAdmin() vive en app.js (global, no en este IIFE) —
+      // reusada tal cual, solo se le cambió el id de contenedor de destino.
+      if (typeof cargarSolicitudesAdmin === 'function') cargarSolicitudesAdmin();
+      return;
+    }
     else body.innerHTML = renderLista();
     wireAccionesFila(body);
     wireClicksAbrirDetalle(body);

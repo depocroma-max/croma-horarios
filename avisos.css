@@ -394,15 +394,22 @@
 /* ── Botones de navegación propios (no ".nav-btn"/".drawer-nav-btn"
    a propósito: esas clases están enganchadas al router genérico
    setView() de app.js, que no debe tocarse en esta fase) ────── */
+/* CSS copiado a propósito de .nav-btn/.nav-btn.active (style.css, la
+   versión "pill" que gana la cascada, no la más vieja) — mismo look que
+   el resto de los botones del top bar sin engancharse a su clase. */
 .avz-nav-btn {
-  padding: 6px 14px; border: none; background: transparent;
-  color: var(--gray-400); font-family: var(--font-body);
+  min-height: 34px; display: inline-flex; align-items: center;
+  padding: 0 16px; border: none; background: transparent;
+  color: #bfbfba; font-family: var(--font-body);
   font-size: 13px; font-weight: 400; cursor: pointer;
-  border-radius: var(--radius-sm); letter-spacing: .3px;
+  border-radius: 999px; letter-spacing: .3px;
   transition: background-color .15s, color .15s;
 }
-.avz-nav-btn:hover { color: var(--white); background: rgba(255,255,255,.08); }
-.avz-nav-btn.active { color: var(--white); background: rgba(255,255,255,.12); font-weight: 500; }
+.avz-nav-btn:hover { background: rgba(255,255,255,.10); }
+.avz-nav-btn.active {
+  color: var(--black); background: var(--white);
+  box-shadow: 0 4px 14px rgba(0,0,0,.22); font-weight: 600;
+}
 
 .avz-drawer-nav-btn {
   display: flex; align-items: center; gap: 12px;

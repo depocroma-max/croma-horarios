@@ -3125,13 +3125,17 @@ function iniciarAppConSesion() {
     adminAutenticado = true;
     sessionStorage.setItem('croma_admin_auth', '1');
     document.getElementById('navBtnAdmin').style.display       = '';
-    document.getElementById('navBtnCalendario').style.display  = '';
+    // "Calendario" (sistema viejo, ver Etapa 6/9 avisos-provider) jubilado
+    // del top bar — se deja oculto a propósito, no se restaura su display.
     document.getElementById('drawerNavAdmin').style.display    = '';
-    document.getElementById('drawerNavCalendario').style.display = '';
     document.getElementById('bellWrap').style.display       = 'flex';
     document.getElementById('bellWrapEmp').style.display    = 'none';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
     document.querySelectorAll('.drawer-nav-btn').forEach(b => b.style.display = '');
+    // Re-ocultar "Calendario" (sistema viejo jubilado) después del forEach
+    // genérico de arriba, que los vuelve a mostrar a todos por igual.
+    document.getElementById('navBtnCalendario').style.display = 'none';
+    document.getElementById('drawerNavCalendario').style.display = 'none';
     actualizarIndicadorSesion();
     showApp();
     const vistaGuardada = localStorage.getItem('croma_vista') || 'empleados';
@@ -4258,6 +4262,8 @@ function renderAdminInline() {
       "<button class='rail-item' onclick=\"switchAdminTab('ajusteJornada',this)\">" + icon('clock','icon-16') + "<span>Ajuste de jornada</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('fichadas',this)\">" + icon('download','icon-16') + "<span>Fichadas</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('recibos',this)\">" + icon('fileText','icon-16') + "<span>Recibos</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('diasVacaciones',this)\">" + icon('palmtree','icon-16') + "<span>Días de Vacaciones</span></button>" +
+      "<button class='rail-item' onclick=\"switchAdminTab('bancoHoras',this)\">" + icon('timer','icon-16') + "<span>Banco de horas</span></button>" +
     "</nav>" +
     "<main class='admin-main-v2'>" +
     "<div id='adminTabEmpleados' class='admin-tab-content'>" +
@@ -4382,6 +4388,8 @@ function renderAdminInline() {
     "<div id='adminTabAjusteJornada' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabFichadas' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabRecibos' class='admin-tab-content' style='display:none'></div>" +
+    "<div id='adminTabDiasVacaciones' class='admin-tab-content' style='display:none'></div>" +
+    "<div id='adminTabBancoHoras' class='admin-tab-content' style='display:none'></div>" +
     "</main>" +
     "</div>" +
     "</div>";
@@ -4399,10 +4407,14 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabAjusteJornada').style.display= tab === 'ajusteJornada'  ? 'block' : 'none';
   document.getElementById('adminTabFichadas').style.display     = tab === 'fichadas'       ? 'block' : 'none';
   document.getElementById('adminTabRecibos').style.display      = tab === 'recibos'        ? 'block' : 'none';
+  document.getElementById('adminTabDiasVacaciones').style.display = tab === 'diasVacaciones' ? 'block' : 'none';
+  document.getElementById('adminTabBancoHoras').style.display   = tab === 'bancoHoras'     ? 'block' : 'none';
   if (tab === 'configuracion') cargarConfigAdmin();
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
   if (tab === 'fichadas') renderFichadasTab();
   if (tab === 'recibos') renderRecibosAdminTab();
+  if (tab === 'diasVacaciones') cargarBancoDias();
+  if (tab === 'bancoHoras') cargarBancoHorasAdmin();
 }
 
 // ── ADMINISTRACIÓN → RECIBOS ──────────────────────────
@@ -7114,9 +7126,9 @@ function renderVacacionesEmpleadoHTML(nombreEmp, vac, solicitudes) {
     ${solicsRows}`;
 }
 
-// ── SOLICITUDES GLOBALES (tab admin) ──────────────────
+// ── SOLICITUDES GLOBALES (tab Solicitudes dentro de Avisos) ───────────
 async function cargarSolicitudesAdmin() {
-  const container = document.getElementById('vacSolicitudesContainer');
+  const container = document.getElementById('avzSolicitudesContainer');
   if (!container) return;
   if (_vacSolicitudesCache === null) {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
@@ -7125,14 +7137,8 @@ async function cargarSolicitudesAdmin() {
     const todas = await fetchSolicitudesCache(false);
     const sols = todas.filter(function(s) { return s.estado === 'pendiente'; });
 
-    // Badge de pendientes
-    const badge = document.getElementById('vacPendBadge');
-    const tabBtn = document.getElementById('vacTabSolicitudesBtn');
-    if (badge) {
-      if (sols.length > 0) { badge.textContent = sols.length + ' pendiente' + (sols.length > 1 ? 's' : ''); badge.style.display = ''; }
-      else badge.style.display = 'none';
-    }
-    if (tabBtn) tabBtn.textContent = 'Solicitudes pendientes' + (sols.length ? ' (' + sols.length + ')' : '');
+    const tabBtn = document.getElementById('avzTabSolicitudes');
+    if (tabBtn) tabBtn.textContent = 'Solicitudes' + (sols.length ? ' (' + sols.length + ')' : '');
 
     if (!sols.length) {
       container.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:14px">No hay solicitudes pendientes</div>';
@@ -7156,7 +7162,7 @@ async function cargarSolicitudesAdmin() {
             <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5"
               onclick="abrirModalRespuesta('${s.id}','rechazada','${encodeURIComponent(s.empleado)}')">✗ Rechazar</button>
             <button class="btn-admin-edit" style="font-size:11px"
-              onclick="_calVacMes=${mesIdx};_calVacAnio=${anioSol};switchVacTab('calendario',document.querySelector('#vacTabs .admin-tab'));setTimeout(cargarCalendarioVacaciones,50)">${icon('calendar','icon-14')} Ver</button>
+              onclick="setView('calendario');_calVacMes=${mesIdx};_calVacAnio=${anioSol};setTimeout(cargarCalendarioVacaciones,50)">${icon('calendar','icon-14')} Ver</button>
           </div>
         </td>
       </tr>`;
@@ -7276,6 +7282,8 @@ async function responderSolicitudAdmin(id, estado, nota) {
     _vacSolicitudesCache = null; // invalidar cache
     const vacView = document.getElementById('viewCalendario');
     if (vacView && vacView.classList.contains('active')) renderCalendarioView();
+    // Tab "Solicitudes" dentro de Avisos, si está visible
+    if (document.getElementById('avzSolicitudesContainer')) cargarSolicitudesAdmin();
     // Si hay vacAdminContent_inner visible, recargar también
     const inner = document.getElementById('vacAdminContent_inner');
     if (inner) {
@@ -8484,15 +8492,16 @@ function renderCalendarioView() {
   const container = document.getElementById('calendarioAdminContainer');
   if (!container) return;
 
+  // "Solicitudes pendientes" (→ tab Solicitudes en Avisos) y "Banco de
+  // días"/"Banco de horas" (→ Administración) jubilados de acá — ver
+  // avisosProvider Etapa 6/9. Quedan solo Calendario y Anuncios, sin
+  // punto de entrada propio en el top bar (Calendario está oculto), pero
+  // siguen funcionando para quien llegue por un link interno (campana).
   container.innerHTML =
     '<div class="admin-inline-wrap">' +
-    '<div id="vacPendBadge" style="display:none"></div>' +
     '<div class="admin-tabs" id="vacTabs">' +
       '<button class="admin-tab active" onclick="switchVacTab(\'calendario\',this)">Calendario</button>' +
       '<button class="admin-tab" onclick="switchVacTab(\'anuncios\',this)">Anuncios</button>' +
-      '<button class="admin-tab" id="vacTabSolicitudesBtn" onclick="switchVacTab(\'solicitudes\',this)">Solicitudes pendientes</button>' +
-      '<button class="admin-tab" onclick="switchVacTab(\'banco\',this)">Banco de días</button>' +
-      '<button class="admin-tab" onclick="switchVacTab(\'bancoHoras\',this)">Banco de horas</button>' +
     '</div>' +
     '<div id="vacCalendarioContainer" class="admin-tab-content">' +
       '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
@@ -8505,15 +8514,6 @@ function renderCalendarioView() {
       '</div>' +
       '<div id="adminAnunciosList"><div style="padding:2rem;text-align:center;color:#94a3b8;font-size:13px">Cargando...</div></div>' +
     '</div>' +
-    '<div id="vacSolicitudesContainer" class="admin-tab-content" style="display:none">' +
-      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
-    '</div>' +
-    '<div id="vacBancoContainer" class="admin-tab-content" style="display:none">' +
-      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
-    '</div>' +
-    '<div id="vacBancoHorasContainer" class="admin-tab-content" style="display:none">' +
-      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
-    '</div>' +
     '</div>';
 
   // Cargar calendario con cache
@@ -8525,18 +8525,12 @@ function switchVacTab(tab, btn) {
   btn.classList.add('active');
   document.getElementById('vacCalendarioContainer').style.display   = tab === 'calendario'  ? 'block' : 'none';
   document.getElementById('vacAnunciosContainer').style.display     = tab === 'anuncios'    ? 'block' : 'none';
-  document.getElementById('vacSolicitudesContainer').style.display  = tab === 'solicitudes' ? 'block' : 'none';
-  document.getElementById('vacBancoContainer').style.display        = tab === 'banco'       ? 'block' : 'none';
-  document.getElementById('vacBancoHorasContainer').style.display   = tab === 'bancoHoras' ? 'block' : 'none';
-  if (tab === 'solicitudes') cargarSolicitudesAdmin();
-  if (tab === 'banco')       cargarBancoDias();
   if (tab === 'anuncios')    cargarListaAnuncios();
-  if (tab === 'bancoHoras')  cargarBancoHorasAdmin();
 }
 
-// ── BANCO DE DÍAS (tab vacaciones) ───────────────────
+// ── DÍAS DE VACACIONES (ex "Banco de días", tab Administración) ──────
 async function cargarBancoDias() {
-  const container = document.getElementById('vacBancoContainer');
+  const container = document.getElementById('adminTabDiasVacaciones');
   if (!container) return;
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
   const anio = new Date().getFullYear();
@@ -8609,7 +8603,7 @@ async function cargarBancoDias() {
 }
 
 async function cargarBancoDiasAnio(anio) {
-  const container = document.getElementById('vacBancoContainer');
+  const container = document.getElementById('adminTabDiasVacaciones');
   if (!container) return;
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
   try {
@@ -8665,10 +8659,10 @@ async function cargarBancoDiasAnio(anio) {
   }
 }
 
-// ── BANCO DE HORAS ────────────────────────────────────
+// ── BANCO DE HORAS (tab Administración) ───────────────
 
 async function cargarBancoHorasAdmin() {
-  const container = document.getElementById('vacBancoHorasContainer');
+  const container = document.getElementById('adminTabBancoHoras');
   if (!container) return;
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
   try {
