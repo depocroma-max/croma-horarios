@@ -5936,7 +5936,10 @@ async function _guardarRecibo(modo) {
 }
 
 async function _recibosDescargarAdmin(id, btn) {
-  if (btn) btn.disabled = true;
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const textoOriginal = btn.innerHTML;
+  btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;display:inline-block"></span>`;
   try {
     const resp = await fetch(`${BACKEND_URL}/api/recibos/${encodeURIComponent(id)}/descargar`, {
       headers: { 'Authorization': `Bearer ${_getToken()}` },
@@ -5960,7 +5963,8 @@ async function _recibosDescargarAdmin(id, btn) {
   } catch (err) {
     showToast('Error de conexión al descargar');
   } finally {
-    if (btn) btn.disabled = false;
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
   }
 }
 
@@ -7566,6 +7570,12 @@ function _renderListadoRecibosPortal() {
 async function _recibosPortalDescargar(id, btn) {
   if (!btn || btn.disabled) return;
   btn.disabled = true;
+  // Feedback visual mientras dura el pedido — sin esto el botón queda
+  // disabled pero se ve igual, y con GAS/Drive lentos el empleado piensa
+  // que no pasó nada y prueba de nuevo en otro botón o recarga la página,
+  // generando pedidos de más en paralelo.
+  const textoOriginal = btn.innerHTML;
+  btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;display:inline-block;vertical-align:-2px"></span> Descargando…`;
   try {
     const resp = await fetch(`${BACKEND_URL}/api/recibos/mi-perfil/${encodeURIComponent(id)}/descargar`, {
       headers: { 'Authorization': `Bearer ${_getToken()}` },
@@ -7599,6 +7609,7 @@ async function _recibosPortalDescargar(id, btn) {
     showToast('No pudimos cargar tus recibos.');
   } finally {
     btn.disabled = false;
+    btn.innerHTML = textoOriginal;
   }
 }
 
