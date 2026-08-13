@@ -2301,7 +2301,10 @@ async function cargarPerfiles(prefetched) {
   if (!prefetched && !url) return;
 
   try {
-    const json = prefetched || await fetchJSONretry(`${url}?accion=perfiles`);
+    // Fase 2A Sheets API: antes pegaba directo a GAS (?accion=perfiles).
+    // Cubre tanto Panel/Admin (cargarDatos) como Administración (línea de
+    // Promise.all más abajo) — ambos pasan por esta misma función.
+    const json = prefetched || await apiPerfilesSheets('', { method: 'GET' });
     if (!json.ok) return;
 
     if (json.categorias?.length) CATEGORIAS_CONFIG = json.categorias;
@@ -5221,6 +5224,10 @@ const apiHorariosSheets = (path, opciones) => _apiFetch('/api/horarios-sheets', 
 // getHorarios() deja de ejecutarse en GAS. accion=datos_portal_empleado
 // sigue intacta en GAS — rollback: volver el fetch de abajo a la URL vieja.
 const apiDatosPortalEmpleado = (path, opciones) => _apiFetch('/api/datos-portal-empleado', path, opciones);
+// Fase 2A: reemplaza accion=perfiles del Panel/Admin y de Administración
+// (ambos pasan por cargarPerfiles()). accion=perfiles sigue intacta en GAS
+// — rollback: volver el fetch de cargarPerfiles() a la URL vieja.
+const apiPerfilesSheets = (path, opciones) => _apiFetch('/api/perfiles-sheets', path, opciones);
 // Mensaje seguro de una respuesta {ok:false,...} — las rutas de Recibos usan
 // "mensaje", los middlewares de auth (401/403) usan "error", _apiFetch usa
 // "error" para sus propios fallos de red/parseo. Un solo lugar para no
