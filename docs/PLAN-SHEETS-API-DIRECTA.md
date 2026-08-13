@@ -125,20 +125,26 @@ que escribe (no hace falta para módulos de solo lectura).
 
 ## 7. Orden de migración sugerido (por módulo)
 
-Criterio: primero lo de **solo lectura y menor riesgo** (para validar el
-patrón completo con el menor blast radius posible), después lo de mayor
-volumen de tráfico (donde más se nota el cuello de botella), dejando
-**fichadas** (la acción más sensible — es el registro legal de asistencia)
-para el final, cuando el patrón ya esté maduro.
+**Decisión (2026-08-13):** se prioriza arrancar directo por **Horarios** en
+vez de por Perfiles — es lo que más se nota en el uso real (Portal Empleado),
+y al revisar el código se confirmó que `accion=horarios` es **puramente de
+lectura**: no existe ninguna acción que escriba en la hoja `DATOS GENERALES`
+(los horarios se cargan a mano en la Sheet, o se completan vía fichadas, que
+es un módulo aparte). Eso baja el riesgo de arrancar por acá — no hace falta
+la cola de escrituras (§6) para esta pieza puntual, es tan "solo lectura"
+como Perfiles, solo que con más volumen de tráfico y más columnas para
+mapear. `guardar_perfil`/`guardar_categoria` (que antes estaban agrupadas acá
+por error) en realidad escriben en `EMPLEADOS`/`CATEGORIAS` — se movieron a
+la fase de Perfiles, donde corresponden.
 
 | Fase | Módulo | Acciones GAS que reemplaza | Por qué en este orden |
 |---|---|---|---|
-| 0 | Infra | — | Cliente Sheets API en croma-backend + cola de escritura + script de refresh token con scope de Sheets. Sin esto no arranca nada. |
-| 1 | Perfiles + Categorías (solo lectura) | `perfiles` | Ya está cacheado, bajo riesgo, permite validar todo el patrón (auth, lectura de filas, mapeo a JSON) de punta a punta con impacto mínimo si algo falla. |
-| 2 | Certificados | `cargar_certificados`, `guardar_certificado`, `borrar_certificado` | Primer módulo con escritura — valida la cola de concurrencia (§6) con volumen bajo. |
-| 3 | Config / Sucursales geo / Eventos | `get_config`, `guardar_config`, `get_eventos`, `guardar_evento`, `eliminar_evento`, `get_sucursales_geo` | Tráfico bajo, ya cacheados, riesgo bajo. |
-| 4 | Vacaciones / Banco de horas | `get_vacaciones`, `solicitar_vac`, `responder_solicitud`, `get_solicitudes_vac`, `get_banco_horas*`, `ajustar_vac`, `inicializar_vac`, `agregar_vacacion_admin` | Más módulos interrelacionados, pero bien acotados. |
-| 5 | Horarios | `horarios`, `guardar_perfil`, `guardar_categoria` | El de mayor volumen de tráfico — dejarlo para cuando el patrón ya esté probado en 4 módulos. |
+| 0 | Infra | — | Cliente Sheets API en croma-backend + script de refresh token con scope de Sheets. Sin esto no arranca nada. |
+| 1 | **Horarios** (solo lectura) | `horarios` | Mayor volumen de tráfico, el más pegado al síntoma reportado (Portal Empleado lento/en blanco) — y sin acción de escritura propia, así que arrancar por acá no requiere la cola de concurrencia (§6) todavía. |
+| 2 | Perfiles + Categorías | `perfiles`, `guardar_perfil`, `guardar_categoria` | Primer módulo con escritura — acá sí hace falta la cola de concurrencia (§6), con volumen bajo para probarla primero. |
+| 3 | Certificados | `cargar_certificados`, `guardar_certificado`, `borrar_certificado` | Mismo patrón que Perfiles, ya validado. |
+| 4 | Config / Sucursales geo / Eventos | `get_config`, `guardar_config`, `get_eventos`, `guardar_evento`, `eliminar_evento`, `get_sucursales_geo` | Tráfico bajo, ya cacheados, riesgo bajo. |
+| 5 | Vacaciones / Banco de horas | `get_vacaciones`, `solicitar_vac`, `responder_solicitud`, `get_solicitudes_vac`, `get_banco_horas*`, `ajustar_vac`, `inicializar_vac`, `agregar_vacacion_admin` | Más módulos interrelacionados, pero bien acotados. |
 | 6 | Login de empleados / Identidad | `cargar_usuarios_interno` (vía `identidad.js`/`gas.js` en croma-backend) | Ya está cacheado y es lo menos urgente (login ya no es el cuello de botella principal). |
 | 7 | Recibos (listado + subir + reemplazar) | `listar_recibos_empleado`, `subir_recibo`, `reemplazar_recibo` | La descarga ya se migró a Drive directo — cierra el círculo para que Recibos no dependa de GAS en absoluto. |
 | 8 | Fichadas | `guardarFichada`, `get_fichadas_empleado`, `get_fichadas_hoy_local`, `acreditarBanco`, `usarBanco`, `ajustar_jornada` | Al final — es el registro legal de asistencia, se migra último y con más testing, cuando el patrón ya está maduro en 7 módulos. |
