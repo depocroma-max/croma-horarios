@@ -222,12 +222,19 @@ function _cacheableTextOutput(cacheKey, computeFn) {
 // antes eran 4 ejecuciones de GAS separadas por cada apertura. Reusa las
 // funciones existentes tal cual (parseando su JSON de vuelta) para no
 // duplicar ninguna lógica ni tocar los otros consumidores de esas acciones.
+//
+// sin_horarios=1 (Fase 1B, docs/PLAN-SHEETS-API-DIRECTA.md en este repo):
+// variante aditiva para el agregador de croma-backend — evita ejecutar
+// getHorarios() acá (esa pieza se lee aparte, directo por Sheets API desde
+// Node) para sacarla de la cola de ejecuciones de GAS. Sin el parámetro,
+// comportamiento y contrato 100% idénticos a antes — nadie más lo manda.
 function getDatosPortalEmpleado(e) {
   try {
+    const sinHorarios  = String((e && e.parameter && e.parameter.sin_horarios) || '') === '1';
     const perfiles     = JSON.parse(getPerfiles().getContent());
     const certificados = JSON.parse(getCertificados().getContent());
     const vacaciones    = JSON.parse(getSolicitudesVacaciones({ parameter: { estado: 'aprobada' } }).getContent());
-    const horarios      = JSON.parse(getHorarios(e).getContent());
+    const horarios      = sinHorarios ? null : JSON.parse(getHorarios(e).getContent());
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
       perfiles: perfiles,
@@ -244,7 +251,10 @@ function getDatosPortalEmpleado(e) {
 function doGet(e) {
   const accion = e.parameter.accion || '';
 
-  if (accion === 'datos_portal_empleado') return _cacheableTextOutput('datos_portal_empleado|' + (e.parameter.empleado || ''), function() { return getDatosPortalEmpleado(e); });
+  // Cache key incluye sin_horarios para no mezclar la variante completa con
+  // la recortada (si no, una respuesta sin horarios podría servirse cacheada
+  // para un pedido normal, o viceversa).
+  if (accion === 'datos_portal_empleado') return _cacheableTextOutput('datos_portal_empleado|' + (e.parameter.empleado || '') + '|' + (e.parameter.sin_horarios || ''), function() { return getDatosPortalEmpleado(e); });
   if (accion === 'horarios')            return _cacheableTextOutput('horarios|' + (e.parameter.empleado || ''), function() { return getHorarios(e); });
   if (accion === 'perfiles')            return _cacheableTextOutput('perfiles', getPerfiles);
   if (accion === 'guardar_perfil')      return guardarPerfil(e);

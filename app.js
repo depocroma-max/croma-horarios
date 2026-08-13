@@ -3230,17 +3230,15 @@ async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
   try {
     // Filtrar por empleado del lado del servidor: baja el payload de "toda
     // la hoja" a solo las filas de este empleado (mucho más rápido).
-    // datos_portal_empleado consolida perfiles+certificados+vacaciones
-    // aprobadas+horarios en un solo viaje a GAS (antes eran 4 separados,
-    // 4 ejecuciones reales de GAS por cada apertura del Portal).
+    // Fase 1B: antes pegaba a accion=datos_portal_empleado (GAS, 4
+    // ejecuciones internas). Ahora pasa por croma-backend, que arma el
+    // mismo contrato combinando GAS (sin horarios) + Sheets API en
+    // paralelo — mismo formato de respuesta, paridad validada campo a
+    // campo (ver docs/PLAN-SHEETS-API-DIRECTA.md).
     const nombreEmp = sesionActual?.empleadoNombre || sesionActual?.nombre || '';
-    const urlConsolidada = `${url}?accion=datos_portal_empleado` +
-      (nombreEmp ? '&empleado=' + encodeURIComponent(nombreEmp) : '');
 
     const [horariosResp] = await Promise.allSettled([
-      _fetchConTimeout(urlConsolidada).then(async r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const consolidado = await r.json();
+      apiDatosPortalEmpleado(nombreEmp ? '?empleado=' + encodeURIComponent(nombreEmp) : '', { method: 'GET' }).then(async consolidado => {
         if (consolidado.ok === false) throw new Error(consolidado.error || 'Error');
         await Promise.allSettled([
           cargarPerfiles(consolidado.perfiles),
@@ -5217,6 +5215,12 @@ const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opcione
 // sigue intacta — si hace falta revertir, alcanza con volver a llamarla
 // directo en cargarDatos() (ver ese fetch más arriba en este archivo).
 const apiHorariosSheets = (path, opciones) => _apiFetch('/api/horarios-sheets', path, opciones);
+// Fase 1B: reemplaza accion=datos_portal_empleado del Portal Empleado.
+// croma-backend arma el mismo contrato combinando GAS (sin_horarios=1,
+// perfiles+certificados+vacaciones) + Sheets API (horarios) en paralelo —
+// getHorarios() deja de ejecutarse en GAS. accion=datos_portal_empleado
+// sigue intacta en GAS — rollback: volver el fetch de abajo a la URL vieja.
+const apiDatosPortalEmpleado = (path, opciones) => _apiFetch('/api/datos-portal-empleado', path, opciones);
 // Mensaje seguro de una respuesta {ok:false,...} — las rutas de Recibos usan
 // "mensaje", los middlewares de auth (401/403) usan "error", _apiFetch usa
 // "error" para sus propios fallos de red/parseo. Un solo lugar para no
