@@ -2403,7 +2403,12 @@ async function cargarDatos(urls) {
   }
 
   try {
-    const json = await fetchJSONretry(`${urlUnica}?accion=horarios`);
+    // Fase 1 Sheets API: antes pegaba directo a GAS (?accion=horarios).
+    // Ahora pasa por croma-backend -> Sheets API v4, mismo contrato JSON
+    // (paridad validada campo a campo, ver docs/PLAN-SHEETS-API-DIRECTA.md).
+    // Rollback: volver esta línea a
+    // `await fetchJSONretry(\`${urlUnica}?accion=horarios\`)`.
+    const json = await apiHorariosSheets('', { method: 'GET' });
     // Compatible con formato nuevo (ok:true) y viejo (sin ok)
     if (json.ok === false) throw new Error(json.error || 'Error en servidor');
 
@@ -5207,6 +5212,11 @@ const apiEmpleados = (path, opciones) => _apiFetch('/api/empleados', path, opcio
 const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opciones);
 const apiFichadas  = (path, opciones) => _apiFetch('/api/fichadas', path, opciones);
 const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opciones);
+// Fase 1 Sheets API (docs/PLAN-SHEETS-API-DIRECTA.md): reemplaza el fetch
+// directo a GAS (?accion=horarios) del Panel/Admin. accion=horarios en GAS
+// sigue intacta — si hace falta revertir, alcanza con volver a llamarla
+// directo en cargarDatos() (ver ese fetch más arriba en este archivo).
+const apiHorariosSheets = (path, opciones) => _apiFetch('/api/horarios-sheets', path, opciones);
 // Mensaje seguro de una respuesta {ok:false,...} — las rutas de Recibos usan
 // "mensaje", los middlewares de auth (401/403) usan "error", _apiFetch usa
 // "error" para sus propios fallos de red/parseo. Un solo lugar para no
