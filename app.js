@@ -2802,7 +2802,8 @@ let sesionActual = null;
 // prefetched: ver nota en cargarPerfiles().
 async function cargarCertificados(prefetched) {
   try {
-    const json = prefetched || await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=cargar_certificados`);
+    // Fase 4A Sheets API: antes pegaba directo a GAS (?accion=cargar_certificados).
+    const json = prefetched || await apiCertificadosSheets('', { method: 'GET' });
     if (json.ok) {
       CERTIFICADOS_CACHE = (json.certificados || []).map(c => {
         // La fecha puede venir como Date object o string — normalizar a "YYYY-MM-DD"
@@ -5228,6 +5229,10 @@ const apiDatosPortalEmpleado = (path, opciones) => _apiFetch('/api/datos-portal-
 // (ambos pasan por cargarPerfiles()). accion=perfiles sigue intacta en GAS
 // — rollback: volver el fetch de cargarPerfiles() a la URL vieja.
 const apiPerfilesSheets = (path, opciones) => _apiFetch('/api/perfiles-sheets', path, opciones);
+// Fase 4A: reemplaza accion=cargar_certificados del Panel/Admin
+// (cargarCertificados()). accion=cargar_certificados sigue intacta en GAS
+// — rollback: volver el fetch de cargarCertificados() a la URL vieja.
+const apiCertificadosSheets = (path, opciones) => _apiFetch('/api/certificados-sheets', path, opciones);
 // Mensaje seguro de una respuesta {ok:false,...} — las rutas de Recibos usan
 // "mensaje", los middlewares de auth (401/403) usan "error", _apiFetch usa
 // "error" para sus propios fallos de red/parseo. Un solo lugar para no
