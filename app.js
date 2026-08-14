@@ -5228,6 +5228,10 @@ const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opcione
 const apiVacaciones = (path, opciones) => _apiFetch('/api/vacaciones', path, opciones);
 // Fase 6B: reemplaza accion=guardar_certificado/borrar_certificado.
 const apiCertificadosAdmin = (path, opciones) => _apiFetch('/api/certificados', path, opciones);
+// Fase 6C.1: reemplaza accion=guardar_config.
+const apiConfig = (path, opciones) => _apiFetch('/api/config', path, opciones);
+// Fase 6C.1: reemplaza accion=guardar_foto_url (paso 2 de subirFotoEmpleado)
+// — reutiliza apiMiPerfil (ya definida arriba, base '/api/mi-perfil').
 // Fase 1 Sheets API (docs/PLAN-SHEETS-API-DIRECTA.md): reemplaza el fetch
 // directo a GAS (?accion=horarios) del Panel/Admin. accion=horarios en GAS
 // sigue intacta — si hace falta revertir, alcanza con volver a llamarla
@@ -6855,13 +6859,12 @@ async function subirFotoEmpleado(input, nombreEmp) {
 
     const fotoUrl = imgbbData.data.url;
 
-    // 2 — Guardar URL en el Apps Script (GET simple, sin base64)
-    const scriptUrl = `${APPS_SCRIPT_URL}?accion=guardar_foto_url` +
-      `&empleado=${encodeURIComponent(nombreEmp)}` +
-      `&foto_url=${encodeURIComponent(fotoUrl)}`;
-
-    const resp = await fetch(scriptUrl);
-    const json = await resp.json();
+    // 2 — Guardar la URL vía Node (JWT); el backend deriva el empleado de
+    // la propia sesión, no manda nombre porque no hace falta (autoservicio).
+    const json = await apiMiPerfil('/foto', {
+      method: 'POST',
+      body: JSON.stringify({ foto_url: fotoUrl }),
+    });
     if (!json.ok) throw new Error(json.error || 'Error guardando URL');
 
     // 3 — Actualizar avatar en pantalla
@@ -6956,7 +6959,7 @@ async function guardarEmailsSucursales() {
     for (const input of inputs) {
       const clave = 'email_suc_' + input.dataset.sucId;
       const valor = input.value.trim();
-      await fetch(vacApiUrl('guardar_config', { clave, valor }));
+      await apiConfig('', { method: 'POST', body: JSON.stringify({ clave, valor }) });
       _configCache[clave] = valor;
     }
     if (statusEl) { statusEl.textContent = '✓ Emails guardados'; statusEl.style.color = '#065f46'; statusEl.style.display = 'block'; }
@@ -6970,8 +6973,7 @@ async function guardarConfigAdmin() {
   const email = document.getElementById('cfgEmailAdmin')?.value.trim();
   const statusEl = document.getElementById('cfgStatus');
   try {
-    const resp = await fetch(vacApiUrl('guardar_config', { clave: 'email_admin', valor: email }));
-    const json = await resp.json();
+    const json = await apiConfig('', { method: 'POST', body: JSON.stringify({ clave: 'email_admin', valor: email }) });
     if (json.ok) {
       _configCache.email_admin = email;
       if (statusEl) { statusEl.textContent = '✓ Guardado'; statusEl.style.color='#065f46'; statusEl.style.display='block'; }
@@ -7027,8 +7029,7 @@ async function eliminarEmailContacto(idx) {
 async function guardarEmailsContactos(lista, statusEl) {
   try {
     const valor = JSON.stringify(lista);
-    const resp = await fetch(vacApiUrl('guardar_config', { clave: 'emails_contactos', valor }));
-    const json = await resp.json();
+    const json = await apiConfig('', { method: 'POST', body: JSON.stringify({ clave: 'emails_contactos', valor }) });
     if (!json.ok) throw new Error(json.error);
     _configCache.emails_contactos = valor;
     renderEmailsLista();

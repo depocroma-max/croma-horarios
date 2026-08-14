@@ -272,9 +272,9 @@ function doGet(e) {
   if (accion === 'cargar_certificados') return _cacheableTextOutput('cargar_certificados', getCertificados);
   if (accion === 'guardar_certificado') return _accionRetirada(e, 'guardar_certificado', 'CERTIFICADO');
   if (accion === 'borrar_certificado')  return _accionRetirada(e, 'borrar_certificado', 'CERTIFICADO');
-  if (accion === 'guardar_foto_url')    return guardarFotoUrl(e);
+  if (accion === 'guardar_foto_url')    return _accionRetirada(e, 'guardar_foto_url', 'EMPLEADO');
   if (accion === 'get_config')          return _cacheableTextOutput('get_config', getConfig);
-  if (accion === 'guardar_config')      return guardarConfig(e);
+  if (accion === 'guardar_config')      return _accionRetirada(e, 'guardar_config', 'CONFIG');
   if (accion === 'get_vacaciones')      return getVacaciones(e);
   if (accion === 'inicializar_vac')     return _accionRetirada(e, 'inicializar_vac', 'VACACIONES');
   if (accion === 'ajustar_vac')         return _accionRetirada(e, 'ajustar_vac', 'VACACIONES');
@@ -1313,7 +1313,116 @@ function despacharAccionSegura(envelope) {
   if (accion === 'certificado_guardar')      return accionCertificadoGuardar(datos);
   if (accion === 'certificado_borrar')       return accionCertificadoBorrar(datos);
 
+  // Config + Foto de perfil (Fase 6C.1) — ver funciones más abajo.
+  if (accion === 'config_guardar') return accionConfigGuardar(datos);
+  if (accion === 'foto_guardar')   return accionFotoGuardar(datos);
+
   return _resp({ ok: false, error: 'Acción no reconocida' });
+}
+
+// ── CONFIG — acción segura (Fase 6C.1) ────────────────
+// Mismo criterio que Vacaciones/Certificados: llega solo por
+// despacharAccionSegura, actor sale de datos.actor (Node/JWT admin-jefe,
+// nunca del navegador). guardarConfig (legada, doGet, más abajo) queda
+// intacta mientras dure la transición. Whitelist de claves basada en las
+// 3 formas reales observadas en la hoja CONFIG hoy (email_admin,
+// emails_contactos, email_suc_<ID> uno por sucursal) — no se inventa nada
+// más allá de lo que el frontend ya escribe en producción.
+const _CONFIG_CLAVES_EXACTAS = ['email_admin', 'emails_contactos'];
+const _CONFIG_CLAVE_SUCURSAL_RE = /^email_suc_[A-Za-z0-9]+$/;
+
+function _configClaveValida(clave) {
+  return _CONFIG_CLAVES_EXACTAS.indexOf(clave) >= 0 || _CONFIG_CLAVE_SUCURSAL_RE.test(clave);
+}
+
+function accionConfigGuardar(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const clave = String(datos.clave || '').trim();
+    const valor = String(datos.valor || '').trim();
+    if (!clave) return _resp({ ok: false, error: 'Falta clave' });
+    if (!_configClaveValida(clave)) return _resp({ ok: false, error: 'Clave no permitida' });
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let hoja = ss.getSheetByName('CONFIG');
+    if (!hoja) {
+      hoja = ss.insertSheet('CONFIG');
+      hoja.getRange(1,1,1,2).setValues([['CLAVE','VALOR']]);
+    }
+    const vals = hoja.getDataRange().getValues();
+    const idx  = vals.findIndex(r => String(r[0]).trim() === clave);
+    const valorAnterior = idx >= 1 ? String(vals[idx][1] || '') : null;
+
+    if (idx >= 1) {
+      hoja.getRange(idx + 1, 2).setValue(valor);
+    } else {
+      hoja.appendRow([clave, valor]);
+    }
+
+    // Invalida el caché de lectura (CacheService, 20s TTL) para que
+    // get_config refleje el cambio de inmediato en vez de esperar el TTL.
+    try { CacheService.getScriptCache().remove('get_config'); } catch (e) {}
+
+    registrarAuditoria(actor, 'CONFIG_GUARDADA', 'CONFIG', clave,
+      { valor: valorAnterior }, { valor }
+    );
+
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── FOTO DE PERFIL — acción segura (Fase 6C.1) ────────
+// Autoservicio: empleado sale de datos.empleado, que Node ya resolvió con
+// resolverEmpleadoAutenticado() (identidad.js) antes de llamar acá — nunca
+// del body que mandó el navegador. guardarFotoUrl (legada, más arriba)
+// queda intacta mientras dure la transición.
+// Validación de URL basada en los dominios REALES observados en
+// EMPLEADOS.FOTO_URL hoy: drive.google.com (camino admin, no se toca acá),
+// i.ibb.co (lo que efectivamente devuelve ImgBB — NO "imgbb.com").
+// Esta acción es autoservicio, así que solo se espera i.ibb.co; el
+// dominio de Drive queda reservado al camino admin (PUT /empleados/:nombre,
+// sin cambios en esta fase).
+// Regex en vez de `new URL(...)` a propósito: confirmado en QA que el
+// runtime V8 de Apps Script no expone la clase URL de forma confiable
+// (ningún otro lugar de este archivo la usa) — con `new URL()` esta
+// función devolvía false SIEMPRE, incluso para URLs válidas de i.ibb.co.
+const _FOTO_URL_RE = /^https:\/\/i\.ibb\.co\//;
+
+function _fotoUrlValida(url) {
+  return _FOTO_URL_RE.test(String(url || ''));
+}
+
+function accionFotoGuardar(datos) {
+  const actor    = String(datos.actor    || 'desconocido');
+  const empleado = String(datos.empleado || '').trim();
+  const fotoUrl  = String(datos.foto_url || '').trim();
+  if (!empleado || !fotoUrl) return _resp({ ok: false, error: 'Faltan datos' });
+  if (!_fotoUrlValida(fotoUrl)) return _resp({ ok: false, error: 'URL de foto no permitida' });
+
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('EMPLEADOS');
+  if (!hoja) return _resp({ ok: false, error: 'Hoja EMPLEADOS no encontrada' });
+
+  const vals = hoja.getDataRange().getValues();
+  const headers = vals[0].map(h => String(h).trim().toUpperCase());
+  const colFoto = headers.indexOf('FOTO_URL');
+  const col = colFoto >= 0 ? colFoto : 4; // fallback al índice fijo legado (col E) si el header no está
+
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]).trim() === empleado) {
+      const teniaFotoAntes = !!String(vals[i][col] || '').trim();
+      hoja.getRange(i + 1, col + 1).setValue(fotoUrl);
+      registrarAuditoria(actor, 'FOTO_ACTUALIZADA', 'EMPLEADO', empleado,
+        { teniaFoto: teniaFotoAntes }, { tieneFoto: true }
+      );
+      return _resp({ ok: true, foto_url: fotoUrl });
+    }
+  }
+  return _resp({ ok: false, error: 'Empleado no encontrado' });
 }
 
 // ═══════════════════════════════════════════════════════
