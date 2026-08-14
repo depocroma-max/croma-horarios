@@ -54,8 +54,8 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     if (accion === 'guardarFichada')  return guardarFichada(e);
-    if (accion === 'acreditarBanco') return acreditarBanco(e);
-    if (accion === 'usarBanco')      return usarBanco(e);
+    if (accion === 'acreditarBanco') return _accionRetirada(e, 'acreditarBanco', 'BANCO_HORAS');
+    if (accion === 'usarBanco')      return _accionRetirada(e, 'usarBanco', 'BANCO_HORAS');
     if (accion === 'ajustar_jornada') return ajustarJornada(e);
 
     // ── Acciones administrativas nuevas (Node → GAS) ──
@@ -265,7 +265,7 @@ function doGet(e) {
   if (accion === 'datos_portal_empleado') return _cacheableTextOutput('datos_portal_empleado|' + (e.parameter.empleado || '') + '|' + (e.parameter.sin_horarios || '') + '|' + (e.parameter.sin_perfiles || '') + '|' + (e.parameter.sin_certificados || '') + '|' + (e.parameter.sin_vacaciones || ''), function() { return getDatosPortalEmpleado(e); });
   if (accion === 'horarios')            return _cacheableTextOutput('horarios|' + (e.parameter.empleado || ''), function() { return getHorarios(e); });
   if (accion === 'perfiles')            return _cacheableTextOutput('perfiles', getPerfiles);
-  if (accion === 'guardar_perfil')      return guardarPerfil(e);
+  if (accion === 'guardar_perfil')      return _accionRetirada(e, 'guardar_perfil', 'EMPLEADO');
   if (accion === 'guardar_categoria')   return guardarCategoria(e);
   if (accion === 'cargar_usuarios')     return getUsuarios(e);
   if (accion === 'guardar_usuarios')    return guardarUsuarios(e);
@@ -585,6 +585,35 @@ function guardarUsuarios(e) {
     .createTextOutput(JSON.stringify({ ok: false, error: 'Acción obsoleta. Utilice la API protegida.' }))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+// ── Fase 6A: cierre de acciones públicas sin blindar su lógica ───────
+// Mismo criterio que guardarUsuarios de arriba: la acción deja de poder
+// invocarse públicamente, pero la función original (guardarPerfil,
+// acreditarBanco, usarBanco) queda intacta y definida más abajo — sin
+// tocar, sin borrar — solo que el router ya no le llega a ningún caller.
+// acreditarBanco/usarBanco: confirmado por grep exhaustivo (Fase 6,
+// verificado de nuevo antes de este cierre) que no tienen ningún
+// consumidor real en app.js/fichar.html/kiosco.html ni en ningún otro
+// repo del ecosistema — estaban expuestas públicamente sin que nada las
+// llamara. guardar_perfil: su único consumidor real (activar/desactivar
+// empleado) se migró a PUT /empleados/:nombre (editar_empleado, Node,
+// JWT+rol, ya en producción) — no PATCH /acceso/estado, que es un campo
+// distinto (login, no si sigue trabajando). No necesita blindarse, se retira.
+function _accionRetirada(e, accion, entidad) {
+  try {
+    const traiaDatos = !!(e && e.parameter && (e.parameter.datos || e.postData));
+    registrarAuditoria(
+      'anonimo', 'INTENTO_BLOQUEADO_' + accion.toUpperCase(), entidad, accion,
+      null, { traia_parametro_datos: traiaDatos }
+    );
+  } catch (auditErr) {
+    Logger.log('Error registrando intento bloqueado de ' + accion + ': ' + auditErr.message);
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: false, error: 'Acción obsoleta. Utilice la API protegida.' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // =====================================================
 //  ADMINISTRACIÓN UNIFICADA DE EMPLEADOS + ACCESO
 // =====================================================

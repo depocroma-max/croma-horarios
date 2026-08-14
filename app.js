@@ -982,7 +982,12 @@ async function reactivarEmpleado(nombre) {
   showToast(`✓ ${nomMostrar} reactivado`);
 }
 
-// Persistir el estado activo/inactivo del perfil (backend + sessionStorage) y re-render
+// Persistir el estado activo/inactivo del perfil (backend + sessionStorage) y re-render.
+// Fase 6A: ya no pasa por guardar_perfil (GAS público, sin auth, retirado) —
+// usa PUT /api/empleados/:nombre (editar_empleado, JWT admin/jefe), que solo
+// pisa el campo ESTADO (y su espejo ACTIVO) y preserva el resto del perfil.
+// No confundir con PATCH /acceso/estado (accionDesactivarAcceso más abajo):
+// eso es si el empleado puede loguearse, esto es si sigue trabajando.
 async function _setEmpleadoActivo(nombre, activo) {
   const perfil = { ...(EMPLEADOS_PERFILES[nombre] || { nombre }), nombre, activo, _editadoLocal: true };
   EMPLEADOS_PERFILES[nombre] = perfil;
@@ -991,7 +996,11 @@ async function _setEmpleadoActivo(nombre, activo) {
     saved[nombre] = perfil;
     sessionStorage.setItem('croma_perfiles_locales', JSON.stringify(saved));
   } catch (e) {}
-  await guardarPerfil(perfil);
+  const res = await apiEmpleados(`/${encodeURIComponent(nombre)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ empleado: { estado: activo ? 'activo' : 'inactivo' } }),
+  });
+  if (!res.ok) showToast('No se pudo guardar: ' + (res.error || 'Error de conexión'));
   if (typeof cerrarDetalle === 'function') cerrarDetalle(); // cerrar overlay de detalle si está abierto
   renderEmpleados(state.datos);
 }
