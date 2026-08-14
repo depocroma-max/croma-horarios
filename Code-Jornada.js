@@ -224,20 +224,23 @@ function _cacheableTextOutput(cacheKey, computeFn) {
 // duplicar ninguna lógica ni tocar los otros consumidores de esas acciones.
 //
 // sin_horarios=1 (Fase 1B) / sin_perfiles=1 (Fase 2A) / sin_certificados=1
-// (Fase 4A, todas en docs/PLAN-SHEETS-API-DIRECTA.md en este repo):
-// variantes aditivas para el agregador de croma-backend — evitan ejecutar
-// getHorarios()/getPerfiles()/getCertificados() acá cuando esas piezas ya
-// se leen aparte, directo por Sheets API desde Node, para sacarlas de la
-// cola de ejecuciones de GAS. Sin los parámetros, comportamiento y
-// contrato 100% idénticos a antes — nadie más los manda.
+// (Fase 4A) / sin_vacaciones=1 (Fase 4B, todas en
+// docs/PLAN-SHEETS-API-DIRECTA.md en este repo): variantes aditivas para
+// el agregador de croma-backend — evitan ejecutar
+// getHorarios()/getPerfiles()/getCertificados()/getSolicitudesVacaciones()
+// acá cuando esas piezas ya se leen aparte, directo por Sheets API desde
+// Node, para sacarlas de la cola de ejecuciones de GAS. Sin los
+// parámetros, comportamiento y contrato 100% idénticos a antes — nadie
+// más los manda.
 function getDatosPortalEmpleado(e) {
   try {
     const sinHorarios     = String((e && e.parameter && e.parameter.sin_horarios) || '') === '1';
     const sinPerfiles     = String((e && e.parameter && e.parameter.sin_perfiles) || '') === '1';
     const sinCertificados = String((e && e.parameter && e.parameter.sin_certificados) || '') === '1';
+    const sinVacaciones   = String((e && e.parameter && e.parameter.sin_vacaciones) || '') === '1';
     const perfiles     = sinPerfiles ? null : JSON.parse(getPerfiles().getContent());
     const certificados = sinCertificados ? null : JSON.parse(getCertificados().getContent());
-    const vacaciones    = JSON.parse(getSolicitudesVacaciones({ parameter: { estado: 'aprobada' } }).getContent());
+    const vacaciones    = sinVacaciones ? null : JSON.parse(getSolicitudesVacaciones({ parameter: { estado: 'aprobada' } }).getContent());
     const horarios      = sinHorarios ? null : JSON.parse(getHorarios(e).getContent());
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
@@ -255,10 +258,11 @@ function getDatosPortalEmpleado(e) {
 function doGet(e) {
   const accion = e.parameter.accion || '';
 
-  // Cache key incluye sin_horarios/sin_perfiles/sin_certificados para no
-  // mezclar variantes recortadas con la completa (si no, una respuesta
-  // recortada podría servirse cacheada para un pedido normal, o viceversa).
-  if (accion === 'datos_portal_empleado') return _cacheableTextOutput('datos_portal_empleado|' + (e.parameter.empleado || '') + '|' + (e.parameter.sin_horarios || '') + '|' + (e.parameter.sin_perfiles || '') + '|' + (e.parameter.sin_certificados || ''), function() { return getDatosPortalEmpleado(e); });
+  // Cache key incluye sin_horarios/sin_perfiles/sin_certificados/sin_vacaciones
+  // para no mezclar variantes recortadas con la completa (si no, una
+  // respuesta recortada podría servirse cacheada para un pedido normal, o
+  // viceversa).
+  if (accion === 'datos_portal_empleado') return _cacheableTextOutput('datos_portal_empleado|' + (e.parameter.empleado || '') + '|' + (e.parameter.sin_horarios || '') + '|' + (e.parameter.sin_perfiles || '') + '|' + (e.parameter.sin_certificados || '') + '|' + (e.parameter.sin_vacaciones || ''), function() { return getDatosPortalEmpleado(e); });
   if (accion === 'horarios')            return _cacheableTextOutput('horarios|' + (e.parameter.empleado || ''), function() { return getHorarios(e); });
   if (accion === 'perfiles')            return _cacheableTextOutput('perfiles', getPerfiles);
   if (accion === 'guardar_perfil')      return guardarPerfil(e);
