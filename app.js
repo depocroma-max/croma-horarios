@@ -2866,9 +2866,7 @@ function getVacacionesAprobadasDe(nombreEmp) {
 
 async function guardarCertificado(cert) {
   try {
-    const datos = encodeURIComponent(JSON.stringify(cert));
-    const resp  = await fetch(`${APPS_SCRIPT_URL}?accion=guardar_certificado&datos=${datos}`);
-    const json  = await resp.json();
+    const json = await apiCertificadosAdmin('', { method: 'POST', body: JSON.stringify(cert) });
     if (json.ok) {
       CERTIFICADOS_CACHE.push({ ...cert, id: json.id });
       return { ok: true, id: json.id };
@@ -2879,8 +2877,7 @@ async function guardarCertificado(cert) {
 
 async function borrarCertificado(id) {
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=borrar_certificado&id=${encodeURIComponent(id)}`);
-    const json = await resp.json();
+    const json = await apiCertificadosAdmin(`/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (json.ok) CERTIFICADOS_CACHE = CERTIFICADOS_CACHE.filter(c => c.id !== id);
     return json.ok;
   } catch(e) { return false; }
@@ -5223,6 +5220,14 @@ const apiEmpleados = (path, opciones) => _apiFetch('/api/empleados', path, opcio
 const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opciones);
 const apiFichadas  = (path, opciones) => _apiFetch('/api/fichadas', path, opciones);
 const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opciones);
+// Fase 6B: reemplaza accion=solicitar_vac/responder_solicitud/inicializar_vac/
+// ajustar_vac/agregar_vacacion_admin (GAS público, sin auth) por estos 5
+// endpoints Node (JWT, rol server-side, BACKEND_SECRET agregado por el
+// backend). Las acciones GAS viejas siguen intactas mientras dure la
+// transición — rollback: volver los call-sites a vacApiUrl(...).
+const apiVacaciones = (path, opciones) => _apiFetch('/api/vacaciones', path, opciones);
+// Fase 6B: reemplaza accion=guardar_certificado/borrar_certificado.
+const apiCertificadosAdmin = (path, opciones) => _apiFetch('/api/certificados', path, opciones);
 // Fase 1 Sheets API (docs/PLAN-SHEETS-API-DIRECTA.md): reemplaza el fetch
 // directo a GAS (?accion=horarios) del Panel/Admin. accion=horarios en GAS
 // sigue intacta — si hace falta revertir, alcanza con volver a llamarla
@@ -7237,7 +7242,7 @@ function abrirModalAjusteAdmin(empEnc, anio) {
         </div>
         <p id="ajusteError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
-          <button class="btn-connect" style="margin:0" onclick="confirmarAjusteAdmin('${empEnc}',${anio})">Guardar ajuste</button>
+          <button class="btn-connect" style="margin:0" id="btnGuardarAjusteVac" onclick="confirmarAjusteAdmin('${empEnc}',${anio})">Guardar ajuste</button>
           <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
         </div>
       </div>
@@ -7247,21 +7252,25 @@ function abrirModalAjusteAdmin(empEnc, anio) {
 }
 
 async function confirmarAjusteAdmin(empEnc, anio) {
+  const btn = document.getElementById('btnGuardarAjusteVac');
+  if (btn && btn.disabled) return; // evita doble envío por doble click
   const nombreEmp = decodeURIComponent(empEnc);
   const ajuste = parseInt(document.getElementById('ajusteDias')?.value) || 0;
   const nota   = document.getElementById('ajusteNota')?.value.trim();
   const errEl  = document.getElementById('ajusteError');
   if (ajuste === 0) { errEl.textContent='El ajuste no puede ser 0'; errEl.style.display='block'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
   try {
-    const resp = await fetch(vacApiUrl('ajustar_vac', {
-      empleado: nombreEmp, anio, ajuste, nota
-    }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/ajustar', {
+      method: 'POST',
+      body: JSON.stringify({ empleado: nombreEmp, anio, ajuste, nota }),
+    });
     if (!json.ok) throw new Error(json.error || 'Error');
     cerrarAdmin();
     showToast('✓ Ajuste guardado');
     cargarVacacionesAdmin(nombreEmp);
   } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar ajuste'; }
     errEl.textContent = e.message;
     errEl.style.display = 'block';
   }
@@ -7271,8 +7280,7 @@ async function inicializarVacAdmin(anio) {
   if (!confirm(`¿Inicializar banco de vacaciones ${anio} para todos los empleados?`)) return;
   showToast('Procesando...');
   try {
-    const resp = await fetch(vacApiUrl('inicializar_vac', { anio }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/inicializar', { method: 'POST', body: JSON.stringify({ anio }) });
     if (!json.ok) throw new Error(json.error || 'Error');
     showToast(`✓ Banco ${anio} inicializado para ${json.total || 'todos los'} empleados`);
   } catch(e) {
@@ -7308,8 +7316,10 @@ function abrirModalRespuesta(solicitudId, estado, empEnc) {
 
 async function responderSolicitudAdmin(id, estado, nota) {
   try {
-    const resp = await fetch(vacApiUrl('responder_solicitud', { id, estado, nota_admin: nota || '' }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/responder', {
+      method: 'POST',
+      body: JSON.stringify({ id, estado, nota_admin: nota || '' }),
+    });
     if (!json.ok) throw new Error(json.error || 'Error');
     cerrarAdmin();
     showToast(estado === 'aprobada' ? '✓ Solicitud aprobada' : '✗ Solicitud rechazada');
@@ -7406,12 +7416,21 @@ async function confirmarSolicitudVac(empEnc, esAdmin) {
     errEl.textContent='La fecha hasta debe ser posterior a la fecha desde'; errEl.style.display='block'; return;
   }
   const dias = calcularDiasVacForm();
-  const datos = encodeURIComponent(JSON.stringify({ empleado: nombreEmp, fecha_desde: desde, fecha_hasta: hasta, dias }));
-  const accion = esAdmin ? 'agregar_vacacion_admin' : 'solicitar_vac';
   if (btn) { btn.disabled = true; btn.textContent = esAdmin ? 'Guardando...' : 'Enviando...'; }
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=${accion}&datos=${datos}`);
-    const json = await resp.json();
+    // esAdmin: admin/jefe cargando a nombre de otro empleado (empleado va
+    // en el body). Autoservicio (esAdmin=false): NO se manda "empleado" —
+    // el backend lo deriva del JWT de la propia sesión, nunca del cliente
+    // (ver informe Fase 6B, corrección de impersonación en solicitar_vac).
+    const json = esAdmin
+      ? await apiVacaciones('/agregar-admin', {
+          method: 'POST',
+          body: JSON.stringify({ empleado: nombreEmp, fecha_desde: desde, fecha_hasta: hasta, dias }),
+        })
+      : await apiVacaciones('/solicitar', {
+          method: 'POST',
+          body: JSON.stringify({ fecha_desde: desde, fecha_hasta: hasta, dias }),
+        });
     if (!json.ok) throw new Error(json.error || 'Error');
     _vacSolicitudesCache = null; // invalidar cache
     VACACIONES_APROBADAS_CACHE = []; // forzar recarga para que aparezca en el historial

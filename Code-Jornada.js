@@ -270,18 +270,18 @@ function doGet(e) {
   if (accion === 'cargar_usuarios')     return getUsuarios(e);
   if (accion === 'guardar_usuarios')    return guardarUsuarios(e);
   if (accion === 'cargar_certificados') return _cacheableTextOutput('cargar_certificados', getCertificados);
-  if (accion === 'guardar_certificado') return guardarCertificado(e);
-  if (accion === 'borrar_certificado')  return borrarCertificado(e);
+  if (accion === 'guardar_certificado') return _accionRetirada(e, 'guardar_certificado', 'CERTIFICADO');
+  if (accion === 'borrar_certificado')  return _accionRetirada(e, 'borrar_certificado', 'CERTIFICADO');
   if (accion === 'guardar_foto_url')    return guardarFotoUrl(e);
   if (accion === 'get_config')          return _cacheableTextOutput('get_config', getConfig);
   if (accion === 'guardar_config')      return guardarConfig(e);
   if (accion === 'get_vacaciones')      return getVacaciones(e);
-  if (accion === 'inicializar_vac')     return inicializarVacacionesAnio(e);
-  if (accion === 'ajustar_vac')         return ajustarDiasVacaciones(e);
-  if (accion === 'solicitar_vac')       return solicitarVacaciones(e);
+  if (accion === 'inicializar_vac')     return _accionRetirada(e, 'inicializar_vac', 'VACACIONES');
+  if (accion === 'ajustar_vac')         return _accionRetirada(e, 'ajustar_vac', 'VACACIONES');
+  if (accion === 'solicitar_vac')       return _accionRetirada(e, 'solicitar_vac', 'SOLICITUD_VAC');
   if (accion === 'get_solicitudes_vac') return getSolicitudesVacaciones(e);
-  if (accion === 'responder_solicitud') return responderSolicitud(e);
-  if (accion === 'agregar_vacacion_admin') return agregarVacacionAdmin(e);
+  if (accion === 'responder_solicitud') return _accionRetirada(e, 'responder_solicitud', 'SOLICITUD_VAC');
+  if (accion === 'agregar_vacacion_admin') return _accionRetirada(e, 'agregar_vacacion_admin', 'SOLICITUD_VAC');
   if (accion === 'get_anuncios')        return getAnuncios(e);
   if (accion === 'guardar_anuncio')     return guardarAnuncio(e);
   if (accion === 'eliminar_anuncio')    return eliminarAnuncio(e);
@@ -1302,7 +1302,334 @@ function despacharAccionSegura(envelope) {
   // visual aparte. Solo lectura, nunca escritura.
   if (accion === 'get_solicitudes_vac_aprobadas') return accionGetSolicitudesVacAprobadas(datos);
 
+  // Vacaciones administrativas + Certificados (Fase 6B) — ver bloque de
+  // funciones más abajo, sección "VACACIONES — acciones seguras" y
+  // "CERTIFICADOS — acciones seguras".
+  if (accion === 'vacaciones_solicitar')     return accionVacacionesSolicitar(datos);
+  if (accion === 'vacaciones_responder')     return accionVacacionesResponder(datos);
+  if (accion === 'vacaciones_inicializar')   return accionVacacionesInicializar(datos);
+  if (accion === 'vacaciones_ajustar')       return accionVacacionesAjustar(datos);
+  if (accion === 'vacaciones_agregar_admin') return accionVacacionesAgregarAdmin(datos);
+  if (accion === 'certificado_guardar')      return accionCertificadoGuardar(datos);
+  if (accion === 'certificado_borrar')       return accionCertificadoBorrar(datos);
+
   return _resp({ ok: false, error: 'Acción no reconocida' });
+}
+
+// ═══════════════════════════════════════════════════════
+//  VACACIONES — acciones seguras (Fase 6B)
+// ═══════════════════════════════════════════════════════
+// Llegan solo por despacharAccionSegura (BACKEND_SECRET, server-to-server
+// desde croma-backend) — actor sale de datos.actor, que Node ya resolvió
+// desde el JWT, nunca de nada que el navegador mande directo. Las
+// funciones legadas de arriba (solicitarVacaciones, responderSolicitud,
+// inicializarVacacionesAnio, ajustarDiasVacaciones, agregarVacacionAdmin)
+// NO se tocan — siguen intactas como implementación de referencia,
+// siguen siendo el camino público (doGet) mientras dure la transición.
+// Estas son funciones nuevas y paralelas a propósito, no un refactor de
+// las de arriba: agregan lock/idempotencia/auditoría que no vale la pena
+// sumarle a un código que va a retirarse. Reutilizan sí los helpers puros
+// ya existentes (buildEmailAdminSolicitud, buildEmailEmpleadoRespuesta,
+// formatearFechaEmail, descontarDiasVacaciones) para no duplicar esa
+// parte.
+
+function accionVacacionesSolicitar(datos) {
+  const empleado    = String(datos.empleado    || '').trim();
+  const fechaDesde  = String(datos.fecha_desde || '').trim();
+  const fechaHasta  = String(datos.fecha_hasta || '').trim();
+  const dias        = parseInt(datos.dias) || 1;
+  if (!empleado || !fechaDesde || !fechaHasta) return _resp({ ok: false, error: 'Faltan datos' });
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('SOLICITUDES_VAC');
+  if (!hoja) {
+    hoja = ss.insertSheet('SOLICITUDES_VAC');
+    hoja.getRange(1,1,1,8).setValues([[
+      'ID','EMPLEADO','FECHA_DESDE','FECHA_HASTA','DIAS','ESTADO','FECHA_SOLICITUD','NOTA_ADMIN'
+    ]]);
+  }
+  const id    = 'vac_' + Date.now();
+  const ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  hoja.appendRow([id, empleado, fechaDesde, fechaHasta, dias, 'pendiente', ahora, '']);
+
+  try {
+    const config = getConfigObj(ss);
+    const emailAdmin = config['email_admin'];
+    if (emailAdmin) {
+      const nomMostrar = empleado.replace(/^\d+\s+/, '');
+      MailApp.sendEmail({
+        to:       emailAdmin,
+        subject:  `📅 Nueva solicitud de vacaciones — ${nomMostrar}`,
+        htmlBody: buildEmailAdminSolicitud({
+          nomMostrar,
+          fechaDesdeFmt: formatearFechaEmail(fechaDesde),
+          fechaHastaFmt: formatearFechaEmail(fechaHasta),
+          dias,
+          fechaSolicitud: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'),
+        }),
+      });
+    }
+  } catch (mailErr) {
+    Logger.log('Error enviando email (vacaciones_solicitar): ' + mailErr.message);
+  }
+
+  return _resp({ ok: true, id });
+}
+
+// Idempotencia (punto 10): confirmado contra la UI real (renderVacacionesAdminHTML)
+// que los botones Aprobar/Rechazar SOLO se muestran cuando estado==='pendiente' —
+// no existe ningún flujo del producto que reabra o revierta una solicitud ya
+// resuelta. Regla: solo se procesa la transición si el estado actual es
+// 'pendiente'; cualquier otro estado actual devuelve error sin tocar nada
+// (sin reescribir la fila, sin volver a descontar, sin reenviar email).
+function accionVacacionesResponder(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor     = String(datos.actor      || 'desconocido');
+    const id        = String(datos.id         || '').trim();
+    const estado    = String(datos.estado     || '').trim();
+    const notaAdmin = String(datos.nota_admin || '').trim();
+    if (!id || !estado) return _resp({ ok: false, error: 'Faltan datos' });
+    if (['aprobada','rechazada'].indexOf(estado) < 0) return _resp({ ok: false, error: 'Estado inválido' });
+
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const hoja = ss.getSheetByName('SOLICITUDES_VAC');
+    if (!hoja) return _resp({ ok: false, error: 'Hoja no encontrada' });
+
+    const vals = hoja.getDataRange().getValues();
+    const idx  = vals.findIndex(r => String(r[0]).trim() === id);
+    if (idx < 1) return _resp({ ok: false, error: 'Solicitud no encontrada' });
+
+    const estadoAnterior = String(vals[idx][5] || 'pendiente').trim();
+    if (estadoAnterior !== 'pendiente') {
+      // No es un error de verdad — es un intento de re-procesar algo ya
+      // resuelto (doble click, doble aprobación, retry). Se corta acá,
+      // sin tocar la hoja ni reenviar el email.
+      return _resp({ ok: false, error: `Esta solicitud ya fue resuelta (estado: ${estadoAnterior})`, ya_resuelta: true });
+    }
+
+    const empleado    = String(vals[idx][1]).trim();
+    const dias         = parseInt(vals[idx][4]) || 0;
+    const fechaDesde   = vals[idx][2];
+    const fechaHasta   = vals[idx][3];
+
+    hoja.getRange(idx + 1, 6).setValue(estado);
+    hoja.getRange(idx + 1, 8).setValue(notaAdmin);
+
+    if (estado === 'aprobada') {
+      descontarDiasVacaciones(ss, empleado, fechaDesde, dias);
+    }
+
+    registrarAuditoria(
+      actor,
+      estado === 'aprobada' ? 'SOLICITUD_VAC_APROBADA' : 'SOLICITUD_VAC_RECHAZADA',
+      'SOLICITUD_VAC', id,
+      { estado: estadoAnterior },
+      { estado, nota_admin: notaAdmin, empleado, dias }
+    );
+
+    try {
+      const nomMostrar    = empleado.replace(/^\d+\s+/, '');
+      const fechaDesdeFmt = formatearFechaEmail(
+        fechaDesde instanceof Date
+          ? Utilities.formatDate(fechaDesde, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+          : String(fechaDesde)
+      );
+      const fechaHastaFmt = formatearFechaEmail(
+        fechaHasta instanceof Date
+          ? Utilities.formatDate(fechaHasta, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+          : String(fechaHasta)
+      );
+      const hojaEmp = ss.getSheetByName('EMPLEADOS');
+      if (hojaEmp) {
+        const empVals  = hojaEmp.getDataRange().getValues();
+        const headers  = empVals[0].map(h => String(h).trim().toUpperCase());
+        const colEmail = headers.indexOf('EMAIL');
+        const colNom   = headers.indexOf('EMPLEADO');
+        if (colEmail >= 0 && colNom >= 0) {
+          const fila = empVals.slice(1).find(r =>
+            String(r[colNom] || '').trim().toLowerCase() === empleado.toLowerCase()
+          );
+          const emailEmp = fila ? String(fila[colEmail] || '').trim() : '';
+          if (emailEmp) {
+            MailApp.sendEmail({
+              to:       emailEmp,
+              subject:  estado === 'aprobada'
+                ? `✅ Tus vacaciones fueron aprobadas`
+                : `❌ Solicitud de vacaciones rechazada`,
+              htmlBody: buildEmailEmpleadoRespuesta({ nomMostrar, estado, fechaDesdeFmt, fechaHastaFmt, diasSol: dias, notaAdmin }),
+            });
+          }
+        }
+      }
+    } catch (mailErr) {
+      Logger.log('Error enviando email al empleado (vacaciones_responder): ' + mailErr.message);
+    }
+
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionVacacionesInicializar(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const anio  = parseInt(datos.anio) || new Date().getFullYear();
+    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+
+    const hojaEmp = ss.getSheetByName('EMPLEADOS');
+    if (!hojaEmp) return _resp({ ok: false, error: 'Hoja EMPLEADOS no encontrada' });
+
+    const valsEmp = hojaEmp.getDataRange().getValues();
+    const headers = valsEmp[0].map(h => String(h).trim().toUpperCase());
+    let colFI     = headers.indexOf('FECHA_INGRESO');
+    if (colFI < 0) {
+      colFI = headers.length;
+      hojaEmp.getRange(1, colFI + 1).setValue('FECHA_INGRESO');
+    }
+
+    let hojaVac = ss.getSheetByName('VACACIONES');
+    if (!hojaVac) {
+      hojaVac = ss.insertSheet('VACACIONES');
+      hojaVac.getRange(1,1,1,7).setValues([[
+        'AÑO','EMPLEADO','FECHA_INGRESO','DIAS_BANCO','DIAS_USADOS','DIAS_AJUSTE','DIAS_DISPONIBLES'
+      ]]);
+    }
+
+    const valsVac  = hojaVac.getDataRange().getValues();
+    let procesados = 0;
+
+    valsEmp.slice(1).forEach(row => {
+      if (!row[0]) return;
+      const nombre = String(row[0]).trim();
+      const activo = row[5] !== false && row[5] !== 'FALSE';
+      if (!activo) return;
+      const fechaIngreso = row[colFI] || null;
+      const diasBanco    = calcularDiasVacaciones(fechaIngreso, anio);
+
+      const idxExistente = valsVac.findIndex(r =>
+        parseInt(r[0]) === anio && String(r[1]).trim().toLowerCase() === nombre.toLowerCase()
+      );
+
+      let fiStr = '';
+      if (fechaIngreso instanceof Date) {
+        fiStr = Utilities.formatDate(fechaIngreso, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      } else {
+        fiStr = String(fechaIngreso || '').trim();
+      }
+
+      if (idxExistente >= 1) {
+        const usados = parseInt(valsVac[idxExistente][4]) || 0;
+        const ajuste = parseInt(valsVac[idxExistente][5]) || 0;
+        hojaVac.getRange(idxExistente + 1, 1, 1, 7).setValues([[
+          anio, nombre, fiStr, diasBanco, usados, ajuste, diasBanco + ajuste - usados
+        ]]);
+      } else {
+        hojaVac.appendRow([anio, nombre, fiStr, diasBanco, 0, 0, diasBanco]);
+      }
+      procesados++;
+    });
+
+    // No se vuelca el dataset completo (nombres/fechas) — solo el resumen.
+    registrarAuditoria(actor, 'VACACIONES_INICIALIZADAS', 'VACACIONES', String(anio), null, { anio, empleados_afectados: procesados });
+
+    return _resp({ ok: true, total: procesados, anio });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionVacacionesAjustar(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor       = String(datos.actor    || 'desconocido');
+    const empleado    = String(datos.empleado || '').trim();
+    const anio        = parseInt(datos.anio) || new Date().getFullYear();
+    const ajusteDelta = parseInt(datos.ajuste || '0');
+    const nota        = String(datos.nota || '').trim();
+    if (!empleado) return _resp({ ok: false, error: 'Falta empleado' });
+    if (!ajusteDelta) return _resp({ ok: false, error: 'El ajuste no puede ser 0' });
+
+    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const hojaVac = ss.getSheetByName('VACACIONES');
+    if (!hojaVac) return _resp({ ok: false, error: 'Hoja VACACIONES no encontrada' });
+
+    const vals = hojaVac.getDataRange().getValues();
+    const idx  = vals.findIndex((r,i) => i>0 &&
+      parseInt(r[0]) === anio && String(r[1]).trim().toLowerCase() === empleado.toLowerCase()
+    );
+    if (idx < 1) return _resp({ ok: false, error: `No se encontró banco para ${empleado} en ${anio}` });
+
+    const banco         = parseInt(vals[idx][3]) || 0;
+    const usados         = parseInt(vals[idx][4]) || 0;
+    const ajusteAnterior = parseInt(vals[idx][5]) || 0;
+    const ajusteNuevo    = ajusteAnterior + ajusteDelta;
+    const disponibleAntes = banco + ajusteAnterior - usados;
+    const disponibleDespues = banco + ajusteNuevo - usados;
+
+    hojaVac.getRange(idx + 1, 6).setValue(ajusteNuevo);
+    hojaVac.getRange(idx + 1, 7).setValue(disponibleDespues);
+
+    if (nota) {
+      const totalCols = hojaVac.getLastColumn();
+      if (totalCols < 8) hojaVac.getRange(1,8).setValue('NOTAS_AJUSTE');
+      const notaExistente = String(hojaVac.getRange(idx + 1, 8).getValue() || '');
+      const timestamp     = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy');
+      hojaVac.getRange(idx + 1, 8).setValue(
+        (notaExistente ? notaExistente + ' | ' : '') + `${timestamp}: ${ajusteDelta>0?'+':''}${ajusteDelta} (${nota})`
+      );
+    }
+
+    registrarAuditoria(actor, 'VACACIONES_AJUSTADAS', 'VACACIONES', empleado + '|' + anio,
+      { ajuste: ajusteAnterior, disponible: disponibleAntes },
+      { ajuste: ajusteNuevo, disponible: disponibleDespues, delta: ajusteDelta, nota }
+    );
+
+    return _resp({ ok: true, nuevo_ajuste: ajusteNuevo, disponible: disponibleDespues });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function accionVacacionesAgregarAdmin(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor      = String(datos.actor       || 'desconocido');
+    const empleado   = String(datos.empleado    || '').trim();
+    const fechaDesde = String(datos.fecha_desde || '').trim();
+    const fechaHasta = String(datos.fecha_hasta || '').trim();
+    const dias       = parseInt(datos.dias) || 1;
+    if (!empleado || !fechaDesde || !fechaHasta) return _resp({ ok: false, error: 'Faltan datos' });
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let hoja = ss.getSheetByName('SOLICITUDES_VAC');
+    if (!hoja) {
+      hoja = ss.insertSheet('SOLICITUDES_VAC');
+      hoja.getRange(1,1,1,8).setValues([[
+        'ID','EMPLEADO','FECHA_DESDE','FECHA_HASTA','DIAS','ESTADO','FECHA_SOLICITUD','NOTA_ADMIN'
+      ]]);
+    }
+
+    const id    = 'vac_' + Date.now();
+    const ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    hoja.appendRow([id, empleado, fechaDesde, fechaHasta, dias, 'aprobada', ahora, 'Cargado por admin']);
+
+    descontarDiasVacaciones(ss, empleado, fechaDesde, dias);
+
+    registrarAuditoria(actor, 'VACACIONES_AGREGADAS_ADMIN', 'SOLICITUD_VAC', id,
+      null, { empleado, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, dias }
+    );
+
+    return _resp({ ok: true, id });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── CERTIFICADOS ──────────────────────────────────────
@@ -1390,6 +1717,60 @@ function borrarCertificado(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
+
+// ── CERTIFICADOS — acciones seguras (Fase 6B) ─────────
+// Mismo criterio que las de VACACIONES de arriba: llegan solo por
+// despacharAccionSegura, actor sale de datos.actor (Node/JWT admin-jefe,
+// nunca del navegador). guardarCertificado/borrarCertificado (legadas,
+// arriba) quedan intactas mientras dure la transición. `empleado` viene
+// especificado por el admin que llama (Node ya validó su rol) — hoy no
+// hay ningún flujo real de autoservicio confirmado para certificados
+// (ver informe Fase 6B), así que no se deriva de identidad propia.
+// No se corrige acá el ID `cert_<Date.now()>` (mismo criterio que la
+// función legada) — no bloquea el blindaje, queda documentado como deuda.
+function accionCertificadoGuardar(datos) {
+  const actor    = String(datos.actor    || 'desconocido');
+  const empleado = String(datos.empleado || '').trim();
+  const fecha    = String(datos.fecha    || '').trim();
+  if (!empleado || !fecha) return _resp({ ok: false, error: 'Faltan datos' });
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('CERTIFICADOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('CERTIFICADOS');
+    hoja.getRange(1,1,1,6).setValues([['ID','EMPLEADO','FECHA','TIPO','HS','NOTA']]);
+  }
+  const id = 'cert_' + Date.now();
+  hoja.appendRow([id, empleado, fecha, datos.tipo || '', datos.hs || 0, datos.nota || '']);
+
+  registrarAuditoria(actor, 'CERTIFICADO_CREADO', 'CERTIFICADO', id,
+    null, { empleado, fecha, tipo: datos.tipo || '' }
+  );
+
+  return _resp({ ok: true, id });
+}
+
+function accionCertificadoBorrar(datos) {
+  const actor = String(datos.actor || 'desconocido');
+  const id    = String(datos.id    || '').trim();
+  if (!id) return _resp({ ok: false, error: 'Falta id' });
+
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName('CERTIFICADOS');
+  if (!hoja) return _resp({ ok: false, error: 'Hoja no encontrada' });
+
+  const vals = hoja.getDataRange().getValues();
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]).trim() === id) {
+      const antes = { empleado: String(vals[i][1] || ''), fecha: String(vals[i][2] || ''), tipo: String(vals[i][3] || '') };
+      hoja.deleteRow(i + 1);
+      registrarAuditoria(actor, 'CERTIFICADO_BORRADO', 'CERTIFICADO', id, antes, null);
+      return _resp({ ok: true });
+    }
+  }
+  return _resp({ ok: false, error: 'No encontrado' });
+}
+
 // ── GUARDAR URL DE FOTO (subida desde ImgBB) ──────────
 function guardarFotoUrl(e) {
   try {
