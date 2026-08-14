@@ -5230,6 +5230,10 @@ const apiVacaciones = (path, opciones) => _apiFetch('/api/vacaciones', path, opc
 const apiCertificadosAdmin = (path, opciones) => _apiFetch('/api/certificados', path, opciones);
 // Fase 6C.1: reemplaza accion=guardar_config.
 const apiConfig = (path, opciones) => _apiFetch('/api/config', path, opciones);
+// Fase 6C.2: reemplaza accion=guardar_evento/eliminar_evento y
+// accion=guardar_anuncio/eliminar_anuncio.
+const apiEventos  = (path, opciones) => _apiFetch('/api/eventos', path, opciones);
+const apiAnuncios = (path, opciones) => _apiFetch('/api/anuncios', path, opciones);
 // Fase 6C.1: reemplaza accion=guardar_foto_url (paso 2 de subirFotoEmpleado)
 // — reutiliza apiMiPerfil (ya definida arriba, base '/api/mi-perfil').
 // Fase 1 Sheets API (docs/PLAN-SHEETS-API-DIRECTA.md): reemplaza el fetch
@@ -8238,14 +8242,17 @@ async function guardarEvento() {
 
   const conAnuncio = destTipo !== 'personal' && document.getElementById('eventoConAnuncio')?.checked;
   const anuncioMsg = document.getElementById('eventoAnuncioMsg')?.value.trim();
-  const notifAdmins = document.getElementById('eventoEmailAdmins')?.checked;
-  const emailsDest = notifAdmins ? getEmailsContactos().map(function(c){ return c.email; }) : [];
+  // Fase 6C.2 (corregido post-QA): el endpoint Node no acepta una lista de
+  // emails — solo la intención (booleano). El backend resuelve los
+  // contactos server-side desde CONFIG.emails_contactos, nunca desde acá.
+  const notificarContactos = !!document.getElementById('eventoEmailAdmins')?.checked;
 
   try {
     const tipo  = document.getElementById('eventoLocalCerrado')?.checked ? 'local_cerrado' : '';
-    const datos = encodeURIComponent(JSON.stringify({ titulo, fecha, fecha_fin: fechaFin, descripcion: desc, destinatarios, tipo, emails: emailsDest }));
-    const resp  = await fetch(eventosApiUrl('guardar_evento', { datos }));
-    const json  = await resp.json();
+    const json = await apiEventos('', {
+      method: 'POST',
+      body: JSON.stringify({ titulo, fecha, fecha_fin: fechaFin, descripcion: desc, destinatarios, tipo, notificar_contactos: notificarContactos }),
+    });
     if (!json.ok) throw new Error(json.error || 'Error');
 
     // Si también es anuncio, guardarlo en paralelo
@@ -8266,13 +8273,15 @@ async function guardarEvento() {
       if ((destTipo === 'especifico' || destTipo === 'sucursal') && !destsAnuncio.length) {
         showToast('Evento guardado, pero ningún empleado coincide para el anuncio');
       } else {
-        const datosAnuncio = encodeURIComponent(JSON.stringify({
-          titulo: '📌 ' + titulo,
-          mensaje: msgAnuncio,
-          destinatarios: destsAnuncio,
-          vigencia: fechaFin  // El anuncio caduca al finalizar el evento
-        }));
-        await fetch(anunciosApiUrl('guardar_anuncio', { datos: datosAnuncio }));
+        await apiAnuncios('', {
+          method: 'POST',
+          body: JSON.stringify({
+            titulo: '📌 ' + titulo,
+            mensaje: msgAnuncio,
+            destinatarios: destsAnuncio,
+            vigencia: fechaFin, // El anuncio caduca al finalizar el evento
+          }),
+        });
         _anunciosCache = null;
       }
     }
@@ -8289,8 +8298,7 @@ async function guardarEvento() {
 async function eliminarEvento(id) {
   if (!confirm('¿Eliminar este evento?')) return;
   try {
-    const resp = await fetch(eventosApiUrl('eliminar_evento', { id }));
-    const json = await resp.json();
+    const json = await apiEventos(`/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!json.ok) throw new Error(json.error || 'Error');
     showToast('✓ Evento eliminado');
     _eventosCache = null;
@@ -9041,9 +9049,10 @@ async function publicarAnuncio() {
   const vigencia = document.getElementById('anuncioVigencia')?.value || '';
 
   try {
-    const datos = encodeURIComponent(JSON.stringify({ titulo, mensaje, destinatarios, vigencia }));
-    const resp  = await fetch(anunciosApiUrl('guardar_anuncio', { datos }));
-    const json  = await resp.json();
+    const json = await apiAnuncios('', {
+      method: 'POST',
+      body: JSON.stringify({ titulo, mensaje, destinatarios, vigencia }),
+    });
     if (!json.ok) throw new Error(json.error || 'Error');
     cerrarAdmin();
     showToast('✓ Anuncio publicado');
@@ -9069,8 +9078,7 @@ async function publicarAnuncio() {
 async function eliminarAnuncioAdmin(id) {
   if (!confirm('¿Eliminar este anuncio?')) return;
   try {
-    const resp = await fetch(anunciosApiUrl('eliminar_anuncio', { id }));
-    const json = await resp.json();
+    const json = await apiAnuncios(`/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!json.ok) throw new Error(json.error || 'Error');
     showToast('✓ Anuncio eliminado');
     _anunciosCache = null;

@@ -30,29 +30,15 @@ function formatearHora(valor) {
 //  API WEB — endpoints para croma-horarios (GitHub Pages)
 // =====================================================
 
-// ── doPost: recibe JSON del frontend (crearEvento) ────
+// ── doPost: recibe JSON del frontend ──────────────────
 function doPost(e) {
   try {
     const accion = (e.parameter && e.parameter.accion) || '';
-    if (accion === 'crearEvento') {
-      const datos = JSON.parse(e.postData.contents || '{}');
-      const ss   = SpreadsheetApp.getActiveSpreadsheet();
-      let hoja   = ss.getSheetByName('EVENTOS');
-      if (!hoja) {
-        hoja = ss.insertSheet('EVENTOS');
-        hoja.getRange(1,1,1,8).setValues([['ID','TITULO','FECHA','FECHA_FIN','DESCRIPCION','DESTINATARIOS','AUTOR','TIPO']]);
-      }
-      if (!datos.titulo || !datos.fecha) throw new Error('Faltan datos obligatorios');
-      const id       = 'EVT-' + Date.now();
-      const destStr  = datos.destinatario || datos.destinatarios || 'todos';
-      const fechaFin = datos.fecha_fin || datos.fecha;
-      const tipoEvt  = datos.tipo || '';
-      hoja.appendRow([id, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '', destStr, 'Admin', tipoEvt]);
-      // Enviar emails a sucursales
-      try { enviarEmailsEvento(ss, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '', destStr); } catch(mailErr) { Logger.log('Email error: ' + mailErr.message); }
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, id }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    // crearEvento (Fase 6C.2): confirmado por grep en los 4 repos que no
+    // tiene ningún consumidor real — guardarEvento()/guardar_evento la
+    // reemplazó hace tiempo. Se cierra con el mismo patrón de siempre; la
+    // lógica queda intacta en _crearEventoLegacy(datos) para rollback.
+    if (accion === 'crearEvento') return _accionRetirada(e, 'crearEvento', 'EVENTO');
     if (accion === 'guardarFichada')  return guardarFichada(e);
     if (accion === 'acreditarBanco') return _accionRetirada(e, 'acreditarBanco', 'BANCO_HORAS');
     if (accion === 'usarBanco')      return _accionRetirada(e, 'usarBanco', 'BANCO_HORAS');
@@ -283,11 +269,11 @@ function doGet(e) {
   if (accion === 'responder_solicitud') return _accionRetirada(e, 'responder_solicitud', 'SOLICITUD_VAC');
   if (accion === 'agregar_vacacion_admin') return _accionRetirada(e, 'agregar_vacacion_admin', 'SOLICITUD_VAC');
   if (accion === 'get_anuncios')        return getAnuncios(e);
-  if (accion === 'guardar_anuncio')     return guardarAnuncio(e);
-  if (accion === 'eliminar_anuncio')    return eliminarAnuncio(e);
+  if (accion === 'guardar_anuncio')     return _accionRetirada(e, 'guardar_anuncio', 'ANUNCIO');
+  if (accion === 'eliminar_anuncio')    return _accionRetirada(e, 'eliminar_anuncio', 'ANUNCIO');
   if (accion === 'get_eventos')           return _cacheableTextOutput('get_eventos|' + (e.parameter.empleado || ''), function() { return getEventos(e); });
-  if (accion === 'guardar_evento')        return guardarEvento(e);
-  if (accion === 'eliminar_evento')       return eliminarEvento(e);
+  if (accion === 'guardar_evento')        return _accionRetirada(e, 'guardar_evento', 'EVENTO');
+  if (accion === 'eliminar_evento')       return _accionRetirada(e, 'eliminar_evento', 'EVENTO');
   if (accion === 'get_sucursales_geo')    return _cacheableTextOutput('get_sucursales_geo', getSucursalesGeo);
   if (accion === 'get_fichadas_empleado') return getFichadasEmpleado(e);
   if (accion === 'get_banco_horas')       return getBancoHoras(e);
@@ -1317,7 +1303,184 @@ function despacharAccionSegura(envelope) {
   if (accion === 'config_guardar') return accionConfigGuardar(datos);
   if (accion === 'foto_guardar')   return accionFotoGuardar(datos);
 
+  // Eventos + Anuncios (Fase 6C.2) — ver funciones más abajo.
+  if (accion === 'evento_guardar')   return accionEventoGuardar(datos);
+  if (accion === 'evento_eliminar')  return accionEventoEliminar(datos);
+  if (accion === 'anuncio_guardar')  return accionAnuncioGuardar(datos);
+  if (accion === 'anuncio_eliminar') return accionAnuncioEliminar(datos);
+
   return _resp({ ok: false, error: 'Acción no reconocida' });
+}
+
+// ── EVENTOS — acciones seguras (Fase 6C.2) ────────────
+// Mismo criterio que Config/Foto/Vacaciones: llegan solo por
+// despacharAccionSegura, actor sale de datos.actor (Node/JWT admin-jefe).
+// guardarEvento/eliminarEvento (legadas, más abajo) quedan intactas.
+//
+// IMPORTANTE — a propósito NO se expone el bloque de `emails` libres que
+// tiene guardarEvento legada (líneas ~2916-2932): esa lista la arma quien
+// llama, sin ninguna validación, y MailApp.sendEmail la manda tal cual —
+// es exactamente el vector que este blindaje tiene que cerrar. La acción
+// segura solo dispara enviarEmailsEvento(), que reparte por CONFIG
+// (email_suc_<ID>), la única fuente de destinatarios autorizados.
+//
+// notificar_contactos (booleano, corrección post-QA): reemplaza el envío
+// a una lista de emails que mandaba el cliente ("notificar contactos" en
+// la UI legada armaba `emails` desde CONFIG.emails_contactos del lado del
+// NAVEGADOR y lo mandaba como lista libre). Acá, si viene true, los
+// destinatarios se resuelven enteramente server-side leyendo
+// CONFIG.emails_contactos — mismo parseo/semántica que ya usaba el
+// frontend (JSON de [{nombre,email}], se manda solo `email`). El cliente
+// nunca puede mandar una dirección — solo la intención (sí/no).
+//
+// Sin dedup contra email_suc_<ID>: confirmado que hoy (2026-08-14) ningún
+// email de emails_contactos coincide con ningún email_suc_<ID> real, pero
+// aunque coincidiera, el legado ya mandaba dos correos por separado en ese
+// caso (dos loops independientes, sin dedup) — se preserva ese
+// comportamiento tal cual, no se inventa una regla de deduplicación nueva.
+//
+// Sin LockService en el alta: es un appendRow puro con ID Date.now()-based,
+// sin lectura previa que pueda quedar desactualizada (mismo criterio ya
+// usado para certificado_guardar/anuncio_guardar/vacaciones_solicitar,
+// ninguno de esos tampoco lockea el alta).
+function _enviarEmailsContactosEvento(ss, titulo, fecha, fechaFin, descripcion) {
+  const config = getConfigObj(ss);
+  let contactos = [];
+  try { contactos = JSON.parse(config['emails_contactos'] || '[]'); } catch (e) { contactos = []; }
+
+  const fechaStr    = fmtFecha(fecha);
+  const fechaFinStr = fechaFin && fechaFin !== fecha ? fmtFecha(fechaFin) : null;
+  const rangoFechas = fechaFinStr ? fechaStr + ' al ' + fechaFinStr : fechaStr;
+
+  contactos.forEach(function(c) {
+    if (!c || !c.email) return;
+    MailApp.sendEmail({
+      to:       c.email,
+      subject:  '📌 Nuevo evento: ' + titulo,
+      htmlBody: buildEmailEvento({ titulo, rangoFechas, descripcion, destinatarioLabel: 'Administración' }),
+    });
+  });
+}
+
+function accionEventoGuardar(datos) {
+  const actor = String(datos.actor || 'desconocido');
+  if (!datos.titulo || !datos.fecha) return _resp({ ok: false, error: 'Faltan datos obligatorios' });
+  const notificarContactos = datos.notificar_contactos === true;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('EVENTOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('EVENTOS');
+    hoja.getRange(1,1,1,7).setValues([['ID','TITULO','FECHA','FECHA_FIN','DESCRIPCION','DESTINATARIOS','AUTOR']]);
+  }
+  const id       = 'EVT-' + Date.now();
+  const destStr  = datos.destinatarios || 'todos';
+  const fechaFin = datos.fecha_fin || datos.fecha;
+  const tipoEvt  = datos.tipo || '';
+  hoja.appendRow([id, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '', destStr, actor, tipoEvt]);
+
+  try {
+    enviarEmailsEvento(ss, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '', destStr);
+  } catch (mailErr) {
+    Logger.log('Email error (evento_guardar): ' + mailErr.message);
+  }
+
+  if (notificarContactos) {
+    try {
+      _enviarEmailsContactosEvento(ss, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '');
+    } catch (mailErr) {
+      Logger.log('Email contactos error (evento_guardar): ' + mailErr.message);
+    }
+  }
+
+  registrarAuditoria(actor, 'EVENTO_CREADO', 'EVENTO', id,
+    null, { titulo: datos.titulo, fecha: datos.fecha, fecha_fin: fechaFin, destinatarios: destStr, tipo: tipoEvt, notificar_contactos: notificarContactos }
+  );
+
+  return _resp({ ok: true, id });
+}
+
+// Lock alrededor de buscar+borrar: pedido explícito para no eliminar la
+// fila incorrecta si la hoja cambia entre el find y el deleteRow.
+function accionEventoEliminar(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const id    = String(datos.id    || '').trim();
+    if (!id) return _resp({ ok: false, error: 'Falta ID' });
+
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const hoja = ss.getSheetByName('EVENTOS');
+    if (!hoja) return _resp({ ok: false, error: 'Hoja EVENTOS no existe' });
+
+    const vals = hoja.getDataRange().getValues();
+    const idx  = vals.findIndex(r => String(r[0]).trim() === id);
+    if (idx < 1) return _resp({ ok: false, error: 'Evento no encontrado' });
+
+    const antes = { titulo: String(vals[idx][1] || ''), fecha: String(vals[idx][2] || ''), destinatarios: String(vals[idx][5] || '') };
+    hoja.deleteRow(idx + 1);
+
+    registrarAuditoria(actor, 'EVENTO_ELIMINADO', 'EVENTO', id, antes, null);
+
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── ANUNCIOS — acciones seguras (Fase 6C.2) ───────────
+// Mismo criterio. guardarAnuncio/eliminarAnuncio (legadas) quedan intactas.
+function accionAnuncioGuardar(datos) {
+  const actor = String(datos.actor || 'desconocido');
+  if (!datos.titulo || !datos.mensaje) return _resp({ ok: false, error: 'Faltan datos obligatorios' });
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = ss.getSheetByName('ANUNCIOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('ANUNCIOS');
+    hoja.getRange(1,1,1,6).setValues([['ID','TITULO','MENSAJE','DESTINATARIOS','FECHA','AUTOR']]);
+  }
+  const id       = 'ANC-' + Date.now();
+  const fecha    = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+  const vigencia = datos.vigencia ? String(datos.vigencia).trim().substring(0, 10) : '';
+  const destStr  = Array.isArray(datos.destinatarios) && datos.destinatarios.length > 0
+    ? JSON.stringify(datos.destinatarios)
+    : (datos.destinatarios || 'todos');
+  hoja.appendRow([id, datos.titulo, datos.mensaje, destStr, fecha, actor, vigencia]);
+
+  registrarAuditoria(actor, 'ANUNCIO_CREADO', 'ANUNCIO', id,
+    null, { titulo: datos.titulo, destinatarios: destStr, vigencia }
+  );
+
+  return _resp({ ok: true, id });
+}
+
+function accionAnuncioEliminar(datos) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _resp({ ok: false, error: 'Sistema ocupado, reintentá en unos segundos' });
+  try {
+    const actor = String(datos.actor || 'desconocido');
+    const id    = String(datos.id    || '').trim();
+    if (!id) return _resp({ ok: false, error: 'Falta ID' });
+
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const hoja = ss.getSheetByName('ANUNCIOS');
+    if (!hoja) return _resp({ ok: false, error: 'Hoja ANUNCIOS no existe' });
+
+    const vals = hoja.getDataRange().getValues();
+    const idx  = vals.findIndex(r => String(r[0]).trim() === id);
+    if (idx < 1) return _resp({ ok: false, error: 'Anuncio no encontrado' });
+
+    const antes = { titulo: String(vals[idx][1] || ''), destinatarios: String(vals[idx][3] || '') };
+    hoja.deleteRow(idx + 1);
+
+    registrarAuditoria(actor, 'ANUNCIO_ELIMINADO', 'ANUNCIO', id, antes, null);
+
+    return _resp({ ok: true });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── CONFIG — acción segura (Fase 6C.1) ────────────────
@@ -2895,6 +3058,28 @@ function getEventos(e) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// Lógica original de la rama `crearEvento` de doPost (Fase 6C.2, cerrada
+// por falta de consumidor) — preservada tal cual, solo se movió el parseo
+// de e.postData.contents afuera para poder guardarla como función aparte.
+// Nunca se llama desde ningún lado; queda solo por si hace falta rollback.
+function _crearEventoLegacy(datos) {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja   = ss.getSheetByName('EVENTOS');
+  if (!hoja) {
+    hoja = ss.insertSheet('EVENTOS');
+    hoja.getRange(1,1,1,8).setValues([['ID','TITULO','FECHA','FECHA_FIN','DESCRIPCION','DESTINATARIOS','AUTOR','TIPO']]);
+  }
+  if (!datos.titulo || !datos.fecha) throw new Error('Faltan datos obligatorios');
+  const id       = 'EVT-' + Date.now();
+  const destStr  = datos.destinatario || datos.destinatarios || 'todos';
+  const fechaFin = datos.fecha_fin || datos.fecha;
+  const tipoEvt  = datos.tipo || '';
+  hoja.appendRow([id, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '', destStr, 'Admin', tipoEvt]);
+  try { enviarEmailsEvento(ss, datos.titulo, datos.fecha, fechaFin, datos.descripcion || '', destStr); } catch(mailErr) { Logger.log('Email error: ' + mailErr.message); }
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, id }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function guardarEvento(e) {
