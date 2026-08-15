@@ -3321,14 +3321,24 @@ async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
 
 // Lleva al empleado logueado a fichar.html (check-in con GPS) sin re-loguear:
 // escribe la sesión en el formato que espera fichar.html y navega.
+//
+// Fase 7C (2026-08-15) — bug encontrado en QA real: fichar.html ahora
+// exige un JWT real (POST /api/fichadas), pero este puente nunca lo
+// incluía — el flujo legado hablaba directo con GAS, que no lo pedía. El
+// JWT SÍ existe acá (croma_token, el mismo que usa _getJwtUser() más
+// abajo para leer usuario/rol) — solo faltaba pasarlo. También se movió
+// el destino de localStorage a sessionStorage, para que coincida con
+// dónde fichar.html lee la sesión desde 7C (ver fichar.html, leerSesion()).
 function irAFicharEmpleado() {
   try {
+    const token = sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
     const ses = {
       nombre:         sesionActual.nombre,
       rol:            sesionActual.rol || 'empleado',
       empleadoNombre: sesionActual.empleadoNombre || sesionActual.nombre,
+      token:          token || null,
     };
-    localStorage.setItem('croma_session', JSON.stringify(ses));
+    sessionStorage.setItem('croma_session', JSON.stringify(ses));
   } catch(e) {}
   window.location.href = 'fichar.html';
 }
