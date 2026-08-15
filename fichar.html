@@ -806,13 +806,42 @@ let geoPos = null;         // { lat, lon }
 // fix de seguridad en Code-Jornada.js y app.js (croma-horarios-main).
 try { localStorage.removeItem('croma_usuarios_cache'); } catch(e) {}
 
+// ── SESIÓN (Fase 7C) ────────────────────────────────────────────────────
+// Antes: `sesion` (sin token — el JWT de /auth/login se descartaba, ver
+// Fase 7A) vivía en localStorage, indefinidamente, sin logout en ningún
+// lugar de este archivo. A partir de 7C, `sesion` SIEMPRE incluye `token`
+// (el JWT real, ahora necesario para POST /api/fichadas) y se guarda en
+// sessionStorage, no localStorage — decisión explícita: "no persistir el
+// JWT más tiempo que la sesión del Portal". Efecto práctico: reloads,
+// navegación y volver con "atrás" dentro de la MISMA pestaña siguen
+// funcionando exactamente igual que antes (sessionStorage sobrevive todo
+// eso); cerrar la pestaña/navegador sí pide loguearse de nuevo — antes no
+// lo pedía nunca. No había ningún flujo de logout que romper. Se limpia
+// también cualquier `croma_session` viejo en localStorage (mismo patrón
+// de limpieza única de arriba) para no dejar sesión sin token "medio
+// activa" si alguien vuelve a abrir este archivo desde una versión
+// cacheada vieja.
+try { localStorage.removeItem('croma_session'); } catch(e) {}
+
+function leerSesion() {
+  try {
+    const raw = sessionStorage.getItem('croma_session');
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    return (s && s.token) ? s : null; // sin token no sirve para fichar -> tratar como "no logueado"
+  } catch(e) { return null; }
+}
+function guardarSesion(s) {
+  try { sessionStorage.setItem('croma_session', JSON.stringify(s)); } catch(e) {}
+}
+function limpiarSesion() {
+  try { sessionStorage.removeItem('croma_session'); } catch(e) {}
+  sesion = null;
+}
+
 // ── INIT ──
 (async function init() {
-  // Restaurar sesión previa
-  try {
-    const saved = localStorage.getItem('croma_session');
-    if (saved) sesion = JSON.parse(saved);
-  } catch(e) {}
+  sesion = leerSesion();
 
   if (sesion) {
     document.getElementById('btnBack').style.display = '';
@@ -873,12 +902,19 @@ async function intentarLogin() {
       return;
     }
 
+    // Fase 7C: antes se descartaba data.token acá mismo (ver Fase 7A) — la
+    // identidad del fichaje ahora depende de que este token se conserve.
+    if (!data.token) {
+      mostrarError(errEl, 'No se pudo iniciar sesión (falta token). Probá de nuevo.');
+      return;
+    }
     sesion = {
       nombre: (data.empleadoData && data.empleadoData.nombre) || data.usuario,
       rol: data.rol || 'empleado',
       empleadoNombre: (data.empleadoData && data.empleadoData.empleadoNombre) || data.usuario,
+      token: data.token,
     };
-    localStorage.setItem('croma_session', JSON.stringify(sesion));
+    guardarSesion(sesion);
     document.getElementById('btnBack').style.display = '';
     await arrancarConSesion();
   } catch (e) {
@@ -1213,6 +1249,70 @@ function onToggleNota() {
 
 function onDestinoChange() {}
 
+// ── Fase 7C: cliente de POST /api/fichadas (Node) ──────────────────────
+// Genera una idempotency_key robusta. Preferencia: crypto.randomUUID().
+// Fallback (navegadores sin randomUUID pero con crypto.getRandomValues):
+// 16 bytes aleatorios en hex. Último fallback (sin crypto en absoluto,
+// prácticamente inexistente en 2026): timestamp + Math.random — nunca
+// SOLO Date.now(), a propósito, para no repetir key ante clicks en el
+// mismo milisegundo.
+function generarIdempotencyKey() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return 'fb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+// Operación de fichada pendiente — sobrevive un resultado AMBIGUO (network
+// error/timeout) para poder reintentar con la MISMA idempotency_key sin
+// arriesgar una fila duplicada. Se limpia ante cualquier resultado
+// CONFIRMADO (éxito o rechazo de negocio con respuesta legible del server).
+let intentoFichadaPendiente = null; // { idempotencyKey, payload }
+
+// Clasifica el resultado de POST /api/fichadas. Nunca llama a GAS como
+// fallback — un timeout/network error no prueba que Node no haya escrito
+// (ver Fase 7B, sección 13: "esto corrige la propuesta preliminar de 7A").
+async function postFichadaNode(payload) {
+  const s = leerSesion();
+  if (!s || !s.token) {
+    throw Object.assign(new Error('Sesión sin token'), { tipo: 'sesion_invalida' });
+  }
+
+  let resp;
+  try {
+    resp = await fetch(`${BACKEND_URL}/api/fichadas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${s.token}` },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    // No llegó a haber respuesta HTTP — AMBIGUO: el request pudo haber
+    // llegado al servidor y escrito igual.
+    throw Object.assign(new Error('Error de red'), { tipo: 'ambiguo' });
+  }
+
+  let json;
+  try {
+    json = await resp.json();
+  } catch (e) {
+    // Hubo respuesta HTTP pero no se pudo leer — también AMBIGUO, el
+    // servidor sí recibió y procesó el request.
+    throw Object.assign(new Error('Respuesta ilegible'), { tipo: 'ambiguo' });
+  }
+
+  if (resp.status === 401) throw Object.assign(new Error((json && json.error) || 'Sesión inválida'), { tipo: 'sesion_invalida' });
+  if (resp.status === 503) throw Object.assign(new Error((json && json.error) || 'No disponible'), { tipo: 'no_disponible' });
+  if (!resp.ok || !json || json.ok !== true) {
+    throw Object.assign(new Error((json && json.error) || 'Error desconocido'), { tipo: 'rechazo_confirmado' });
+  }
+  return json; // { ok:true, id, idempotent }
+}
+
 async function enviarFichada() {
   const fecha    = document.getElementById('campoFecha').value;
   const entrada  = document.getElementById('campoEntrada').value;
@@ -1220,7 +1320,6 @@ async function enviarFichada() {
   const notaActiva = document.getElementById('toggleNota').checked;
   const nota     = notaActiva ? document.getElementById('campoNota').value.trim() : '';
   const esRecup  = document.getElementById('toggleRecup').checked;
-  const destino  = 'FECHA';
   const fechaRec = document.getElementById('campoFechaRecup').value;
 
   if (!entrada) { mostrarAlertaCroma('Falta un dato', 'Completá la hora de entrada.'); return; }
@@ -1230,37 +1329,45 @@ async function enviarFichada() {
   const btn = document.getElementById('btnSubmit');
   btn.disabled = true; btn.textContent = 'Guardando...';
 
-  const empNombre   = sesion.empleadoNombre || sesion.nombre;
-  const localNombre = sucursalGeo ? sucursalGeo.local : '—';
+  const empNombre = sesion.empleadoNombre || sesion.nombre;
 
-  const payload = {
-    local:              localNombre,
-    empleado:           empNombre,
-    fecha,
-    hora_entrada:       entrada,
-    hora_salida:        salida,
-    nota,
-    tipo_registro:        esRecup ? 'RECUPERACION' : 'NORMAL',
-    hs_a_recuperar:       0,
-    destino_recuperacion: esRecup ? 'FECHA' : '',
-    fecha_a_recuperar:    esRecup ? fechaRec : '',
-    modo_carga:         'INDIVIDUAL',
-    lat:                geoPos ? geoPos.lat         : '',
-    lon:                geoPos ? geoPos.lon         : '',
-    distancia_m:        geoPos ? geoPos.distancia_m : '',
-  };
+  // Nueva operación lógica -> nueva idempotency_key. Si ya hay una
+  // pendiente sin resolver (reintento tras resultado ambiguo, incluido un
+  // click extra mientras el botón debería estar deshabilitado), se
+  // reutiliza EXACTAMENTE la misma key y el mismo payload — nunca se arma
+  // uno nuevo con los valores actuales del formulario.
+  let payload;
+  if (intentoFichadaPendiente) {
+    payload = intentoFichadaPendiente.payload;
+  } else {
+    const localNombre = sucursalGeo ? sucursalGeo.local : '—';
+    payload = {
+      local:                localNombre,
+      fecha,
+      hora_entrada:         entrada,
+      hora_salida:          salida,
+      nota,
+      tipo_registro:        esRecup ? 'RECUPERACION' : 'NORMAL',
+      hs_a_recuperar:       0,
+      destino_recuperacion: esRecup ? 'FECHA' : '',
+      fecha_a_recuperar:    esRecup ? fechaRec : '',
+      lat:                  geoPos ? geoPos.lat         : '',
+      lon:                  geoPos ? geoPos.lon         : '',
+      distancia_m:          geoPos ? geoPos.distancia_m : '',
+      idempotency_key:      generarIdempotencyKey(),
+      // empleado/modo_carga: NO se mandan — la identidad y el modo de
+      // carga los fija Node server-side (JWT + ruta Portal fija a
+      // INDIVIDUAL). Si en algún momento hiciera falta mandarlos por
+      // compatibilidad, el backend los ignora igual (ver Fase 7B).
+    };
+    intentoFichadaPendiente = { idempotencyKey: payload.idempotency_key, payload };
+  }
 
   try {
-    // 1. Guardar la fichada
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=guardarFichada`, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload),
-    });
-    const json = await resp.json();
-    if (!json.ok) throw new Error(json.error || 'Error desconocido');
+    await postFichadaNode(payload);
+    intentoFichadaPendiente = null; // resultado CONFIRMADO (éxito) -> limpiar
 
-
-    // Pantalla de éxito
+    // Pantalla de éxito (igual que antes)
     const [anio, mes, dia] = fecha.split('-').map(Number);
     const fechaObj = new Date(anio, mes - 1, dia);
     let detalle = `<strong>${empNombre}</strong><br>` +
@@ -1272,8 +1379,55 @@ async function enviarFichada() {
     mostrarScreen('screenOk');
     iniciarRedireccion();
 
-  } catch(err) {
-    const msg = String(err.message || '');
+  } catch (err) {
+    const tipo = err.tipo;
+    const msg  = String(err.message || '');
+
+    if (tipo === 'ambiguo') {
+      // NO se limpia intentoFichadaPendiente — el reintento debe usar la
+      // MISMA key. NO se llama a GAS bajo ninguna circunstancia acá.
+      btn.disabled = false; btn.textContent = 'Guardar turno';
+      mostrarAlertaCroma(
+        'No pudimos confirmar',
+        'Se envió tu fichada pero no llegó la confirmación del servidor. Puede que ya se haya guardado.<br><br>' +
+        'Tocá "Reintentar" — es seguro, no se va a duplicar.',
+        'Reintentar',
+        () => { cerrarAlertaCroma(); enviarFichada(); }
+      );
+      return;
+    }
+
+    if (tipo === 'sesion_invalida') {
+      // Rechazo CONFIRMADO por identidad — no tiene sentido reintentar con
+      // la misma sesión. Se limpia todo y se manda a loguearse de nuevo.
+      intentoFichadaPendiente = null;
+      limpiarSesion();
+      btn.disabled = false; btn.textContent = 'Guardar turno';
+      mostrarAlertaCroma(
+        'Sesión vencida',
+        'Iniciá sesión de nuevo para fichar.',
+        'Aceptar',
+        () => { cerrarAlertaCroma(); mostrarScreen('screenLogin'); }
+      );
+      return;
+    }
+
+    if (tipo === 'no_disponible') {
+      // 503 — feature flag apagado o mantenimiento. Rechazo CONFIRMADO
+      // (el servidor respondió, solo que no puede procesar todavía): no
+      // hay nada que reintentar automáticamente, y menos caer a GAS.
+      intentoFichadaPendiente = null;
+      btn.disabled = false; btn.textContent = 'Guardar turno';
+      mostrarAlertaCroma('No disponible', 'El sistema de fichaje no está disponible en este momento. Probá de nuevo en unos minutos.');
+      return;
+    }
+
+    // rechazo_confirmado: 403/409/400/etc. con respuesta legible del
+    // servidor — la operación NO se escribió (o si es FICHADA_DUPLICADA,
+    // ya había otra). En ambos casos no tiene sentido reintentar la misma
+    // key: se limpia.
+    intentoFichadaPendiente = null;
+    btn.disabled = false; btn.textContent = 'Guardar turno';
     if (msg.startsWith('FICHADA_DUPLICADA')) {
       mostrarAlertaCroma(
         'Turno duplicado',
@@ -1282,9 +1436,8 @@ async function enviarFichada() {
         'Si es un error, pedile a un admin que lo revise en "Ajustar jornada".'
       );
     } else {
-      mostrarAlertaCroma('No se pudo guardar', 'Verificá tu conexión e intentá de nuevo.<br><br>' + msg);
+      mostrarAlertaCroma('No se pudo guardar', msg);
     }
-    btn.disabled = false; btn.textContent = 'Guardar turno';
   }
 }
 
@@ -1406,9 +1559,16 @@ async function cargarHistorial(empNombre) {
 }
 
 // ── MODAL DE ALERTA (reemplaza alert() nativo con el diseño de Croma) ──
-function mostrarAlertaCroma(titulo, mensaje) {
+// Fase 7C: botonTexto/onBoton opcionales — sin ellos se comporta exacto
+// que antes (un único botón "Aceptar" que cierra). Se usan para el caso de
+// resultado ambiguo (7C.4), donde el botón dice "Reintentar" y reintenta
+// la MISMA operación en vez de solo cerrar.
+function mostrarAlertaCroma(titulo, mensaje, botonTexto, onBoton) {
   document.getElementById('alertTitle').textContent = titulo;
   document.getElementById('alertMsg').innerHTML = mensaje;
+  const btn = document.getElementById('alertBtn');
+  btn.textContent = botonTexto || 'Aceptar';
+  btn.onclick = onBoton || cerrarAlertaCroma;
   document.getElementById('alertOverlay').classList.add('open');
 }
 function cerrarAlertaCroma() {
