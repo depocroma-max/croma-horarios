@@ -762,7 +762,7 @@ function renderEmpleados(datos) {
   // Separar activos de ex-empleados (perfil.activo === false)
   const listaActivos   = lista.filter(e => e.activo !== false);
   const listaInactivos = lista.filter(e => e.activo === false);
-  const puedeGestionar = sesionActual?.rol === 'admin';
+  const puedeGestionar = sesionActual?.rol === 'admin' || sesionActual?.rol === 'horarios';
 
   const buildEmpCard = (e, inactivo) => {
     const s = suc(e.suc);
@@ -1345,7 +1345,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 ${icon('circlePlus','icon-13')}
                 Certificado
               </button>
-              ${sesionActual?.rol === 'admin' ? (
+              ${(sesionActual?.rol === 'admin' || sesionActual?.rol === 'horarios') ? (
                 (EMPLEADOS_PERFILES[nombreEmp]?.activo !== false)
                   ? `<button class="btn-detalle-accion btn-detalle-baja" onclick="marcarEmpleadoInactivo('${nombreEmp.replace(/'/g,"\\'")}')">
                        ${icon('userX','icon-13')}
@@ -3136,7 +3136,7 @@ function cerrarSesion() {
 
 // ── INICIAR APP SEGÚN ROL ──────────────────────────────
 function iniciarAppConSesion() {
-  if (sesionActual.rol === 'admin') {
+  if (sesionActual.rol === 'admin' || sesionActual.rol === 'horarios') {
     adminAutenticado = true;
     sessionStorage.setItem('croma_admin_auth', '1');
     document.getElementById('navBtnAdmin').style.display       = '';
@@ -3186,7 +3186,7 @@ function actualizarIndicadorSesion() {
     const topActions = document.querySelector('.top-actions');
     topActions.parentNode.insertBefore(chip, topActions);
   }
-  const esAdmin = sesionActual.rol === 'admin';
+  const esAdmin = sesionActual.rol === 'admin' || sesionActual.rol === 'horarios';
   const esEmpleado = sesionActual.rol === 'empleado';
   // Portal Empleado: "Mi perfil" y el nombre se sacaron de la topbar y
   // viven en "Más" (ver masListado en renderVistaEmpleado) — acá queda
@@ -4148,7 +4148,7 @@ function _isAdminJwt() {
     const t = sessionStorage.getItem('croma_token') || localStorage.getItem('croma_token');
     if (!t) return false;
     const p = JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-    return p.exp * 1000 > Date.now() && (p.rol === 'admin' || p.rol === 'jefe');
+    return p.exp * 1000 > Date.now() && (p.rol === 'admin' || p.rol === 'jefe' || p.rol === 'horarios');
   } catch(e) { return false; }
 }
 let adminAutenticado = _isAdminJwt();
