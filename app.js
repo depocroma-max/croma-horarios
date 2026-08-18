@@ -9175,8 +9175,17 @@ async function verificarBannerViaProvider(nombreEmp, sucursalId) {
 // y actualizarBadgeAnunciosEmp() sin cambios. Extraído acá para no
 // duplicarlo entre Novedades (Etapa 3.2) y Campana (Etapa 3.3) — ninguna
 // función legacy se toca, esto es exclusivamente código nuevo de esta
-// transición. vigencia solo se completa cuando fechaHastaExplicita===true
-// (contrato v1.3), igual criterio en ambos consumidores.
+// transición.
+// vigencia = item.fechaHasta directo (no se usa fechaHastaExplicita):
+// tanto el POST de croma-backend como accionGuardarAviso en GAS colapsan
+// "sin fecha_hasta" contra fecha_desde antes de guardar, así que
+// fechaHasta SIEMPRE viene poblado salvo que el aviso no tenga ninguna
+// fecha (informativo puro, sin calendario). En ese caso vigencia queda
+// '' y anuncioVencido() usa su propio fallback (30 días desde creación).
+// Bug real (Etapa 6/9, corte a Strategy 'avisos'): con
+// fechaHastaExplicita hardcodeado en false, vigencia quedaba siempre ''
+// y CUALQUIER aviso con fecha vencida seguía notificando como nuevo en
+// Novedades/Campana hasta cumplir el fallback de 30 días.
 function _adaptarItemsParaAnunciosLegacy(items) {
   return items.map(function (item) {
     return {
@@ -9184,7 +9193,7 @@ function _adaptarItemsParaAnunciosLegacy(items) {
       titulo: item.titulo,
       mensaje: item.mensaje,
       fecha: item.fechaPublicacion || item.fechaDesde,
-      vigencia: item.fechaHastaExplicita === true ? item.fechaHasta : '',
+      vigencia: item.fechaHasta || '',
     };
   });
 }
