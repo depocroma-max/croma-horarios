@@ -23,13 +23,29 @@
 
   // Token vía #token=... o ?token=... (no queda en logs del servidor,
   // mismo patrón que usa horarios/panel al llegar desde el hub).
+  //
+  // OJO al limpiar la URL: este script se carga ANTES que app.js (a
+  // propósito), y app.js todavía necesita leer su PROPIO parámetro del
+  // hash (hsession, para reconocer sesiones de empleado) — si acá se
+  // pisa el hash entero con location.pathname + location.search, ese
+  // dato se pierde antes de que app.js llegue a leerlo (bug real,
+  // encontrado 2026-08-19: un login de empleado caía al branch de
+  // admin porque hsession ya no estaba, y tiraba TypeError más adelante
+  // al no encontrar los elementos de esa vista). Por eso acá se saca
+  // SOLO la clave 'token' del hash, nunca el hash completo — cualquier
+  // otro parámetro que haya ahí (de esta app o de otra) sobrevive.
   function _leerTokenDeUrl() {
     var hashParams = new URLSearchParams(location.hash.slice(1));
     var searchParams = new URLSearchParams(location.search);
     var token = hashParams.get('token') || searchParams.get('token');
     if (token) {
       sessionStorage.setItem('croma_token', token);
-      history.replaceState(null, '', location.pathname + location.search);
+      if (hashParams.has('token')) {
+        hashParams.delete('token');
+        var nuevoHash = hashParams.toString();
+        var nuevaUrl = location.pathname + location.search + (nuevoHash ? '#' + nuevoHash : '');
+        history.replaceState(null, '', nuevaUrl);
+      }
     }
   }
   _leerTokenDeUrl();
