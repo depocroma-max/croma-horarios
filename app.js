@@ -4447,11 +4447,50 @@ function switchAdminTab(tab, btn) {
 // _renderTabRecibosEmpleado, _abrirModalRecibo, _recibosDescargarAdmin) —
 // solo cambia el punto de entrada. Mismos permisos: esta pestaña vive
 // dentro de Administración, ya gateada a admin/jefe.
+// Estado del filtro/orden por empresa — vive fuera de renderRecibosAdminTab
+// para sobrevivir a sus propios re-renders (el select/botón que lo controla
+// se reconstruye desde acá cada vez).
+let _recibosAdminFiltro = { empresa: '', ordenEmpresa: '' }; // ordenEmpresa: '' | 'asc' | 'desc'
+
+function _toggleOrdenEmpresaRecibos() {
+  _recibosAdminFiltro.ordenEmpresa =
+    _recibosAdminFiltro.ordenEmpresa === 'asc' ? 'desc' :
+    _recibosAdminFiltro.ordenEmpresa === 'desc' ? '' : 'asc';
+  renderRecibosAdminTab();
+}
+
+// 'Mes actual' y 'mes anterior' — mismo formato yyyy-MM que PERIODO en
+// Sheets (ver _validarPeriodo en croma-backend/src/routes/recibos.js).
+function _ultimosDosMesesRecibos() {
+  const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const now = new Date();
+  const build = d => ({
+    periodo: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+    label: `${MESES_ABR[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+  });
+  return [build(now), build(new Date(now.getFullYear(), now.getMonth() - 1, 1))];
+}
+
 function renderRecibosAdminTab() {
   const container = document.getElementById('adminTabRecibos');
   if (!container) return;
 
-  const empleadosAdmin = obtenerEmpleadosAdmin().filter(e => e.estado !== 'inactivo');
+  let empleadosAdmin = obtenerEmpleadosAdmin().filter(e => e.estado !== 'inactivo');
+
+  const empresasDisponibles = Array.from(new Set(empleadosAdmin.map(e => e.empresa).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es'));
+
+  if (_recibosAdminFiltro.empresa) empleadosAdmin = empleadosAdmin.filter(e => (e.empresa || '') === _recibosAdminFiltro.empresa);
+
+  if (_recibosAdminFiltro.ordenEmpresa) {
+    const dir = _recibosAdminFiltro.ordenEmpresa === 'asc' ? 1 : -1;
+    empleadosAdmin = empleadosAdmin.slice().sort((a, b) => {
+      const ea = (a.empresa || '').toLowerCase(), eb = (b.empresa || '').toLowerCase();
+      if (ea !== eb) return ea < eb ? -1 * dir : 1 * dir;
+      return a.nombre.localeCompare(b.nombre, 'es');
+    });
+  }
+
+  const [mes1, mes2] = _ultimosDosMesesRecibos();
 
   const filas = empleadosAdmin.map(emp => {
     const nombre = emp.nombre;
@@ -4468,14 +4507,24 @@ function renderRecibosAdminTab() {
         <div class="dt-identity-legal" style="margin-top:2px">${nombreLegalHTML}</div>
       </div></div></td>
       <td><span style="font-size:12.5px;color:var(--text-secondary)">${emp.empresa || '—'}</span></td>
-      <td class="al-c"><button class="btn-admin-edit" type="button" onclick="event.stopPropagation();_toggleRecibosAdminFila('${nomEnc}','${rowId}')">${icon('fileText', 'icon-14')} Ver recibos</button></td>
+      <td class="al-c" data-mes="0" style="font-size:14px">…</td>
+      <td class="al-c" data-mes="1" style="font-size:14px">…</td>
+      <td class="al-c">
+        <div style="display:flex;gap:6px;justify-content:center">
+          <button class="btn-admin-edit" type="button" title="Agregar recibo" onclick="event.stopPropagation();_accesoRapidoAgregarRecibo('${nomEnc}','${rowId}')">${icon('plus', 'icon-14')} Agregar</button>
+          <button class="btn-admin-edit" type="button" onclick="event.stopPropagation();_toggleRecibosAdminFila('${nomEnc}','${rowId}')">${icon('fileText', 'icon-14')} Ver recibos</button>
+        </div>
+      </td>
     </tr>
     <tr id="${rowId}" style="display:none">
-      <td colspan="3" style="padding:0;border-bottom:1px solid var(--border-neutral)">
+      <td colspan="5" style="padding:0;border-bottom:1px solid var(--border-neutral)">
         <div style="padding:16px 18px;background:var(--gray-50)" id="${rowId}_body"></div>
       </td>
     </tr>`;
   }).join('');
+
+  const flechaStyle = _recibosAdminFiltro.ordenEmpresa === 'asc' ? 'display:inline-flex;transform:rotate(180deg)' : 'display:inline-flex';
+  const ordenBtnActivo = _recibosAdminFiltro.ordenEmpresa ? 'style="border-color:var(--accent, #0d0d0d)"' : '';
 
   container.innerHTML = `
     <div class="admin-head-row">
@@ -4486,14 +4535,61 @@ function renderRecibosAdminTab() {
     </div>
     <div class="filters-bar">
       <div class="f-search-wrap">${icon('search', 'icon-16')}<input type="text" class="f-search" id="adminBuscarRecibos" placeholder="Buscar empleado…" oninput="_filtrarTablaRecibosAdmin()" /></div>
+      <select class="admin-input" id="adminFiltroEmpresaRecibos" style="max-width:220px" onchange="_recibosAdminFiltro.empresa=this.value;renderRecibosAdminTab();">
+        <option value="">Todas las empresas</option>
+        ${empresasDisponibles.map(e => `<option value="${e.replace(/"/g, '&quot;')}" ${_recibosAdminFiltro.empresa === e ? 'selected' : ''}>${e}</option>`).join('')}
+      </select>
+      <button type="button" class="btn-admin-edit" ${ordenBtnActivo} onclick="_toggleOrdenEmpresaRecibos()">
+        Empresa <span style="${flechaStyle}">${icon('chevronDown', 'icon-14')}</span>
+      </button>
     </div>
     <div class="dt-wrap"><div class="dt-scroll">
       <table class="dt-table" id="adminTablaRecibos">
-        <thead><tr><th>Empleado</th><th>Empresa</th><th class="al-c"></th></tr></thead>
-        <tbody>${filas || '<tr><td colspan="3" style="text-align:center;padding:2.5rem;color:var(--text-muted);font-size:13px">Sin empleados cargados</td></tr>'}</tbody>
+        <thead><tr><th>Empleado</th><th>Empresa</th><th class="al-c">${mes1.label}</th><th class="al-c">${mes2.label}</th><th class="al-c"></th></tr></thead>
+        <tbody>${filas || '<tr><td colspan="5" style="text-align:center;padding:2.5rem;color:var(--text-muted);font-size:13px">Sin empleados cargados</td></tr>'}</tbody>
       </table>
     </div></div>
   `;
+
+  _cargarEstadoMensualRecibos();
+}
+
+// Un solo pedido al backend trae los períodos ACTIVOS de TODOS los
+// empleados (ver GET /api/recibos/estado-mensual) — evita N llamadas, una
+// por fila, solo para pintar el ✅/-- de los últimos 2 meses.
+async function _cargarEstadoMensualRecibos() {
+  const [mes1, mes2] = _ultimosDosMesesRecibos();
+  const data = await apiRecibos('/estado-mensual', { method: 'GET' });
+  if (!data || data.ok !== true) {
+    document.querySelectorAll('#adminTablaRecibos tbody tr.dt-clickable td[data-mes]').forEach(td => { td.textContent = '?'; });
+    return;
+  }
+  const porEmpleado = data.por_empleado || {};
+  document.querySelectorAll('#adminTablaRecibos tbody tr.dt-clickable').forEach(row => {
+    const nombre = row.getAttribute('data-nombre') || '';
+    const key = nombre.trim().replace(/\s+/g, ' ').toLowerCase();
+    const periodos = porEmpleado[key] || [];
+    const c1 = row.querySelector('td[data-mes="0"]');
+    const c2 = row.querySelector('td[data-mes="1"]');
+    if (c1) c1.textContent = periodos.includes(mes1.periodo) ? '✅' : '--';
+    if (c2) c2.textContent = periodos.includes(mes2.periodo) ? '✅' : '--';
+  });
+}
+
+// Expande la fila (si no lo estaba ya) y abre directo el modal de "Subir
+// recibo" — evita el paso intermedio de tocar "Ver recibos" primero cuando
+// lo único que se quiere es cargar un recibo nuevo.
+function _accesoRapidoAgregarRecibo(nombre, rowId) {
+  const fila = document.getElementById(rowId);
+  if (!fila) return;
+  const yaAbierta = fila.style.display !== 'none' && _recibosFicha && _recibosFicha.nombre === nombre;
+  if (!yaAbierta) _toggleRecibosAdminFila(nombre, rowId);
+  if (!_recibosFicha || _recibosFicha.nombre !== nombre) return;
+  if (!_recibosFicha.nombreLegal) {
+    showToast('Falta el nombre legal — completalo en el Perfil antes de subir recibos');
+    return;
+  }
+  _abrirModalRecibo('subir');
 }
 
 // Solo una fila expandida a la vez: _renderTabRecibosEmpleado() genera IDs
@@ -5998,6 +6094,7 @@ async function _guardarRecibo(modo) {
     _cerrarModalRecibo();
     showToast(modo === 'reemplazar' ? 'Recibo reemplazado correctamente' : 'Recibo subido correctamente');
     _fetchRecibosEmpleado();
+    if (document.getElementById('adminTablaRecibos')) _cargarEstadoMensualRecibos();
   } catch (err) {
     mostrarError('Error de conexión. Intentá de nuevo.');
   } finally {
