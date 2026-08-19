@@ -436,7 +436,7 @@
       <div>
         <div class="form-emp-name" id="formEmpNombre"></div>
         <div class="form-emp-suc" id="formSucInfo"></div>
-        <span class="kiosco-badge" style="margin-top:4px">Kiosco · sin GPS</span>
+        <span class="kiosco-badge" style="margin-top:4px" id="kioscoBadge">Kiosco · sin GPS</span>
       </div>
     </div>
 
@@ -537,6 +537,32 @@
 <script src="croma-icons.js?v=20260803-1a"></script>
 <script>
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
+const BACKEND_URL = 'https://api.croma-app.com.ar';
+
+// ── Fase 7D-3: modo de escritura por dispositivo ────────────────────────
+// Cada kiosco decide su writer ANTES de mandar cualquier request, nunca
+// como reacción a un error — esto NO es un fallback Node→GAS (eso está
+// explícitamente prohibido, ver enviarFichada más abajo). Es selección de
+// modo, fija para toda la sesión de esta pestaña:
+//   - hay credencial instalada en localStorage -> modoEscritura='NODE'
+//   - no hay credencial -> modoEscritura='LEGACY_GAS' (comportamiento
+//     actual, sin ningún cambio, ni un byte distinto de código ejecutado)
+// El formato del token acá SOLO decide qué camino de código toma este
+// archivo — el auth real ocurre siempre en el backend (verificarDispositivoKiosco).
+// Un token con formato válido pero revocado/inexistente sigue en modo
+// NODE igual (ver punto 10 del diseño: un token inválido es un problema
+// de configuración, nunca un motivo para caer a GAS silenciosamente).
+const CROMA_KIOSCO_TOKEN_KEY = 'croma_kiosco_token';
+const TOKEN_KIOSCO_RE = /^[0-9a-f]{64}$/;
+
+function leerTokenKiosco() {
+  try {
+    const t = localStorage.getItem(CROMA_KIOSCO_TOKEN_KEY);
+    return (t && TOKEN_KIOSCO_RE.test(t)) ? t : null;
+  } catch (e) { return null; }
+}
+const tokenKioscoInstalado = leerTokenKiosco();
+const modoEscritura = tokenKioscoInstalado ? 'NODE' : 'LEGACY_GAS';
 
 const SUCURSALES = [
   { id: '01',      nombre: '01 PASEO',           color: '#2563EB', colorLight: '#EFF6FF', icon: 'store'        },
@@ -919,6 +945,9 @@ function mostrarFormulario() {
 
   document.getElementById('formEmpNombre').textContent = usuariosSel.nombre.replace(/^\d+\s*/, '');
   document.getElementById('formSucInfo').textContent   = sucursal.nombre;
+  // Indicador NO sensible, solo en modo Node — nunca el token ni el hash.
+  document.getElementById('kioscoBadge').textContent = modoEscritura === 'NODE'
+    ? 'Kiosco · sin GPS · Dispositivo autorizado' : 'Kiosco · sin GPS';
 
   const now = new Date();
   document.getElementById('fechaDisplay').textContent =
@@ -984,6 +1013,80 @@ function onToggleRecup() {
   document.getElementById('recupExtra').classList.toggle('visible', document.getElementById('toggleRecup').checked);
 }
 
+// ── Fase 7D-3: cliente Node para Kiosco ─────────────────────────────────
+// Genera una idempotency_key robusta — mismo helper que fichar.html
+// (Fase 7C). Preferencia: crypto.randomUUID(). Fallback (sin
+// randomUUID pero con getRandomValues): 16 bytes en hex. Último fallback:
+// timestamp+random, nunca solo Date.now().
+function generarIdempotencyKey() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return 'fb-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+// Operación pendiente — sobrevive un resultado AMBIGUO (network error/
+// timeout) para reintentar con la MISMA idempotency_key sin arriesgar una
+// fila duplicada. Nunca se usa para cambiar de writer: una vez que una
+// operación nació en Node, sus reintentos son SIEMPRE a Node.
+let intentoFichadaKioscoPendiente = null; // { idempotencyKey, payload }
+
+// Clasifica el resultado de POST /api/fichadas/kiosco. Nunca llama a GAS
+// como fallback bajo ninguna circunstancia — ver enviarFichada().
+async function postFichadaKioscoNode(payload) {
+  let resp;
+  try {
+    resp = await fetch(`${BACKEND_URL}/api/fichadas/kiosco`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Kiosk ${tokenKioscoInstalado}` },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    // Sin respuesta HTTP — AMBIGUO: el request pudo haber llegado igual.
+    throw Object.assign(new Error('Error de red'), { tipo: 'ambiguo' });
+  }
+
+  let json;
+  try {
+    json = await resp.json();
+  } catch (e) {
+    // Hubo respuesta pero no se pudo leer — también AMBIGUO.
+    throw Object.assign(new Error('Respuesta ilegible'), { tipo: 'ambiguo' });
+  }
+
+  if (resp.status === 401) {
+    // Credencial inválida/revocada/corrupta — problema de CONFIGURACIÓN
+    // del dispositivo, nunca un motivo para caer a GAS (ver punto 10 del
+    // diseño 7D-3). STOP operativo, no reintento automático.
+    throw Object.assign(new Error((json && json.error) || 'Dispositivo no autorizado'), { tipo: 'no_autorizado' });
+  }
+  if (resp.status === 503) throw Object.assign(new Error((json && json.error) || 'No disponible'), { tipo: 'no_disponible' });
+  if (!resp.ok || !json || json.ok !== true) {
+    throw Object.assign(new Error((json && json.error) || 'Error desconocido'), { tipo: 'rechazo_confirmado' });
+  }
+  return json; // { ok:true, id, idempotent, local }
+}
+
+function mostrarPantallaExitoFichada(nombre, entrada, salida, esRecup, fechaRec, now) {
+  document.getElementById('okDetalle').innerHTML =
+    '<strong>' + nombre + '</strong><br>' +
+    sucursal.nombre + '<br>' +
+    DIAS_ES[now.getDay()] + ' ' + now.getDate() + ' de ' + MESES_ES[now.getMonth()] +
+    ' — ' + entrada + ' a ' + salida +
+    (esRecup ? '<br><small>Recuperación del ' + fechaRec + '</small>' : '');
+
+  fichadasHoy.push({ empleado: usuariosSel.nombre, hora_entrada: entrada, hora_salida: salida });
+  try { localStorage.setItem(cacheFichadasKey(), JSON.stringify(fichadasHoy)); } catch(e) {}
+
+  mostrarScreen('screenOk');
+  iniciarCountdown(8);
+}
+
 async function enviarFichada() {
   const entrada  = document.getElementById('campoEntrada').value;
   const salida   = document.getElementById('campoSalida').value;
@@ -1000,7 +1103,93 @@ async function enviarFichada() {
 
   const now   = new Date();
   const fecha = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  const nombre = usuariosSel.nombre.replace(/^\d+\s*/, '');
 
+  // ══════════════════════════════════════════════════════════════════
+  // MODO NODE (Fase 7D-3) — solo si hay credencial de dispositivo instalada.
+  // ══════════════════════════════════════════════════════════════════
+  if (modoEscritura === 'NODE') {
+    let payload;
+    if (intentoFichadaKioscoPendiente) {
+      // Reintento tras resultado ambiguo: MISMA key, MISMO payload — nunca
+      // se arma uno nuevo con los valores actuales del formulario.
+      payload = intentoFichadaKioscoPendiente.payload;
+    } else {
+      payload = {
+        empleado:          usuariosSel.nombre,
+        fecha,
+        hora_entrada:      entrada,
+        hora_salida:       salida,
+        nota,
+        tipo_registro:     esRecup ? 'RECUPERACION' : 'NORMAL',
+        fecha_a_recuperar: esRecup ? fechaRec : '',
+        idempotency_key:   generarIdempotencyKey(),
+        // local/sucursal/modo_carga: NO se mandan — el backend los deriva
+        // exclusivamente de la credencial del dispositivo.
+      };
+      intentoFichadaKioscoPendiente = { idempotencyKey: payload.idempotency_key, payload };
+    }
+
+    try {
+      const resultado = await postFichadaKioscoNode(payload);
+      intentoFichadaKioscoPendiente = null; // resultado CONFIRMADO -> limpiar
+
+      // Discrepancia token↔sucursal (punto 5 del diseño): el dispositivo
+      // resolvió una sucursal distinta a la que muestra esta pantalla —
+      // la fichada YA se guardó correctamente (el backend nunca escribe
+      // mal), pero es una señal de que este kiosco está mal configurado
+      // (token de otra sucursal instalado acá). Se avisa fuerte, sin
+      // bloquear la operación ya hecha.
+      if (resultado.local && resultado.local !== sucursal.nombre) {
+        console.error('[kiosco] ADVERTENCIA: sucursal resuelta por el dispositivo (' + resultado.local + ') no coincide con la sucursal mostrada (' + sucursal.nombre + ') — revisar instalación de la credencial.');
+        alert('ATENCIÓN: la fichada se guardó, pero este dispositivo está configurado para "' + resultado.local + '", no para "' + sucursal.nombre + '". Avisá a un administrador antes de seguir usando este kiosco.');
+      }
+
+      mostrarPantallaExitoFichada(nombre, entrada, salida, esRecup, fechaRec, now);
+      return;
+    } catch (err) {
+      const tipo = err.tipo;
+
+      if (tipo === 'ambiguo') {
+        // NO se limpia intentoFichadaKioscoPendiente — el reintento debe
+        // usar la MISMA key. NO se llama a GAS bajo ninguna circunstancia.
+        btn.disabled = false; btn.textContent = 'Guardar turno';
+        cromaConfirm(
+          'No pudimos confirmar',
+          'Se envió la fichada pero no llegó la confirmación del servidor. Puede que ya se haya guardado.<br><br>Tocá "Sí, cargar otro" para reintentar — es seguro, no se va a duplicar.'
+        ).then(ok => { if (ok) enviarFichada(); });
+        return;
+      }
+
+      if (tipo === 'no_autorizado') {
+        // Credencial inválida — STOP operativo, nunca cae a GAS. Se limpia
+        // la operación pendiente (no tiene sentido reintentar con la misma
+        // key contra un dispositivo no autorizado).
+        intentoFichadaKioscoPendiente = null;
+        btn.disabled = false; btn.textContent = 'Guardar turno';
+        alert('Dispositivo no autorizado. Este kiosco requiere reconfiguración — avisá a un administrador. (No se guardó ningún turno.)');
+        return;
+      }
+
+      if (tipo === 'no_disponible') {
+        intentoFichadaKioscoPendiente = null;
+        btn.disabled = false; btn.textContent = 'Guardar turno';
+        alert('El sistema de fichaje no está disponible en este momento. Probá de nuevo en unos minutos.');
+        return;
+      }
+
+      // rechazo_confirmado — 403 (empleado inactivo)/409 (duplicado)/400.
+      intentoFichadaKioscoPendiente = null;
+      btn.disabled = false; btn.textContent = 'Guardar turno';
+      alert('No se pudo guardar.\n(' + err.message + ')');
+      return;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // MODO LEGACY_GAS — SIN CAMBIOS respecto al comportamiento anterior a
+  // 7D-3. Los 7 kioscos sin credencial instalada siguen exactamente así.
+  // ══════════════════════════════════════════════════════════════════
   const payload = {
     local:             sucursal.nombre,
     empleado:          usuariosSel.nombre,
@@ -1022,19 +1211,7 @@ async function enviarFichada() {
     const json = await resp.json();
     if (!json.ok) throw new Error(json.error || 'Error desconocido');
 
-    const nombre = usuariosSel.nombre.replace(/^\d+\s*/, '');
-    document.getElementById('okDetalle').innerHTML =
-      '<strong>' + nombre + '</strong><br>' +
-      sucursal.nombre + '<br>' +
-      DIAS_ES[now.getDay()] + ' ' + now.getDate() + ' de ' + MESES_ES[now.getMonth()] +
-      ' — ' + entrada + ' a ' + salida +
-      (esRecup ? '<br><small>Recuperación del ' + fechaRec + '</small>' : '');
-
-    fichadasHoy.push({ empleado: usuariosSel.nombre, hora_entrada: entrada, hora_salida: salida });
-    try { localStorage.setItem(cacheFichadasKey(), JSON.stringify(fichadasHoy)); } catch(e) {}
-
-    mostrarScreen('screenOk');
-    iniciarCountdown(8);
+    mostrarPantallaExitoFichada(nombre, entrada, salida, esRecup, fechaRec, now);
   } catch(err) {
     alert('No se pudo guardar. Verificá la conexión.\n(' + err.message + ')');
     btn.disabled = false; btn.textContent = 'Guardar turno';
