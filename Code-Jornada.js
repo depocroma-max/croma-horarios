@@ -1281,6 +1281,13 @@ function despacharAccionSegura(envelope) {
   if (accion === 'debug_resolver_destinatarios') return accionDebugResolverDestinatarios(datos);
   if (accion === 'get_avisos_visibles_usuario') return accionGetAvisosVisiblesUsuario(datos);
   if (accion === 'marcar_aviso_leido')          return accionMarcarAvisoLeido(datos);
+  // AVISOS ahora vive en Sheets API directa (croma-backend/services/
+  // avisos-sheets.js, 2026-08-18) — esta es la ÚNICA acción de AVISOS que
+  // le queda a GAS: no lee ni escribe la hoja AVISOS, solo dispara los
+  // emails de canal 'email' (no hay SMTP propio en croma-backend todavía).
+  // El aviso ya viene armado desde Node — acá no se valida de nuevo ni se
+  // vuelve a tocar la hoja.
+  if (accion === 'enviar_emails_aviso')         return accionEnviarEmailsAviso(datos);
 
   // Vacaciones aprobadas — lectura segura para el calendario nuevo de
   // AVISOS (ver accionGetSolicitudesVacAprobadas). No forma parte del
@@ -5363,7 +5370,7 @@ function accionReemplazarRecibo(datos) {
 // (auditoría rápida, comparación de registros), tal como se aprobó.
 
 const AVISOS_TIPOS_VALIDOS = ['informacion', 'evento', 'local_cerrado'];
-const AVISOS_DEST_MODOS_VALIDOS = ['todos', 'sucursal', 'empleado', 'administracion'];
+const AVISOS_DEST_MODOS_VALIDOS = ['todos', 'sucursal', 'empleado', 'administracion', 'personal'];
 const AVISOS_CANALES_VALIDOS = ['calendario', 'banner', 'email', 'whatsapp'];
 const AVISOS_SUCURSALES_VALIDAS = ['01', '05', '09', '10', '12', '14', 'DEPO', 'OFICINA'];
 
@@ -5621,6 +5628,19 @@ function enviarEmailsAviso(ss, aviso) {
       }),
     });
   });
+}
+
+// accion: enviar_emails_aviso — datos: { aviso }. Puente para AVISOS ahora
+// que vive en Sheets API directa (croma-backend/services/avisos-sheets.js):
+// el aviso ya viene armado y validado desde Node, esta acción NO lee ni
+// escribe la hoja AVISOS, solo reusa enviarEmailsAviso() con el
+// spreadsheet activo. Sin lock — no toca ninguna hoja compartida, no hay
+// nada que serializar.
+function accionEnviarEmailsAviso(datos) {
+  const aviso = datos && datos.aviso;
+  if (!aviso) return _resp({ ok: false, error: 'Falta el aviso' });
+  enviarEmailsAviso(SpreadsheetApp.getActiveSpreadsheet(), aviso);
+  return _resp({ ok: true });
 }
 
 function accionEditarAviso(datos) {

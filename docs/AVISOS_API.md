@@ -1,29 +1,36 @@
-# AVISOS — Referencia técnica de API (Fase 3A)
+# AVISOS — Referencia técnica de API
 
-> Backend y modelo de datos únicamente. El frontend todavía consume datos mock
-> (Fase 1/2) — nada en producción lee todavía de acá. `EVENTOS`/`ANUNCIOS` siguen
-> funcionando exactamente igual, sin cambios, en paralelo.
+> **2026-08-18 — Migrado a Sheets API directa.** AVISOS ya no depende de
+> Apps Script salvo para el envío de emails (ver Flujo). El frontend real
+> (`croma-calendario-main`, separado de `croma-horarios-main` el mismo día)
+> consume esto vía `/api/avisos/mios`. `EVENTOS`/`ANUNCIOS` siguen sin
+> tocarse, en paralelo, ajenos a este módulo.
 
 ## Flujo
 
 ```
-Frontend (croma-horarios-main)
+Frontend (croma-calendario-main)
         │  fetch con Authorization: Bearer <JWT>
         ▼
-croma-backend (Node/Express)  — /api/avisos/*
-        │  verificarJWT + requiereRol('admin','jefe')
-        │  agrega clave_backend (GAS_BACKEND_SECRET) server-side
-        │  agrega actor = req.user.usuario (nunca del body)
+croma-backend (Node/Express)  — /api/avisos/*, /api/avisos/mios
+        │  verificarJWT + requiereRol('admin','jefe','horarios') (gestión)
+        │  services/avisos-sheets.js — lee/escribe la hoja AVISOS directo
+        │  vía Sheets API v4 (services/sheets.js), cola de escritura en
+        │  memoria por hoja (services/sheets-cola-escritura.js)
         ▼
-Apps Script (Code-Jornada.js) — despacharAccionSegura
-        │  valida clave_backend, despacha a la acción
-        ▼
-Google Sheets — hoja AVISOS
+Google Sheets — hoja AVISOS / AVISOS_LEIDOS
 ```
 
-Toda acción de AVISOS (lectura **y** escritura) pasa por este camino completo.
-Ninguna acción nueva se agrega a `doGet` — esa es la puerta legada que solo
-siguen usando `EVENTOS`/`ANUNCIOS` por compatibilidad.
+Única dependencia de Apps Script que le queda a este módulo: el envío de
+emails del canal `email` (no hay SMTP propio en croma-backend todavía) —
+`services/avisos-sheets.js` llama a la acción GAS `enviar_emails_aviso`
+(nueva, sin lectura/escritura de hoja) de forma best-effort, fire-and-forget,
+después de crear el aviso. Un fallo ahí nunca revierte la creación.
+
+Las acciones viejas de GAS (`guardar_aviso`, `editar_aviso`, etc., en
+`Code-Jornada.js`) se dejaron intactas sin usar — mismo criterio de
+reversibilidad que el resto de `docs/PLAN-SHEETS-API-DIRECTA.md`: no se
+retira código viejo hasta que lo nuevo lleve un tiempo largo estable.
 
 ## Permisos
 
@@ -124,11 +131,16 @@ FECHA_MODIFICACION | VERSION
 
 - `DESTINATARIOS` y `CANALES` viajan como JSON string dentro de la celda.
 - `TIPO` ∈ `informacion | evento | local_cerrado`.
-- `DESTINATARIOS.modo` ∈ `todos | sucursal | empleado | administracion`.
+- `DESTINATARIOS.modo` ∈ `todos | sucursal | empleado | administracion | personal`.
   `local_cerrado` **solo** admite `modo:'sucursal'` (nunca `'todos'` — un
   cierre que afecte a todas las sucursales se expresa seleccionándolas
   explícitamente, no con el atajo `'todos'`, que es reservado para
   comunicados generales).
+  - `personal` (agregado 2026-08-18): visible ÚNICAMENTE para la cuenta
+    que lo creó (`AUTOR === identidad.usuario`) — ni siquiera otro
+    admin/horarios lo ve al consultar `GET /api/avisos/mios`. No depende
+    de rol ni de sucursal, solo de autoría. Pensado para marcar algo en
+    el calendario propio sin que se le avise a nadie más.
 - `PRIORIDAD` ∈ `normal | urgente`.
 - `ARCHIVADO` es el único estado que se persiste. `activo/programado/vencido`
   se derivan siempre de las fechas — nunca se guardan, para que no puedan

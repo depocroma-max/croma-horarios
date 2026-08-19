@@ -186,10 +186,11 @@
   // snake_case↔camelCase (no hace falta acá: el endpoint ya devuelve el
   // shape final tal cual lo necesita el calendario).
   async function fetchVacacionesAprobadas() {
-    const token = typeof _getToken === 'function' ? _getToken() : null;
+    const token = window.CromaSesion ? window.CromaSesion.obtenerToken() : null;
     let resp;
     try {
-      resp = await fetch((typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : '') + '/api/avisos/vacaciones-aprobadas', {
+      const base = window.CromaSesion ? window.CromaSesion.BACKEND_URL : '';
+      resp = await fetch(base + '/api/avisos/vacaciones-aprobadas', {
         headers: token ? { Authorization: 'Bearer ' + token } : {},
       });
     } catch (e) {

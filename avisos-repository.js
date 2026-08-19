@@ -190,11 +190,12 @@
   async function fetchAvisosApi(path, opciones) {
     opciones = opciones || {};
     const headers = Object.assign({ 'Content-Type': 'application/json' }, opciones.headers || {});
-    const token = typeof _getToken === 'function' ? _getToken() : null;
+    const token = window.CromaSesion ? window.CromaSesion.obtenerToken() : null;
     if (token) headers['Authorization'] = 'Bearer ' + token;
     let resp;
     try {
-      resp = await fetch((typeof BACKEND_URL !== 'undefined' ? BACKEND_URL : '') + '/api/avisos' + path,
+      const base = window.CromaSesion ? window.CromaSesion.BACKEND_URL : '';
+      resp = await fetch(base + '/api/avisos' + path,
         Object.assign({}, opciones, { headers: headers }));
     } catch (e) {
       return { ok: false, status: 0, error: 'No pudimos conectarnos. Probá de nuevo.' };

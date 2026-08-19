@@ -96,12 +96,16 @@
   }
 
   function _apiUrl() {
-    const base = (typeof BACKEND_URL !== 'undefined') ? BACKEND_URL : '';
+    const base = window.CromaSesion ? window.CromaSesion.BACKEND_URL : '';
     return base + '/api/avisos/mios';
   }
 
+  function _token() {
+    return window.CromaSesion ? window.CromaSesion.obtenerToken() : null;
+  }
+
   async function _fetchMisAvisos() {
-    const token = (typeof _getToken === 'function') ? _getToken() : null;
+    const token = _token();
     let resp;
     try {
       resp = await fetch(_apiUrl(), {
@@ -136,7 +140,7 @@
     // identidad la resuelve el backend desde el JWT, nunca desde acá— se
     // mantiene solo para cumplir la misma firma que LegacyStrategy.
     marcarLeido: async function (empleado, itemId) {
-      const token = (typeof _getToken === 'function') ? _getToken() : null;
+      const token = _token();
       let resp;
       try {
         resp = await fetch(_apiUrl() + '/' + encodeURIComponent(itemId) + '/marcar-leido', {

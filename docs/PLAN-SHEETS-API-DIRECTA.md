@@ -1,8 +1,9 @@
 # PLAN — Sacar a Apps Script del camino crítico (Sheets API directa)
 
-> **Estado:** propuesta, sin empezar. Este documento es la especificación para
-> ejecutar el trabajo en fases (pensado para retomarlo en otra sesión/herramienta,
-> mismo criterio que se usó para AVISOS — ver `AVISOS_API.md`).
+> **Estado (2026-08-18):** en curso, bastante avanzado — desactualizado si decía
+> "sin empezar". Ya migrados: Horarios, Perfiles, Vacaciones (lectura), Portal
+> Empleado, Avisos (completo). Fichadas parcial. Ver tabla de fases más abajo
+> para el detalle actualizado por módulo.
 
 ## 0. Decisión aceptada — hosting de croma-backend
 
@@ -148,7 +149,7 @@ la fase de Perfiles, donde corresponden.
 | 6 | Login de empleados / Identidad | `cargar_usuarios_interno` (vía `identidad.js`/`gas.js` en croma-backend) | Ya está cacheado y es lo menos urgente (login ya no es el cuello de botella principal). |
 | 7 | Recibos (listado + subir + reemplazar) | `listar_recibos_empleado`, `subir_recibo`, `reemplazar_recibo` | La descarga ya se migró a Drive directo — cierra el círculo para que Recibos no dependa de GAS en absoluto. |
 | 8 | Fichadas | `guardarFichada`, `get_fichadas_empleado`, `get_fichadas_hoy_local`, `acreditarBanco`, `usarBanco`, `ajustar_jornada` | Al final — es el registro legal de asistencia, se migra último y con más testing, cuando el patrón ya está maduro en 7 módulos. |
-| — | Avisos | ya vive en `croma-backend` desde antes (ver `AVISOS_API.md`) — no requiere trabajo nuevo, solo falta que Apps Script deje de ser el motor de fondo también para AVISOS si se quiere sacar del todo. |
+| ✅ | Avisos | `get_avisos*`, `guardar_aviso`, `editar_aviso`, `archivar_aviso`, `restaurar_aviso`, `marcar_aviso_leido` | **Migrado 2026-08-18** — `croma-backend/src/services/avisos-sheets.js`. Único resto de GAS: envío de emails (best-effort, acción nueva `enviar_emails_aviso`, sin lectura/escritura de hoja) — no hay SMTP propio en Node todavía. Ver `AVISOS_API.md`. |
 
 Fichar.html y kiosco.html (los 2 kioscos) consumen varias de estas acciones
 directo — cada fase que los toque tiene que actualizar esos dos archivos
