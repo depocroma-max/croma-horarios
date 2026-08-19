@@ -8958,6 +8958,34 @@ function anuncioVencido(a) {
   return false;
 }
 
+// Fecha en la que un anuncio deja de estar vigente (mismo criterio que
+// anuncioVencido, extraído acá para poder medir CUÁNTOS días lleva
+// vencido, no solo si lo está). null = sin fecha, nunca vence.
+function _fechaVencimientoAnuncio(a) {
+  if (a.vigencia) return a.vigencia;
+  if (a.fecha) {
+    const d = new Date(a.fecha.substring(0, 10));
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().substring(0, 10);
+  }
+  return null;
+}
+
+// Pedido explícito: un anuncio vencido sigue mostrándose (tag "Vencido")
+// un día más para que no desaparezca de golpe el mismo día que vence —
+// recién a partir del segundo día vencido se saca de la lista.
+function anuncioVencidoHaceMasDeUnDia(a) {
+  const fechaVence = _fechaVencimientoAnuncio(a);
+  if (!fechaVence) return false;
+  // Fechas puras (UTC medianoche las dos), nunca la hora actual — si no,
+  // la diferencia se infla según qué hora del día es "hoy" y esto se
+  // dispara antes de tiempo (bug real, encontrado al probar este mismo
+  // fix: a la tarde ya contaba como "2 días" un vencimiento de ayer).
+  const hoy = new Date().toISOString().substring(0, 10);
+  const dias = Math.round((Date.parse(hoy + 'T00:00:00Z') - Date.parse(fechaVence + 'T00:00:00Z')) / 86400000);
+  return dias > 1;
+}
+
 // ── HELPERS ───────────────────────────────────────────
 function anunciosApiUrl(accion, params) {
   let url = `${APPS_SCRIPT_URL}?accion=${accion}`;
@@ -9341,13 +9369,21 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
   const badge = document.getElementById('anunciosBadgeCount');
   if (!wrap || !list) return;
 
-  const noLeidos = anuncios.filter(a => !_anunciosLeidosEmp.has(a.id));
+  // Un vencido de hace más de 1 día ya ni se muestra (ver
+  // anuncioVencidoHaceMasDeUnDia) — el día que vence y el siguiente
+  // todavía aparece (tag "Vencido"), después desaparece de la lista.
+  const visibles = anuncios.filter(a => !anuncioVencidoHaceMasDeUnDia(a));
+
+  // Bug real: acá nunca se excluía vencido del badge (a diferencia de
+  // actualizarBadgeAnunciosEmp, que sí lo hacía) — un anuncio vencido
+  // sin leer seguía sumando al contador de "Novedades" para siempre.
+  const noLeidos = visibles.filter(a => !_anunciosLeidosEmp.has(a.id) && !anuncioVencido(a));
   if (badge) {
     badge.textContent = noLeidos.length || '';
     badge.style.display = noLeidos.length ? 'inline-flex' : 'none';
   }
 
-  list.innerHTML = anuncios.map(function(a, i) {
+  list.innerHTML = visibles.map(function(a, i) {
     const leido   = _anunciosLeidosEmp.has(a.id);
     const vencido = anuncioVencido(a);
     const claseItem = (leido || vencido) ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo';
