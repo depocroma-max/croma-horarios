@@ -3188,6 +3188,19 @@ function _derivarCamposFecha(fechaISO) {
   };
 }
 
+// getHorarios()/leerHorarios() calculan el "día del mes" a mostrar a partir
+// de MARCA_TEMPORAL (columna E), no de FECHA/AÑO/MES/DIA — así funciona
+// siempre para fichadas normales, donde ambas cosas coinciden. Un ajuste de
+// jornada puede crear/mover una fila a una fecha distinta de "hoy" (ej.
+// cargar un turno olvidado de ayer), así que su MARCA_TEMPORAL tiene que
+// caer en el día de la jornada corregida — si quedara en "ahora" (new
+// Date()), el turno se ve agrupado en el día del click en vez del día real.
+function _marcaTemporalParaFecha(fechaISO) {
+  const partes = fechaISO.split('-').map(Number);
+  const ahora  = new Date();
+  return new Date(partes[0], partes[1] - 1, partes[2], ahora.getHours(), ahora.getMinutes(), ahora.getSeconds());
+}
+
 // ── ID_FICHADA / ESTADO: columnas, contador atómico y backfill ──
 // ID_FICHADA: identificador permanente y corto (FID000001, FID001250, ...),
 // sin fecha/hora (esa info ya vive en otras columnas). ESTADO: ACTIVA|ANULADA,
@@ -3621,7 +3634,7 @@ function ajustarJornada(e) {
         filaNueva[cAnio]    = anio;
         filaNueva[cMes]     = mesTexto;
         filaNueva[cDia]     = diaTexto;
-        filaNueva[cMarca]   = new Date();
+        filaNueva[cMarca]   = _marcaTemporalParaFecha(datos.fecha_jornada);
         filaNueva[cEmp]     = datos.empleado;
         filaNueva[cEntrada] = entradaNueva;
         filaNueva[cSalida]  = salidaNueva;
@@ -3695,6 +3708,7 @@ function ajustarJornada(e) {
         hoja.getRange(fila, cAnio + 1).setValue(anio);
         hoja.getRange(fila, cMes + 1).setValue(mesTexto);
         hoja.getRange(fila, cDia + 1).setValue(diaTexto);
+        hoja.getRange(fila, cMarca + 1).setValue(_marcaTemporalParaFecha(datos.fecha_jornada));
       }
 
       jornadaTurnos['turno' + n] = { id_fichada: idFichada, entrada: entradaNueva, salida: salidaNueva, estado: 'ACTIVA' };
