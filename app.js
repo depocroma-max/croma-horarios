@@ -452,12 +452,143 @@ function renderGrilla(datos) {
 const DIAS_FULL_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 let enVivoInterval = null;
 
+// Rollback temporal, mismo criterio ya usado en croma-panel-main:
+//   true  = /api/envivo-hoy (HORARIOS + FICHADAS, estado calculado por
+//           croma-backend) — el frontend solo renderiza.
+//   false = legacy: state.datos (DATOS GENERALES) + estadoEnVivo() acá.
+// Sin fallback automático Node->legacy ante error — ver cargarEnVivoNode().
+const ENVIVO_NODE = true;
+let envivoDataNode = null;
+let envivoErrorNode = null;
+
+async function cargarEnVivoNode() {
+  const container = document.getElementById('enVivoContainer');
+  if (container) container.innerHTML = '<p style="padding:2rem;color:#999;font-size:14px">Cargando...</p>';
+  envivoErrorNode = null;
+  const data = await apiEnVivo('');
+  if (data && data.ok) {
+    envivoDataNode = data.data;
+  } else {
+    envivoDataNode = null;
+    envivoErrorNode = (data && data.error) || 'No se pudo cargar En vivo.';
+  }
+  renderEnVivoNode();
+}
+
+// Mismo DOM/clases CSS que renderEnVivo() (legacy) — nunca reinterpreta
+// item.estado ni recalcula atraso con Date(): la única fecha usada acá es
+// cosmética (hora de "actualizado" de la barra), igual que en
+// croma-panel-main/renderEnVivoPanelNode().
+function renderEnVivoNode() {
+  const container = document.getElementById('enVivoContainer');
+  if (!container) return;
+
+  if (envivoDataNode === null) {
+    container.innerHTML = `<p style="padding:2rem;color:#999;font-size:14px">${envivoErrorNode || 'Error al cargar los datos en vivo'}</p>`;
+    return;
+  }
+
+  let totalPresentes = 0;
+  let cards = '';
+
+  SUCURSALES.forEach(suc => {
+    const items = envivoDataNode.filter(r => r.sucursal === suc.nombre);
+    const presentes  = items.filter(r => r.estado === 'PRESENTE');
+    const pausados   = items.filter(r => r.estado === 'PAUSA');
+    const atrasados  = items.filter(r => r.estado === 'ATRASO');
+    const proximos   = items.filter(r => r.estado === 'PROXIMO');
+    const terminados = items.filter(r => r.estado === 'FINALIZADO');
+    totalPresentes += presentes.length;
+
+    const hayDatos = items.length > 0;
+
+    cards += `<div class="envivo-card ${presentes.length ? 'activa' : 'vacia'}" style="--card-suc:${suc.color}">`;
+    cards += `<div class="envivo-card-head">
+        <span class="envivo-card-pin" style="color:${suc.color}">${icon('mapPin','icon-16')}</span>
+        <span class="envivo-card-suc">${suc.nombre}</span>
+        <span class="envivo-card-count ${presentes.length ? '' : 'cero'}"><b>${presentes.length}</b><span>en turno</span></span>
+      </div>`;
+
+    if (presentes.length) {
+      cards += '<div class="envivo-presentes">';
+      presentes.forEach(item => {
+        let meta = `Ingreso ${item.real ? item.real.entrada : '?'} - Sale ${item.real ? item.real.salida : '?'}`;
+        if (item.puntualidad && item.puntualidad.estado === 'LLEGO_TARDE') meta += ` · llegó ${item.puntualidad.minutos} min tarde`;
+        if (item.plan && item.plan.estado === 'SIN_HORARIO') meta += ' · sin horario cargado';
+        if (item.inconsistencias && item.inconsistencias.length) meta += ' · ⚠ revisar horario';
+        cards += `<div class="envivo-emp">
+          ${avatarEnVivoHTML(item.empleado, suc, 'presente')}
+          <div class="envivo-emp-info">
+            <span class="envivo-emp-nombre">${nombreCortoEnVivo(item.empleado)}</span>
+            <span class="envivo-emp-meta">${meta}</span>
+          </div>
+        </div>`;
+      });
+      cards += '</div>';
+    } else if (hayDatos) {
+      cards += '<div class="envivo-vacia-msg">Nadie en turno ahora</div>';
+    } else {
+      cards += '<div class="envivo-vacia-msg">Sin registros hoy</div>';
+    }
+
+    if (pausados.length || atrasados.length || proximos.length || terminados.length) {
+      cards += '<div class="envivo-card-foot">';
+      pausados.forEach(item => {
+        const vuelve = item.proximo ? item.proximo.entrada : '?';
+        cards += `<div class="envivo-foot-line">${icon('pause','icon-14')} <b>${nombreCortoEnVivo(item.empleado)}</b> en pausa · vuelve ${vuelve}</div>`;
+      });
+      atrasados.forEach(item => {
+        const minutos = item.puntualidad ? item.puntualidad.minutos : '?';
+        const esVuelta = item.puntualidad && item.puntualidad.estado === 'ATRASO_DE_VUELTA';
+        const bloque = (item.plan && item.plan.bloqueActualIndex != null && item.plan.bloques[item.plan.bloqueActualIndex]) ? item.plan.bloques[item.plan.bloqueActualIndex].entrada : '?';
+        cards += `<div class="envivo-foot-line">${icon('alertTriangle','icon-14')} <b>${nombreCortoEnVivo(item.empleado)}</b> ${esVuelta ? 'atrasado de vuelta · debía volver ' : 'atrasado · debía entrar '}${bloque} · ${minutos} min</div>`;
+      });
+      proximos.forEach(item => {
+        const entra = item.proximo ? item.proximo.entrada : '?';
+        cards += `<div class="envivo-foot-line">${icon('clock','icon-12')}<b>${nombreCortoEnVivo(item.empleado)}</b> entra ${entra}</div>`;
+      });
+      terminados.sort((a, b) => a.empleado.localeCompare(b.empleado)).forEach(item => {
+        const salida = item.real ? item.real.salida : '?';
+        const extra = (item.plan && item.plan.estado === 'SIN_HORARIO') ? ' (sin horario cargado)' : '';
+        cards += `<div class="envivo-foot-line fin">${icon('check','icon-12')}<b>${nombreCortoEnVivo(item.empleado)}</b> terminó ${salida}${extra}</div>`;
+      });
+      cards += '</div>';
+    }
+
+    cards += '</div>';
+  });
+
+  container.innerHTML = cards;
+
+  const bar = document.getElementById('enVivoBar');
+  if (bar) {
+    // Cosmético únicamente (hora de refresco de pantalla) — nunca decide estado.
+    const ahora = new Date();
+    const hh = String(ahora.getHours()).padStart(2, '0');
+    const mm = String(ahora.getMinutes()).padStart(2, '0');
+    bar.innerHTML =
+      `<span class="envivo-bar-dia">${DIAS_FULL_ES[ahora.getDay()]} ${ahora.getDate()} ${MESES_ES[ahora.getMonth()].toLowerCase()}</span>` +
+      `<span class="envivo-bar-hora">actualizado <b>${hh}:${mm}</b></span>` +
+      `<span class="envivo-bar-total"><span class="envivo-live-dot"></span>EN VIVO · <b>${totalPresentes}</b>&nbsp;trabajando</span>`;
+  }
+}
+
 function iniciarEnVivoAuto() {
   if (enVivoInterval) return;
+  let ticks = 0;
   enVivoInterval = setInterval(() => {
     if (state.tabActual !== 'envivo') return;
-    renderEnVivo();
-  }, 60000); // re-render cada minuto para que la presencia y el reloj avancen
+    if (ENVIVO_NODE) {
+      // El estado ya viene calculado del backend — no alcanza con
+      // re-renderizar cada minuto (no cambia nada del lado del cliente),
+      // hace falta volver a pedirlo. Cada 5 min, mismo intervalo que
+      // croma-panel-main (FICHADAS se lee fresca en cada request).
+      ticks++;
+      if (ticks % 5 === 0) cargarEnVivoNode();
+    } else {
+      renderEnVivo(); // legacy: recalcula en el cliente cada minuto para que avance el reloj
+    }
+  }, 60000);
 }
 function detenerEnVivoAuto() {
   if (enVivoInterval) { clearInterval(enVivoInterval); enVivoInterval = null; }
@@ -2606,7 +2737,7 @@ function setView(view) {
     statsRow.style.display = 'none';
     filters.style.display  = 'none';
     mostrarFiltrosDiaEnBarra(false);
-    renderEnVivo();
+    if (ENVIVO_NODE) cargarEnVivoNode(); else renderEnVivo();
     iniciarEnVivoAuto();
   } else {
     weekNav.style.display  = 'none';
@@ -5347,6 +5478,11 @@ const apiAnuncios = (path, opciones) => _apiFetch('/api/anuncios', path, opcione
 // sigue intacta — si hace falta revertir, alcanza con volver a llamarla
 // directo en cargarDatos() (ver ese fetch más arriba en este archivo).
 const apiHorariosSheets = (path, opciones) => _apiFetch('/api/horarios-sheets', path, opciones);
+// En vivo (HORARIOS+FICHADAS, estado ya calculado por croma-backend) —
+// mismo motor y endpoint ya productivo en croma-panel-main desde Fase 3D.
+// Rollback: ENVIVO_NODE=false (ver bloque "EN VIVO" más arriba en este
+// archivo) vuelve a state.datos/DATOS GENERALES sin tocar esta línea.
+const apiEnVivo = (path, opciones) => _apiFetch('/api/envivo-hoy', path, opciones);
 // Fase 1B: reemplaza accion=datos_portal_empleado del Portal Empleado.
 // croma-backend arma el mismo contrato combinando GAS (sin_horarios=1,
 // perfiles+certificados+vacaciones) + Sheets API (horarios) en paralelo —
