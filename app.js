@@ -638,7 +638,10 @@ function inicialesEnVivo(nombre) {
   return limpio.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('');
 }
 function nombreCortoEnVivo(nombre) {
-  return String(nombre || '').replace(/^\d+\s+/, '');
+  const limpio = String(nombre || '').replace(/^\d+\s+/, '');
+  const apodo = EMPLEADOS_PERFILES[nombre]?.apodo || EMPLEADOS_PERFILES[limpio]?.apodo;
+  if (apodo) return apodo;
+  return limpio.split(' ')[0] || limpio;
 }
 
 function avatarEnVivoHTML(nombre, suc, estadoDot) {
