@@ -465,12 +465,23 @@ async function cargarEnVivoNode() {
   const container = document.getElementById('enVivoContainer');
   if (container) container.innerHTML = '<p style="padding:2rem;color:#999;font-size:14px">Cargando...</p>';
   envivoErrorNode = null;
-  const data = await apiEnVivo('');
+  let data = await apiEnVivo('');
+  if (!(data && data.ok)) {
+    // _apiFetch traga excepciones de red sin loguear nada — un hipo
+    // transitorio de conexión se veía como error sin ninguna pista en
+    // consola. Un reintento silencioso a los 2s cubre ese caso común
+    // sin esconder una falla real (si vuelve a fallar, ahí sí se loguea
+    // y se muestra el error).
+    console.warn('[envivo] primer intento falló, reintentando en 2s:', data);
+    await new Promise(r => setTimeout(r, 2000));
+    data = await apiEnVivo('');
+  }
   if (data && data.ok) {
     envivoDataNode = data.data;
   } else {
     envivoDataNode = null;
     envivoErrorNode = (data && data.error) || 'No se pudo cargar En vivo.';
+    console.error('[envivo] falló también el reintento:', data);
   }
   renderEnVivoNode();
 }
