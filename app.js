@@ -1045,31 +1045,31 @@ function renderEmpleados(datos) {
         </div>
       </div>
       <div class="emp-filtro-grupo" style="min-width:130px;flex:1">
-        <label class="emp-filtro-label">Período</label>
+        <label class="emp-filtro-label" for="empFiltPeriodo">Período</label>
         <select class="emp-filtro-select" id="empFiltPeriodo" onchange="renderEmpleados(state.datos)">
           ${periodoOpts}
         </select>
       </div>
       <div class="emp-filtro-grupo" style="min-width:130px;flex:1">
-        <label class="emp-filtro-label">Empresa</label>
+        <label class="emp-filtro-label" for="empFiltEmpresa">Empresa</label>
         <select class="emp-filtro-select" id="empFiltEmpresa" onchange="renderEmpleados(state.datos)">
           ${empresaOpts}
         </select>
       </div>
       <div class="emp-filtro-grupo" style="min-width:130px;flex:1">
-        <label class="emp-filtro-label">Categoría</label>
+        <label class="emp-filtro-label" for="empFiltCategoria">Categoría</label>
         <select class="emp-filtro-select" id="empFiltCategoria" onchange="renderEmpleados(state.datos)">
           ${categoriaOpts}
         </select>
       </div>
       <div class="emp-filtro-grupo" style="min-width:120px;flex:1">
-        <label class="emp-filtro-label">Local</label>
+        <label class="emp-filtro-label" for="empFiltLocal">Local</label>
         <select class="emp-filtro-select" id="empFiltLocal" onchange="empCambioLocal()">
           ${localOpts}
         </select>
       </div>
       <div class="emp-filtro-grupo" style="min-width:140px;flex:2">
-        <label class="emp-filtro-label">Empleado/a</label>
+        <label class="emp-filtro-label" for="empFiltEmp">Empleado/a</label>
         <select class="emp-filtro-select" id="empFiltEmp" onchange="renderEmpleados(state.datos)">
           ${empOpts}
         </select>
@@ -1475,7 +1475,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               </div>
             </div>
             <div class="detalle-acciones">
-              <select id="detalleSelectMes" class="filter-select" style="height:32px;font-size:12px;padding:0 8px;border-radius:8px">
+              <select id="detalleSelectMes" aria-label="Período" class="filter-select" style="height:32px;font-size:12px;padding:0 8px;border-radius:8px">
                 ${opcionesMes}
               </select>
               <button class="btn-detalle-accion" onclick="imprimirDetalleEmpleado()" title="Imprimir / PDF">
@@ -2195,19 +2195,19 @@ function renderReportes(datos) {
   container.innerHTML = `
     <div class="rep-filtros-panel">
       <div class="rep-filtro-grupo">
-        <label class="emp-filtro-label">Período</label>
+        <label class="emp-filtro-label" for="repFiltPeriodo">Período</label>
         <select class="emp-filtro-select" id="repFiltPeriodo" onchange="renderReportes(state.datos)">
           ${periodoOpts}
         </select>
       </div>
       <div class="rep-filtro-grupo">
-        <label class="emp-filtro-label">Comparar con</label>
+        <label class="emp-filtro-label" for="repFiltComp">Comparar con</label>
         <select class="emp-filtro-select" id="repFiltComp" onchange="renderReportes(state.datos)">
           ${compOpts}
         </select>
       </div>
       <div class="rep-filtro-grupo">
-        <label class="emp-filtro-label">Sucursal</label>
+        <label class="emp-filtro-label" for="repFiltLocal">Sucursal</label>
         <select class="emp-filtro-select" id="repFiltLocal" onchange="renderReportes(state.datos)">
           ${localOpts}
         </select>
@@ -2629,7 +2629,7 @@ function buildUrlForm() {
         <div class="dot" style="background:#475569"></div>
         URL única (todas las sucursales)
       </div>
-      <input type="url" class="url-input" id="url_unica"
+      <input type="url" class="url-input" id="url_unica" aria-label="URL única (todas las sucursales)"
         placeholder="https://script.google.com/macros/s/.../exec"
         value="${saved['unica'] || ''}" />
     </div>
@@ -3051,22 +3051,22 @@ function abrirFormCertificado(nombreEmp, desdeAdmin) {
           <div style="display:flex;gap:8px">
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
               <span style="font-size:11px;color:#94a3b8">Desde</span>
-              <input type="date" class="admin-input" id="certDesde" onchange="renderCertRango()" />
+              <input type="date" class="admin-input" id="certDesde" aria-label="Desde" onchange="renderCertRango()" />
             </div>
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
               <span style="font-size:11px;color:#94a3b8">Hasta</span>
-              <input type="date" class="admin-input" id="certHasta" onchange="renderCertRango()" />
+              <input type="date" class="admin-input" id="certHasta" aria-label="Hasta" onchange="renderCertRango()" />
             </div>
           </div>
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Tipo de certificado</label>
+          <label class="emp-filtro-label" for="certTipo">Tipo de certificado</label>
           <select class="admin-input" id="certTipo" onchange="onCertTipoChange()">
             ${tiposOpts}
           </select>
         </div>
         <div class="admin-form-grupo" id="certNotaGrupo" style="display:none">
-          <label class="emp-filtro-label">Descripción</label>
+          <label class="emp-filtro-label" for="certNotaPersonalizada">Descripción</label>
           <input type="text" class="admin-input" id="certNotaPersonalizada" placeholder="Ej: Trámite migratorio" />
         </div>
         <div class="admin-form-grupo" id="certDiasGrupo" style="display:none">
@@ -3845,7 +3845,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
               ${avatarInner}
             </div>
             <button class="btn-cambiar-foto" onclick="triggerCambiarFoto('${nombreEmp.replace(/'/g,"\\'")}')" title="Cambiar foto" aria-label="Cambiar foto">${icon('camera','icon-16')}</button>
-            <input type="file" id="inputFotoEmpleado" accept="image/*" style="display:none"
+            <input type="file" id="inputFotoEmpleado" aria-label="Cambiar foto" accept="image/*" style="display:none"
                    onchange="subirFotoEmpleado(this, '${nombreEmp.replace(/'/g,"\\'")}')">
           </div>
           <div class="portal-profile-info">
@@ -3927,7 +3927,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- SELECTOR DE PERÍODO -->
       <div class="emp-vista-toolbar">
         <div style="display:flex;align-items:center;gap:8px">
-          <label style="font-size:13px;color:#64748b;font-weight:500">Período:</label>
+          <label style="font-size:13px;color:#64748b;font-weight:500" for="evSelectMes">Período:</label>
           <select id="evSelectMes" class="filter-select" style="font-size:13px">
             ${opcionesMes}
           </select>
@@ -4201,17 +4201,17 @@ async function abrirMiPerfil() {
         </div>
 
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">PIN actual</label>
+          <label class="emp-filtro-label" for="miPerfilPinActual">PIN actual</label>
           <input type="password" class="admin-input" id="miPerfilPinActual"
             placeholder="PIN actual" maxlength="8" autocomplete="off" />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">PIN nuevo</label>
+          <label class="emp-filtro-label" for="miPerfilPinNuevo">PIN nuevo</label>
           <input type="password" class="admin-input" id="miPerfilPinNuevo"
             placeholder="PIN nuevo (mínimo 4 dígitos)" maxlength="8" autocomplete="off" />
         </div>
         <div class="admin-form-grupo">
-          <input type="password" class="admin-input" id="miPerfilPinRepetir"
+          <input type="password" class="admin-input" id="miPerfilPinRepetir" aria-label="Repetir PIN nuevo"
             placeholder="Repetir PIN nuevo" maxlength="8" autocomplete="off" />
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
             Dejá los tres campos de PIN vacíos si no querés cambiarlo
@@ -4452,11 +4452,11 @@ function renderAdminInline() {
         "<button class='btn-connect' style='width:auto;padding:0 16px;height:38px;margin:0;display:inline-flex;align-items:center;gap:7px' onclick=\"abrirFormularioEmpleado(null)\">" + icon('plus','icon-16') + " Nuevo empleado</button>" +
       "</div>" +
       "<div class='filters-bar'>" +
-        "<div class='f-search-wrap'>" + icon('search','icon-16') + "<input type='text' class='f-search' id='adminBuscarEmp' placeholder='Buscar empleado…' oninput='_filtrarTablaAdminCombinado()' /></div>" +
-        "<select class='f-select' id='filtroAdminSucursal' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las sucursales</option>" + sucOptsFiltro + "</select>" +
-        "<select class='f-select' id='filtroAdminEmpresa' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las empresas</option>" + empOptsFiltro + "</select>" +
-        "<select class='f-select' id='filtroAdminCategoria' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las categorías</option>" + catOptsFiltro + "</select>" +
-        "<select class='f-select' id='filtroAdminEstado' onchange='_filtrarTablaAdminCombinado()'>" +
+        "<div class='f-search-wrap'>" + icon('search','icon-16') + "<input type='text' class='f-search' id='adminBuscarEmp' aria-label='Buscar empleado' placeholder='Buscar empleado…' oninput='_filtrarTablaAdminCombinado()' /></div>" +
+        "<select class='f-select' id='filtroAdminSucursal' aria-label='Filtrar por sucursal' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las sucursales</option>" + sucOptsFiltro + "</select>" +
+        "<select class='f-select' id='filtroAdminEmpresa' aria-label='Filtrar por empresa' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las empresas</option>" + empOptsFiltro + "</select>" +
+        "<select class='f-select' id='filtroAdminCategoria' aria-label='Filtrar por categoría' onchange='_filtrarTablaAdminCombinado()'><option value=''>Todas las categorías</option>" + catOptsFiltro + "</select>" +
+        "<select class='f-select' id='filtroAdminEstado' aria-label='Filtrar por estado' onchange='_filtrarTablaAdminCombinado()'>" +
           "<option value=''>Cualquier estado</option>" +
           "<option value='con_acceso'>Con acceso</option>" +
           "<option value='sin_acceso'>Sin acceso</option>" +
@@ -4500,8 +4500,8 @@ function renderAdminInline() {
         "<button class='btn-connect' style='width:auto;padding:0 16px;height:38px;margin:0;display:inline-flex;align-items:center;gap:7px' onclick='abrirSelectorEmpleadoCertificado()'>" + icon('plus','icon-16') + " Nuevo certificado</button>" +
       "</div>" +
       "<div class='filters-bar'>" +
-        "<div class='f-search-wrap'>" + icon('search','icon-16') + "<input type='text' class='f-search' id='adminBuscarCert' placeholder='Buscar empleado o nota…' oninput='_filtrarTablaCertAdmin()' /></div>" +
-        "<select class='f-select' id='filtroCertTipo' onchange='_filtrarTablaCertAdmin()'><option value=''>Todos los tipos</option>" + tiposOptsFiltro + "</select>" +
+        "<div class='f-search-wrap'>" + icon('search','icon-16') + "<input type='text' class='f-search' id='adminBuscarCert' aria-label='Buscar empleado o nota' placeholder='Buscar empleado o nota…' oninput='_filtrarTablaCertAdmin()' /></div>" +
+        "<select class='f-select' id='filtroCertTipo' aria-label='Filtrar por tipo' onchange='_filtrarTablaCertAdmin()'><option value=''>Todos los tipos</option>" + tiposOptsFiltro + "</select>" +
         "<button class='f-clear' onclick='_limpiarFiltrosCertAdmin()'>Limpiar</button>" +
       "</div>" +
       "<div class='dt-wrap'>" +
@@ -4518,7 +4518,7 @@ function renderAdminInline() {
         "<div class='admin-table-wrap' style='padding:1.5rem'>" +
           "<h3 style='font-size:14px;font-weight:600;margin:0 0 1.25rem;color:#1e293b'>Configuración general</h3>" +
           "<div class='admin-form-grupo'>" +
-            "<label class='emp-filtro-label'>Email del administrador (para notificaciones de vacaciones)</label>" +
+            "<label class='emp-filtro-label' for='cfgEmailAdmin'>Email del administrador (para notificaciones de vacaciones)</label>" +
             "<input type='email' class='admin-input' id='cfgEmailAdmin' placeholder='admin@croma.com' />" +
           "</div>" +
           "<div style='margin-top:1.25rem'>" +
@@ -4531,8 +4531,8 @@ function renderAdminInline() {
           "<p style='font-size:12px;color:#94a3b8;margin:0 0 1.25rem'>Se usan para notificar eventos del calendario a cada sucursal.</p>" +
           SUCURSALES.map(function(s) {
             return "<div class='admin-form-grupo' style='margin-bottom:10px'>" +
-              "<label class='emp-filtro-label'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:" + s.color + ";margin-right:6px'></span>" + s.nombre + "</label>" +
-              "<input type='email' class='admin-input cfg-suc-email' data-suc-id='" + s.id + "' placeholder='email@sucursal.com' style='margin:0' />" +
+              "<label class='emp-filtro-label' for='cfgSucEmail_" + s.id + "'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:" + s.color + ";margin-right:6px'></span>" + s.nombre + "</label>" +
+              "<input type='email' class='admin-input cfg-suc-email' id='cfgSucEmail_" + s.id + "' data-suc-id='" + s.id + "' placeholder='email@sucursal.com' style='margin:0' />" +
             "</div>";
           }).join('') +
           "<div style='margin-top:1.25rem'>" +
@@ -4545,8 +4545,8 @@ function renderAdminInline() {
           "<p style='font-size:12px;color:#94a3b8;margin:0 0 1.25rem'>Estos correos estarán disponibles para elegir al crear un evento del calendario.</p>" +
           "<div id='cfgEmailsLista'><p style='font-size:12px;color:#94a3b8'>Cargando...</p></div>" +
           "<div style='display:flex;gap:8px;margin-top:12px'>" +
-            "<input type='text' class='admin-input' id='cfgNuevoNombre' placeholder='Nombre' style='margin:0;flex:1' />" +
-            "<input type='email' class='admin-input' id='cfgNuevoEmail' placeholder='correo@ejemplo.com' style='margin:0;flex:2' />" +
+            "<input type='text' class='admin-input' id='cfgNuevoNombre' aria-label='Nombre del contacto' placeholder='Nombre' style='margin:0;flex:1' />" +
+            "<input type='email' class='admin-input' id='cfgNuevoEmail' aria-label='Email del contacto' placeholder='correo@ejemplo.com' style='margin:0;flex:2' />" +
             "<button class='btn-connect' style='margin:0;width:auto;padding:10px 18px;white-space:nowrap' onclick='agregarEmailContacto()'>+ Agregar</button>" +
           "</div>" +
           "<p id='cfgEmailsStatus' style='font-size:12px;margin-top:8px;display:none'></p>" +
@@ -4679,8 +4679,8 @@ function renderRecibosAdminTab() {
       </div>
     </div>
     <div class="filters-bar">
-      <div class="f-search-wrap">${icon('search', 'icon-16')}<input type="text" class="f-search" id="adminBuscarRecibos" placeholder="Buscar empleado…" oninput="_filtrarTablaRecibosAdmin()" /></div>
-      <select class="admin-input" id="adminFiltroEmpresaRecibos" style="max-width:220px" onchange="_recibosAdminFiltro.empresa=this.value;renderRecibosAdminTab();">
+      <div class="f-search-wrap">${icon('search', 'icon-16')}<input type="text" class="f-search" id="adminBuscarRecibos" aria-label="Buscar empleado" placeholder="Buscar empleado…" oninput="_filtrarTablaRecibosAdmin()" /></div>
+      <select class="admin-input" id="adminFiltroEmpresaRecibos" aria-label="Filtrar por empresa" style="max-width:220px" onchange="_recibosAdminFiltro.empresa=this.value;renderRecibosAdminTab();">
         <option value="">Todas las empresas</option>
         ${empresasDisponibles.map(e => `<option value="${e.replace(/"/g, '&quot;')}" ${_recibosAdminFiltro.empresa === e ? 'selected' : ''}>${e}</option>`).join('')}
       </select>
@@ -4806,7 +4806,7 @@ function abrirSelectorEmpleadoCertificado() {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Empleado</label>
+          <label class="emp-filtro-label" for="certSelectorEmpleado">Empleado</label>
           <select class="admin-input" id="certSelectorEmpleado">
             <option value="">Elegí un empleado…</option>
             ${opts}
@@ -4931,12 +4931,12 @@ function renderAjusteJornadaTab() {
 
   cont.innerHTML =
     "<div class='admin-toolbar' style='flex-wrap:wrap;gap:10px'>" +
-      "<input type='text' class='admin-search' id='ajusteBuscarEmp' list='ajusteEmpList' placeholder='Buscar empleado...' style='min-width:220px' />" +
+      "<input type='text' class='admin-search' id='ajusteBuscarEmp' aria-label='Buscar empleado' list='ajusteEmpList' placeholder='Buscar empleado...' style='min-width:220px' />" +
       "<datalist id='ajusteEmpList'>" + empNombres.map(n => `<option value="${n}">`).join('') + "</datalist>" +
-      "<select class='admin-input' id='ajusteMes' style='margin:0;width:auto'>" +
+      "<select class='admin-input' id='ajusteMes' aria-label='Mes' style='margin:0;width:auto'>" +
         MESES_LBL.map((m, i) => `<option value="${i + 1}" ${i + 1 === mesActual ? 'selected' : ''}>${m}</option>`).join('') +
       "</select>" +
-      "<select class='admin-input' id='ajusteAnio' style='margin:0;width:auto'>" +
+      "<select class='admin-input' id='ajusteAnio' aria-label='Año' style='margin:0;width:auto'>" +
         [anioActual, anioActual - 1].map(a => `<option value="${a}">${a}</option>`).join('') +
       "</select>" +
       "<button class='btn-connect' style='margin:0;width:auto;padding:8px 18px;font-size:13px' onclick='buscarJornadasAjuste()'>" + icon('search', 'icon-14') + " Buscar</button>" +
@@ -4969,23 +4969,23 @@ function renderFichadasTab() {
       "<p>Consultá y descargá fichadas filtradas por período, empresa, sucursal o colaborador.</p>" +
     "</div>" +
     "<div class='filters-bar' style='flex-wrap:wrap'>" +
-      "<select class='f-select' id='fichAnio' onchange='_fichadasConsultar()'>" +
+      "<select class='f-select' id='fichAnio' aria-label='Año' onchange='_fichadasConsultar()'>" +
         "<option value=''>Todos los años</option>" +
         [anioActual, anioActual - 1, anioActual - 2].map(a => `<option value="${a}" ${a === anioActual ? 'selected' : ''}>${a}</option>`).join('') +
       "</select>" +
-      "<select class='f-select' id='fichMes' onchange='_fichadasConsultar()'>" +
+      "<select class='f-select' id='fichMes' aria-label='Mes' onchange='_fichadasConsultar()'>" +
         "<option value=''>Todos los meses</option>" +
         MESES_LBL.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('') +
       "</select>" +
-      "<select class='f-select' id='fichEmpresa' onchange='_fichadasConsultar()'>" +
+      "<select class='f-select' id='fichEmpresa' aria-label='Empresa' onchange='_fichadasConsultar()'>" +
         "<option value=''>Todas las empresas</option>" +
         EMPRESAS.map(e => `<option value="${e}">${e}</option>`).join('') +
       "</select>" +
-      "<select class='f-select' id='fichSucursal' onchange='_fichadasConsultar()'>" +
+      "<select class='f-select' id='fichSucursal' aria-label='Sucursal' onchange='_fichadasConsultar()'>" +
         "<option value=''>Todas las sucursales</option>" +
         SUCURSALES.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('') +
       "</select>" +
-      "<input type='text' class='f-select' id='fichColaborador' list='fichColaboradorList' placeholder='Todos los colaboradores (nómina completa)' oninput='_fichadasConsultarDebounced()' style='min-width:220px' />" +
+      "<input type='text' class='f-select' id='fichColaborador' aria-label='Buscar colaborador' list='fichColaboradorList' placeholder='Todos los colaboradores (nómina completa)' oninput='_fichadasConsultarDebounced()' style='min-width:220px' />" +
       "<datalist id='fichColaboradorList'>" + empNombres.map(n => `<option value="${n}">`).join('') + "</datalist>" +
       "<button class='f-clear' onclick='_fichadasLimpiarFiltros()'>Limpiar</button>" +
     "</div>" +
@@ -5265,9 +5265,9 @@ function abrirModalAjusteJornada(empleado, fechaISO) {
         <div class="ajuste-diff-despues">
           <span class="ajuste-diff-tag">Después</span>
           <div style="display:flex;gap:6px;align-items:center">
-            <input type="time" class="admin-input" id="ajusteEntrada${n}" value="${activo ? t.entrada : ''}" onchange="onAjusteCampoChange(${n})" style="margin:0" />
+            <input type="time" class="admin-input" id="ajusteEntrada${n}" aria-label="Hora de entrada, turno ${n}" value="${activo ? t.entrada : ''}" onchange="onAjusteCampoChange(${n})" style="margin:0" />
             <span class="text-muted">–</span>
-            <input type="time" class="admin-input" id="ajusteSalida${n}" value="${activo ? t.salida : ''}" onchange="onAjusteCampoChange(${n})" style="margin:0" />
+            <input type="time" class="admin-input" id="ajusteSalida${n}" aria-label="Hora de salida, turno ${n}" value="${activo ? t.salida : ''}" onchange="onAjusteCampoChange(${n})" style="margin:0" />
           </div>
         </div>
       </div>
@@ -5294,12 +5294,12 @@ function abrirModalAjusteJornada(empleado, fechaISO) {
           <div class="ajuste-diff-arrow">${icon('arrowRight', 'icon-16')}</div>
           <div class="ajuste-diff-despues">
             <span class="ajuste-diff-tag">Después</span>
-            <label class="form-switch"><input type="checkbox" id="ajusteRecuperaHoras" ${j.recupera_horas ? 'checked' : ''}><span class="switch-track"></span></label>
+            <label class="form-switch"><input type="checkbox" id="ajusteRecuperaHoras" aria-label="Recupera horas" ${j.recupera_horas ? 'checked' : ''}><span class="switch-track"></span></label>
           </div>
         </div>
 
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Certificado <span class="text-muted" style="font-weight:400">(se guarda aparte, en Certificados)</span></label>
+          <label class="emp-filtro-label" for="ajusteCertificado">Certificado <span class="text-muted" style="font-weight:400">(se guarda aparte, en Certificados)</span></label>
           <select class="admin-input" id="ajusteCertificado">
             <option value="">Sin certificado</option>
             ${TIPOS_CERTIFICADO.map(t => `<option value="${t}">${t}</option>`).join('')}
@@ -5314,19 +5314,19 @@ function abrirModalAjusteJornada(empleado, fechaISO) {
           <div class="ajuste-diff-arrow">${icon('arrowRight', 'icon-16')}</div>
           <div class="ajuste-diff-despues">
             <span class="ajuste-diff-tag">Después</span>
-            <textarea class="admin-input" id="ajusteObservacion" rows="2" style="margin:0;height:auto;min-height:64px;padding:10px 12px;resize:vertical;font-family:inherit">${j.observacion || ''}</textarea>
+            <textarea class="admin-input" id="ajusteObservacion" aria-label="Observación" rows="2" style="margin:0;height:auto;min-height:64px;padding:10px 12px;resize:vertical;font-family:inherit">${j.observacion || ''}</textarea>
           </div>
         </div>
 
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Motivo del ajuste *</label>
+          <label class="emp-filtro-label" for="ajusteMotivo">Motivo del ajuste *</label>
           <select class="admin-input" id="ajusteMotivo" onchange="onMotivoAjusteChange()">
             <option value="">Seleccioná un motivo</option>
             ${motivoOpts}
           </select>
         </div>
         <div class="admin-form-grupo" id="ajusteMotivoDetalleGrupo" style="display:none">
-          <label class="emp-filtro-label">Detalle del motivo *</label>
+          <label class="emp-filtro-label" for="ajusteMotivoDetalle">Detalle del motivo *</label>
           <input type="text" class="admin-input" id="ajusteMotivoDetalle" placeholder="Detallá el motivo del ajuste" />
         </div>
 
@@ -5723,11 +5723,11 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
         <div id="formEmpTabPerfil" class="admin-tab-content">
           <div class="admin-form-grid">
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Nombre operativo</label>
+            <label class="emp-filtro-label" for="formEmpNombre">Nombre operativo</label>
             ${nombreCampoHtml}
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Nombre legal completo${esNuevo ? ' *' : ''}</label>
+            <label class="emp-filtro-label" for="formEmpNombreLegal">Nombre legal completo${esNuevo ? ' *' : ''}</label>
             <input type="text" class="admin-input" id="formEmpNombreLegal" value="${emp.nombre_legal || ''}"
               placeholder="Ej: Aixa Rojas Fernández" autocomplete="off" ${esNuevo ? 'required' : ''} />
             <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
@@ -5735,7 +5735,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
             </span>
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Apodo</label>
+            <label class="emp-filtro-label" for="formEmpApodo">Apodo</label>
             <input type="text" class="admin-input" id="formEmpApodo" value="${emp.apodo || ''}"
               placeholder="Ej: Turco" autocomplete="off" maxlength="30" />
             <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
@@ -5753,13 +5753,13 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
               : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8">Sin foto</div>`}
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">URL de foto (Google Drive)</label>
+            <label class="emp-filtro-label" for="formEmpFotoUrl">URL de foto (Google Drive)</label>
             <input type="url" class="admin-input" id="formEmpFotoUrl" value="${emp.foto_url || ''}"
               placeholder="https://drive.google.com/..." oninput="previewFoto(this.value)" />
             <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Celular (WhatsApp)</label>
+            <label class="emp-filtro-label" for="formEmpCelular">Celular (WhatsApp)</label>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
               <input type="text" class="admin-input" id="formEmpCelular" value="${emp.celular || ''}"
@@ -5773,31 +5773,31 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
         <div id="formEmpTabLaboral" class="admin-tab-content" style="display:none">
           <div class="admin-form-grid">
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Sucursal principal</label>
+            <label class="emp-filtro-label" for="formEmpSucursal">Sucursal principal</label>
             <select class="admin-input" id="formEmpSucursal">${sucOpts}</select>
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Fecha de ingreso</label>
+            <label class="emp-filtro-label" for="formEmpFechaIngreso">Fecha de ingreso</label>
             <input type="date" class="admin-input" id="formEmpFechaIngreso" value="${emp.fecha_ingreso || ''}" />
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Empresa</label>
+            <label class="emp-filtro-label" for="formEmpEmpresa">Empresa</label>
             <select class="admin-input" id="formEmpEmpresa">${empOpts}</select>
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Categoría</label>
+            <label class="emp-filtro-label" for="formEmpCategoria">Categoría</label>
             <select class="admin-input" id="formEmpCategoria">${catOpts}</select>
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Regla personalizada de horas extra</label>
+            <label class="emp-filtro-label" for="formEmpReglaCustom">Regla personalizada de horas extra</label>
             <select class="admin-input" id="formEmpReglaCustom" onchange="_toggleHsBaseFormEmp(this.value)">${reglaOpts}</select>
           </div>
           <div class="admin-form-grupo" id="formEmpHsBaseGrupo" style="${emp.regla_custom === 'personalizado' ? '' : 'display:none'}">
-            <label class="emp-filtro-label">Horas base por día (límite para extra)</label>
+            <label class="emp-filtro-label" for="formEmpHsBase">Horas base por día (límite para extra)</label>
             <input type="number" class="admin-input" id="formEmpHsBase" value="${emp.hs_base || 8}" min="1" max="12" step="0.5" />
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Número de vendedor Sysneo</label>
+            <label class="emp-filtro-label" for="formEmpSysneo">Número de vendedor Sysneo</label>
             <div style="display:flex;align-items:center;gap:8px">
               <input type="text" class="admin-input" id="formEmpSysneo" value="${emp.numero_vendedor_sysneo || ''}"
                 placeholder="Opcional" autocomplete="off" style="flex:1;margin:0" />
@@ -5808,7 +5808,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
             </span>
           </div>
           <div class="admin-form-grupo">
-            <label class="emp-filtro-label">Estado del empleado</label>
+            <label class="emp-filtro-label" for="formEmpEstado">Estado del empleado</label>
             <select class="admin-input" id="formEmpEstado">
               <option value="activo" ${emp.estado !== 'inactivo' ? 'selected' : ''}>Activo</option>
               <option value="inactivo" ${emp.estado === 'inactivo' ? 'selected' : ''}>Inactivo</option>
@@ -5852,16 +5852,16 @@ function _renderTabAccesoEmpleado(emp, crearAccesoInicial) {
   if (!tieneAcceso) {
     return `
       <div class="admin-form-grupo">
-        <label class="form-switch"><input type="checkbox" id="formEmpCrearAcceso" ${crearAccesoInicial ? 'checked' : ''} onchange="_toggleCrearAccesoEmpleado(this.checked)"><span class="switch-track"></span></label>
+        <label class="form-switch"><input type="checkbox" id="formEmpCrearAcceso" aria-label="Crear acceso para este empleado" ${crearAccesoInicial ? 'checked' : ''} onchange="_toggleCrearAccesoEmpleado(this.checked)"><span class="switch-track"></span></label>
         <span style="margin-left:10px;font-size:13px;color:#1e293b;vertical-align:middle">Crear acceso para este empleado</span>
       </div>
       <div id="formEmpAccesoCampos" style="${crearAccesoInicial ? '' : 'display:none'}">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Nombre de usuario</label>
+          <label class="emp-filtro-label" for="formEmpUsername">Nombre de usuario</label>
           <input type="text" class="admin-input" id="formEmpUsername" placeholder="Ej: aixa03" autocomplete="off" autocapitalize="off" />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">PIN</label>
+          <label class="emp-filtro-label" for="formEmpPin">PIN</label>
           <input type="text" class="admin-input" id="formEmpPin" placeholder="Ej: 1234" maxlength="8" inputmode="numeric" autocomplete="off" />
         </div>
       </div>
@@ -5871,24 +5871,24 @@ function _renderTabAccesoEmpleado(emp, crearAccesoInicial) {
   const u = emp._usuario;
   return `
     <div class="admin-form-grupo">
-      <label class="emp-filtro-label">Nombre de usuario</label>
+      <label class="emp-filtro-label" for="formEmpUsername">Nombre de usuario</label>
       <input type="text" class="admin-input" id="formEmpUsername" value="${u.nombre}" readonly />
     </div>
     <div class="admin-form-grupo">
-      <label class="emp-filtro-label">PIN</label>
+      <label class="emp-filtro-label" for="formEmpPin">PIN</label>
       <div><button type="button" class="btn-admin-edit" id="formEmpBtnCambiarPin" onclick="_mostrarCampoPinEmpleado()">Cambiar PIN</button></div>
       <input type="text" class="admin-input" id="formEmpPin" placeholder="PIN nuevo" maxlength="8" inputmode="numeric" autocomplete="off" style="display:none;margin-top:8px" />
       <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Dejalo así para conservar el PIN actual</span>
     </div>
     <div class="admin-form-grupo">
-      <label class="emp-filtro-label">Estado del acceso</label>
+      <label class="emp-filtro-label" for="formEmpAccesoEstado">Estado del acceso</label>
       <select class="admin-input" id="formEmpAccesoEstado">
         <option value="activo" ${u.estado !== 'inactivo' ? 'selected' : ''}>Activo</option>
         <option value="inactivo" ${u.estado === 'inactivo' ? 'selected' : ''}>Inactivo</option>
       </select>
     </div>
     <div class="admin-form-grupo">
-      <label class="emp-filtro-label">Fin de acceso (opcional)</label>
+      <label class="emp-filtro-label" for="formEmpFinAcceso">Fin de acceso (opcional)</label>
       <input type="date" class="admin-input" id="formEmpFinAcceso" value="${u.fin_acceso || ''}" />
     </div>
     <input type="hidden" id="formEmpAccesoEstadoOriginal" value="${u.estado !== 'inactivo' ? 'activo' : 'inactivo'}" />
@@ -6130,7 +6130,7 @@ function _abrirModalRecibo(modo, reciboId) {
   }
 
   const periodoCampoHtml = modo === 'reemplazar'
-    ? `<input type="text" class="admin-input" value="${esc(_formatearPeriodoRecibo(filaAnterior.periodo))}" readonly />
+    ? `<input type="text" class="admin-input" id="reciboPeriodoDisplay" value="${esc(_formatearPeriodoRecibo(filaAnterior.periodo))}" readonly />
        <input type="hidden" id="reciboPeriodoFijo" value="${esc(filaAnterior.periodo)}" />
        <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Versión actual: v${filaAnterior.version}. Se creará una nueva versión y esta quedará marcada como reemplazada.</span>`
     : `<input type="month" class="admin-input" id="reciboPeriodo" />`;
@@ -6145,23 +6145,23 @@ function _abrirModalRecibo(modo, reciboId) {
       <div class="admin-form">
         <input type="hidden" id="reciboModalIdAnterior" value="${esc(reciboId || '')}" />
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Colaborador</label>
-          <input type="text" class="admin-input" value="${esc(_recibosFicha.nombre)}" readonly />
+          <label class="emp-filtro-label" for="reciboColaboradorDisplay">Colaborador</label>
+          <input type="text" class="admin-input" id="reciboColaboradorDisplay" value="${esc(_recibosFicha.nombre)}" readonly />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Nombre legal</label>
-          <input type="text" class="admin-input" value="${esc(_recibosFicha.nombreLegal)}" readonly />
+          <label class="emp-filtro-label" for="reciboNombreLegalDisplay">Nombre legal</label>
+          <input type="text" class="admin-input" id="reciboNombreLegalDisplay" value="${esc(_recibosFicha.nombreLegal)}" readonly />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Empresa</label>
-          <input type="text" class="admin-input" value="${esc(_recibosFicha.empresa)}" readonly />
+          <label class="emp-filtro-label" for="reciboEmpresaDisplay">Empresa</label>
+          <input type="text" class="admin-input" id="reciboEmpresaDisplay" value="${esc(_recibosFicha.empresa)}" readonly />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Período</label>
+          <label class="emp-filtro-label" for="${modo === 'reemplazar' ? 'reciboPeriodoDisplay' : 'reciboPeriodo'}">Período</label>
           ${periodoCampoHtml}
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Archivo PDF (máx. 2MB)</label>
+          <label class="emp-filtro-label" for="reciboArchivo">Archivo PDF (máx. 2MB)</label>
           <input type="file" class="admin-input" id="reciboArchivo" accept="application/pdf" />
         </div>
         <p id="reciboModalError" class="alert alert-danger" style="display:none;margin-top:.5rem"></p>
@@ -6528,7 +6528,7 @@ function abrirCambiarPinAdmin(nombre) {
       <div class="admin-form">
         <input type="hidden" id="pinRapidoNombre" value="${nomEnc}" />
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">PIN nuevo</label>
+          <label class="emp-filtro-label" for="pinRapidoValor">PIN nuevo</label>
           <input type="text" class="admin-input" id="pinRapidoValor" placeholder="Ej: 1234" maxlength="8" inputmode="numeric" autocomplete="off" />
         </div>
         <p id="pinRapidoError" class="alert alert-danger" style="display:none;margin-top:.5rem"></p>
@@ -6578,7 +6578,7 @@ function abrirAsignarSysneo(nombre) {
       <div class="admin-form">
         <input type="hidden" id="sysneoRapidoNombre" value="${nomEnc}" />
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Número</label>
+          <label class="emp-filtro-label" for="sysneoRapidoValor">Número</label>
           <input type="text" class="admin-input" id="sysneoRapidoValor" value="${emp.numero_vendedor_sysneo || ''}" placeholder="Opcional" autocomplete="off" />
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
             Este número se crea manualmente en Sysneo y acá se guarda únicamente como referencia. Croma Horarios no se conecta ni sincroniza con Sysneo.
@@ -6643,19 +6643,19 @@ function abrirEditarCategoria(catId) {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">ID (código corto)</label>
+          <label class="emp-filtro-label" for="catId">ID (código corto)</label>
           <input type="text" class="admin-input" id="catId" value="${cat?.id||''}" placeholder="Ej: JC, MJ, FR..." maxlength="10" ${cat?'readonly':''} />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Nombre</label>
+          <label class="emp-filtro-label" for="catNombre">Nombre</label>
           <input type="text" class="admin-input" id="catNombre" value="${cat?.nombre||''}" placeholder="Ej: Jornada Completa" />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Descripción</label>
+          <label class="emp-filtro-label" for="catDesc">Descripción</label>
           <input type="text" class="admin-input" id="catDesc" value="${cat?.descripcion||''}" placeholder="Ej: 8h Lun-Vie, 4h Sáb" />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Regla de cálculo</label>
+          <label class="emp-filtro-label" for="catRegla">Regla de cálculo</label>
           <select class="admin-input" id="catRegla">
             <option value="lv8_s4" ${cat?.regla==='lv8_s4'?'selected':''}>8h Lun-Vie, 4h Sáb (Jornada completa)</option>
             <option value="fijo4" ${cat?.regla==='fijo4'?'selected':''}>4h cualquier día (Media jornada)</option>
@@ -7495,11 +7495,11 @@ function abrirModalAjusteAdmin(empEnc, anio) {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Ajuste de días (positivo suma, negativo resta)</label>
+          <label class="emp-filtro-label" for="ajusteDias">Ajuste de días (positivo suma, negativo resta)</label>
           <input type="number" class="admin-input" id="ajusteDias" value="0" step="1" placeholder="Ej: 3 o -2" />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Motivo / Nota</label>
+          <label class="emp-filtro-label" for="ajusteNota">Motivo / Nota</label>
           <input type="text" class="admin-input" id="ajusteNota" placeholder="Ej: Acuerdo especial" />
         </div>
         <p id="ajusteError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
@@ -7560,7 +7560,7 @@ function abrirModalRespuesta(solicitudId, estado, empEnc) {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Nota para el empleado (opcional)</label>
+          <label class="emp-filtro-label" for="respuestaNota">Nota para el empleado (opcional)</label>
           <input type="text" class="admin-input" id="respuestaNota" placeholder="Ej: Reagendar para enero" />
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
@@ -7620,12 +7620,12 @@ function abrirModalSolicitudVac(empEnc, esAdmin) {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Fecha desde</label>
+          <label class="emp-filtro-label" for="vacDesde">Fecha desde</label>
           <input type="date" class="admin-input" id="vacDesde" value="${hoyISO}"
             onchange="calcularDiasVacForm()" ${esAdmin ? '' : `min="${hoyISO}"`} />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Fecha hasta</label>
+          <label class="emp-filtro-label" for="vacHasta">Fecha hasta</label>
           <input type="date" class="admin-input" id="vacHasta" value="${hoyISO}"
             onchange="calcularDiasVacForm()" ${esAdmin ? '' : `min="${hoyISO}"`} />
         </div>
@@ -8233,11 +8233,11 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     '<div class="cal-vac-toolbar">' +
       '<div class="cal-vac-nav">' +
         '<button class="week-btn" onclick="cambiarMesCalVac(-1)">&#8592;</button>' +
-        '<select class="filter-select" style="font-size:14px;font-weight:600;background:transparent;border:none;box-shadow:none" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>' +
-        '<select class="filter-select" style="font-size:14px;font-weight:600;width:78px;background:transparent;border:none;box-shadow:none" onchange="_calVacAnio=parseInt(this.value);cargarCalendarioVacaciones()">' + anioOpts + '</select>' +
+        '<select class="filter-select" id="calVacMesSelect" aria-label="Mes" style="font-size:14px;font-weight:600;background:transparent;border:none;box-shadow:none" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>' +
+        '<select class="filter-select" id="calVacAnioSelect" aria-label="Año" style="font-size:14px;font-weight:600;width:78px;background:transparent;border:none;box-shadow:none" onchange="_calVacAnio=parseInt(this.value);cargarCalendarioVacaciones()">' + anioOpts + '</select>' +
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
-      '<select class="filter-select" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
+      '<select class="filter-select" id="calVacFiltroLocalSelect" aria-label="Filtrar por local" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
       // "Nuevo evento" (sistema viejo) jubilado a favor del panel Avisos —
       // ver avisosProvider Etapa 6/9. Botón oculto, no borrado: revertir
       // es solo restaurar esta línea.
@@ -8308,7 +8308,7 @@ async function abrirNuevoEvento(fechaPreset) {
 
   const sucCheckboxes = SUCURSALES.map(function(s) {
     return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;cursor:pointer">' +
-      '<input type="checkbox" class="evento-suc-cb" value="suc_' + s.id + '" style="width:16px;height:16px;accent-color:#7c3aed" />' +
+      '<input type="checkbox" class="evento-suc-cb" name="eventoSucursales" value="suc_' + s.id + '" style="width:16px;height:16px;accent-color:#7c3aed" />' +
       '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + s.color + ';flex-shrink:0"></span>' +
       '<span style="font-size:13px;color:#374151">' + s.nombre + '</span>' +
     '</label>';
@@ -8317,7 +8317,7 @@ async function abrirNuevoEvento(fechaPreset) {
   const empOpts = usuarios.map(function(u) {
     const nom = u.empleadoNombre.replace(/^\d+\s+/,'');
     return '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;cursor:pointer">' +
-      '<input type="checkbox" class="evento-dest-cb" value="' + u.empleadoNombre + '" style="width:16px;height:16px;accent-color:#7c3aed" />' +
+      '<input type="checkbox" class="evento-dest-cb" name="eventoDestinatarios" value="' + u.empleadoNombre + '" style="width:16px;height:16px;accent-color:#7c3aed" />' +
       '<span style="font-size:13px;color:#374151">' + nom + '</span>' +
     '</label>';
   }).join('');
@@ -8332,7 +8332,7 @@ async function abrirNuevoEvento(fechaPreset) {
       <div class="admin-form" style="gap:14px">
 
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Título del evento *</label>
+          <label class="emp-filtro-label" for="eventoTitulo">Título del evento *</label>
           <input type="text" class="admin-input" id="eventoTitulo" placeholder="Ej: Reunión de personal, Capacitación..." maxlength="80" />
         </div>
 
@@ -8341,17 +8341,17 @@ async function abrirNuevoEvento(fechaPreset) {
           <div style="display:flex;gap:10px;align-items:center">
             <div style="flex:1">
               <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Desde</div>
-              <input type="date" class="admin-input" id="eventoFecha" value="${fechaVal}" onchange="eventoFechaDesdeChange()" style="margin:0" />
+              <input type="date" class="admin-input" id="eventoFecha" aria-label="Fecha desde" value="${fechaVal}" onchange="eventoFechaDesdeChange()" style="margin:0" />
             </div>
             <div style="flex:1">
               <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Hasta</div>
-              <input type="date" class="admin-input" id="eventoFechaFin" value="${fechaVal}" style="margin:0" />
+              <input type="date" class="admin-input" id="eventoFechaFin" aria-label="Fecha hasta" value="${fechaVal}" style="margin:0" />
             </div>
           </div>
         </div>
 
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Descripción (opcional)</label>
+          <label class="emp-filtro-label" for="eventoDesc">Descripción (opcional)</label>
           <textarea class="admin-input" id="eventoDesc" rows="3" placeholder="Detalles del evento..." style="resize:vertical;font-family:inherit;font-size:13px"></textarea>
         </div>
 
@@ -8397,7 +8397,7 @@ async function abrirNuevoEvento(fechaPreset) {
           </label>
           <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">El evento aparecerá en el calendario Y como notificación al empleado</span>
           <div id="eventoAnuncioWrap" style="display:none;margin-top:10px">
-            <input type="text" class="admin-input" id="eventoAnuncioMsg" placeholder="Mensaje adicional del anuncio (opcional)" />
+            <input type="text" class="admin-input" id="eventoAnuncioMsg" aria-label="Mensaje adicional del anuncio" placeholder="Mensaje adicional del anuncio (opcional)" />
           </div>
         </div>
 
@@ -8898,8 +8898,8 @@ async function cargarBancoDias() {
       '<div style="padding:1.5rem">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">' +
         '<div style="display:flex;align-items:center;gap:6px">' +
-          '<label style="font-size:13px;color:#64748b;font-weight:500">Año:</label>' +
-          '<select class="filter-select" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
+          '<label style="font-size:13px;color:#64748b;font-weight:500" for="bancoDiasAnioSelect">Año:</label>' +
+          '<select class="filter-select" id="bancoDiasAnioSelect" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
         '</div>' +
         '<button class="btn-admin-edit" onclick="inicializarVacAdmin(' + anio + ')" style="margin-left:auto">↺ Inicializar ' + anio + '</button>' +
       '</div>' +
@@ -8963,8 +8963,8 @@ async function cargarBancoDiasAnio(anio) {
       '<div style="padding:1.5rem">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">' +
         '<div style="display:flex;align-items:center;gap:6px">' +
-          '<label style="font-size:13px;color:#64748b;font-weight:500">Año:</label>' +
-          '<select class="filter-select" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
+          '<label style="font-size:13px;color:#64748b;font-weight:500" for="bancoDiasAnioSelect">Año:</label>' +
+          '<select class="filter-select" id="bancoDiasAnioSelect" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
         '</div>' +
         '<button class="btn-admin-edit" onclick="inicializarVacAdmin(' + anio + ')" style="margin-left:auto">↺ Inicializar ' + anio + '</button>' +
       '</div>' +
@@ -9240,7 +9240,7 @@ async function abrirNuevoAnuncio() {
       : `<span style="font-size:10px;color:#cbd5e1" title="Sin número cargado">sin WA</span>`;
     return `<div class="anuncio-dest-row">
       <label class="anuncio-dest-check" style="flex:1;margin:0">
-        <input type="checkbox" value="${u.empleadoNombre}" class="anuncio-dest-cb" />
+        <input type="checkbox" name="anuncioDestinatarios" value="${u.empleadoNombre}" class="anuncio-dest-cb" />
         <span>${nom}</span>
       </label>
       ${waBtn}
@@ -9256,17 +9256,17 @@ async function abrirNuevoAnuncio() {
       </div>
       <div class="admin-form">
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Título del anuncio</label>
+          <label class="emp-filtro-label" for="anuncioTitulo">Título del anuncio</label>
           <input type="text" class="admin-input" id="anuncioTitulo" placeholder="Ej: Reunión de equipo" maxlength="80" />
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Mensaje</label>
+          <label class="emp-filtro-label" for="anuncioMensaje">Mensaje</label>
           <textarea class="admin-input" id="anuncioMensaje" rows="4"
             style="height:auto;resize:vertical;padding-top:10px;padding-bottom:10px"
             placeholder="Escribí el mensaje completo aquí..."></textarea>
         </div>
         <div class="admin-form-grupo">
-          <label class="emp-filtro-label">Vigencia (opcional)</label>
+          <label class="emp-filtro-label" for="anuncioVigencia">Vigencia (opcional)</label>
           <div style="display:flex;align-items:center;gap:10px">
             <input type="date" class="admin-input" id="anuncioVigencia" style="margin:0;flex:1" />
             <span style="font-size:11px;color:#94a3b8;white-space:nowrap">Si no se pone, caduca a los 30 días</span>
