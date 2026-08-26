@@ -3494,6 +3494,24 @@ body {
   font-weight: 700;
   white-space: nowrap;
 }
+/* Turno planificado (Horario semanal) mostrado antes de fichar — mismo
+   look que un turno normal, con borde punteado (mismo lenguaje visual que
+   "próximo"/"tentativo" en el resto de la app) y el local a cubrir arriba
+   del horario, por si esa semana cubre más de una sucursal. */
+.portal-week-card.is-planificado {
+  border-style: dashed;
+}
+.portal-week-shift-local {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  margin-bottom: -1px;
+}
 .portal-week-free {
   display: inline-flex;
   justify-content: center;

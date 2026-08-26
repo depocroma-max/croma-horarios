@@ -255,6 +255,17 @@ function getLunes(offset = 0) {
   return lunes;
 }
 
+// Formato YYYY-WNN — PORT LITERAL de getSemanaId() en croma-panel-main/index.html
+// (no es ISO-8601 estándar a propósito, ver croma-backend/src/services/envivo.js
+// getSemanaIdServer() — debe coincidir con los IDs de semana ya guardados en HORARIOS).
+function getSemanaId(offset) {
+  const lunes = getLunes(offset);
+  const anio = lunes.getFullYear();
+  const inicio = new Date(anio, 0, 1);
+  const semana = Math.ceil(((lunes - inicio) / 86400000 + inicio.getDay() + 1) / 7);
+  return anio + '-W' + String(semana).padStart(2, '0');
+}
+
 function formatFecha(d) {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 }
@@ -3539,6 +3550,11 @@ function mostrarVistaEmpleado() {
   // rango: una sola consulta, igual patrón de tráfico que antes — la
   // navegación de semanas sigue sin generar fetches nuevos.
   setTimeout(() => cargarEventosViaProvider(nombreEmp, sucId), 1400);
+  // Turno planificado (Horario semanal) para "Mi semana" — ver
+  // cargarPlanHorarioEmpleado(). _empSemanaOffset ya quedó en 0 arriba.
+  // El grid ya se renderizó una vez con lo que había en caché (o "Libre"
+  // si no había nada todavía); esto lo actualiza cuando llega la respuesta.
+  cargarPlanHorarioEmpleado(0);
 }
 
 function mostrarVistaEmpleadoSinDatos(nombreEmp) {
@@ -3675,51 +3691,13 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     return (offset > 0 ? '+' : '') + offset + ' semanas · ' + desde + ' – ' + hasta;
   }
 
+  // Delegado a _buildSemanaEmpleadoCards() (fuera de este closure, también
+  // usado por empNavSemana() — antes eran dos copias separadas de la misma
+  // lógica). misRegistros de este closure ya está asignado a _empMisRegistros
+  // en mostrarVistaEmpleado() antes de llamar acá, así que la versión global
+  // ve exactamente los mismos datos.
   function buildSemanaEmpleado() {
-    const lunes = getLunes(_empSemanaOffset);
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
-    const diasLargos = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-    const cards = [];
-    for (let i=0; i<7; i++) {
-      const f = new Date(lunes); f.setDate(lunes.getDate()+i);
-      const regs = misRegistros.filter(r =>
-        String(r.AÑO) === String(f.getFullYear()) &&
-        r.MES === MESES_ES[f.getMonth()] &&
-        String(r.DIA) === String(f.getDate())
-      ).sort((a,b)=>(a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
-      const total = regs.reduce((a,r)=>a+(parseFloat(r.TOTAL_HS)||0),0);
-      const esHoy = f.toDateString() === new Date().toDateString();
-      const libre = !regs.length;
-
-      // Tipo de turno para colorear
-      let tipoTurno = '';
-      if (!libre) {
-        if (regs.length >= 2) tipoTurno = 'cortado';
-        else if (total <= 4) tipoTurno = 'media';
-        else if (total >= 7) tipoTurno = 'corrido';
-      }
-
-      const turnos = libre
-        ? '<div class="portal-week-free">Libre</div>'
-        : regs.map(r => {
-            const ent = normalizarLibreTxt(r.H_ENTRADA);
-            const sal = normalizarLibreTxt(r.H_SALIDA);
-            if (!ent || !sal) return '<span class="portal-week-shift">Horario a confirmar</span>';
-            return `<span class="portal-week-shift">${ent} → ${sal}</span>`;
-          }).join('');
-      cards.push(`
-        <div class="portal-week-card ${libre?'is-free':''} ${esHoy?'is-today':''} ${tipoTurno?'turno-'+tipoTurno:''}">
-          <div class="portal-week-day">
-            <span>${diasLargos[i]}</span>
-            <span class="portal-week-day-num">${f.getDate()}</span>
-          </div>
-          <div class="portal-week-body">
-            ${turnos}
-            ${!libre ? `<small>${total.toFixed(1)} hs</small>` : ''}
-          </div>
-        </div>`);
-    }
-    return cards.join('');
+    return _buildSemanaEmpleadoCards();
   }
 
   function getProximoTurno() {
@@ -5497,6 +5475,13 @@ const apiHorariosSheets = (path, opciones) => _apiFetch('/api/horarios-sheets', 
 // Rollback: ENVIVO_NODE=false (ver bloque "EN VIVO" más arriba en este
 // archivo) vuelve a state.datos/DATOS GENERALES sin tocar esta línea.
 const apiEnVivo = (path, opciones) => _apiFetch('/api/envivo-hoy', path, opciones);
+// Horario semanal (HORARIOS, lo que carga el encargado) — usado en el
+// Portal Empleado para mostrar en "Mi semana" el turno planificado de los
+// días que todavía no se fichan (ver cargarPlanHorarioEmpleado()). Sin
+// restricción de rol en el backend (GET /api/horarios-semanales solo pide
+// JWT válido, cualquier rol incluido empleado — confirmado en
+// croma-backend/src/routes/horarios-semanales.js).
+const apiHorariosSemanales = (path, opciones) => _apiFetch('/api/horarios-semanales', path, opciones);
 // Fase 1B: reemplaza accion=datos_portal_empleado del Portal Empleado.
 // croma-backend arma el mismo contrato combinando GAS (sin_horarios=1,
 // perfiles+certificados+vacaciones) + Sheets API (horarios) en paralelo —
@@ -8721,6 +8706,139 @@ function renderEventosEnSemana(nombreEmp) {
   }
 }
 
+// ── "Mi semana" del Portal Empleado: turno planificado (Horario semanal) ──
+// Días ya fichados siguen mostrando SIEMPRE lo realmente trabajado (nunca
+// el plan, aunque difieran). Para días futuros sin fichar todavía, se
+// muestra el turno que cargó el encargado en HORARIOS (incluye el local,
+// por si el empleado cubre más de una sucursal esa semana) en vez de
+// "Libre" — así el empleado sabe qué turno le toca antes de que llegue el
+// día. Confirmado con el usuario: días pasados = lo fichado, futuros = el plan.
+const DIAS_KEY_PORTAL = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'];
+
+function _normalizarLibreTxtPortal(txt) {
+  const v = String(txt || '').trim();
+  return v.toUpperCase() === 'FRANCO' ? 'Libre' : v;
+}
+
+function _duracionHsBloquePortal(entrada, salida) {
+  const eMin = hhmmAMin(entrada), sMin = hhmmAMin(salida);
+  if (isNaN(eMin) || isNaN(sMin)) return 0;
+  let dur = sMin - eMin;
+  if (dur <= 0) dur += 1440; // cruza medianoche
+  return dur / 60;
+}
+
+// Busca, entre todas las sucursales, el bloque planificado de un empleado
+// para un día de la semana. Un empleado puede tener plan en más de una
+// sucursal la misma semana (multi-local, ya validado en Horario semanal:
+// nunca se pisan en el mismo día — ver _buscarConflictoSuperposicion en
+// croma-backend), así que basta con devolver el primero que aparezca.
+function _buscarPlanEmpleadoDia(horariosPorSucursal, nombreEmpleado, diaKey) {
+  if (!horariosPorSucursal) return null;
+  const nombreNorm = String(nombreEmpleado || '').trim().toLowerCase();
+  for (const sucursal of Object.keys(horariosPorSucursal)) {
+    for (const fila of horariosPorSucursal[sucursal]) {
+      if (String(fila.empleado || '').trim().toLowerCase() !== nombreNorm) continue;
+      const valor = String(fila[diaKey] || '').trim();
+      if (valor && valor.toUpperCase() !== 'LIBRE') return { sucursal, valor };
+    }
+  }
+  return null;
+}
+
+// Trae (con caché por semana) el Horario semanal completo y re-renderiza
+// el grid de "Mi semana" cuando llega. GET /api/horarios-semanales no
+// restringe por rol (cualquier JWT válido, incluido empleado) — confirmado
+// en croma-backend/src/routes/horarios-semanales.js.
+async function cargarPlanHorarioEmpleado(offset) {
+  const semanaId = getSemanaId(offset);
+  if (_empPlanHorariosCache[semanaId] === undefined) {
+    const data = await apiHorariosSemanales('?semana=' + encodeURIComponent(semanaId));
+    _empPlanHorariosCache[semanaId] = (data && data.ok) ? data.horarios : null;
+  }
+  // Solo re-renderizar si el usuario sigue en la misma semana — evita que
+  // una respuesta que tardó pise una navegación más reciente.
+  if (getSemanaId(_empSemanaOffset) === semanaId) _renderSemanaEmpleadoGrid();
+}
+
+// Única fuente de verdad para las cards de "Mi semana" — antes había dos
+// copias casi idénticas de esta lógica (acá y en empNavSemana), una sin
+// tocar desde el render inicial y otra desde la navegación de semanas;
+// unificadas acá de paso al agregar el plan de HORARIOS.
+function _buildSemanaEmpleadoCards() {
+  const lunes = getLunes(_empSemanaOffset);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const diasLargos = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const planSemana = _empPlanHorariosCache[getSemanaId(_empSemanaOffset)];
+  const cards = [];
+
+  for (let i = 0; i < 7; i++) {
+    const f = new Date(lunes); f.setDate(lunes.getDate() + i);
+    const fSinHora = new Date(f); fSinHora.setHours(0, 0, 0, 0);
+    const regs = _empMisRegistros.filter(r =>
+      String(r.AÑO) === String(f.getFullYear()) &&
+      r.MES === MESES_ES[f.getMonth()] &&
+      String(r.DIA) === String(f.getDate())
+    ).sort((a, b) => (a.H_ENTRADA || '').localeCompare(b.H_ENTRADA || ''));
+    const total = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
+    const esHoy = f.toDateString() === new Date().toDateString();
+
+    const plan = (!regs.length && fSinHora >= hoy)
+      ? _buscarPlanEmpleadoDia(planSemana, _empPortalActual, DIAS_KEY_PORTAL[i])
+      : null;
+
+    const libre = !regs.length && !plan;
+    let tipoTurno = '';
+    let turnos;
+
+    if (regs.length) {
+      turnos = regs.map(r => {
+        const ent = _normalizarLibreTxtPortal(r.H_ENTRADA), sal = _normalizarLibreTxtPortal(r.H_SALIDA);
+        if (!ent || !sal) return '<span class="portal-week-shift">Horario a confirmar</span>';
+        return `<span class="portal-week-shift">${ent} → ${sal}</span>`;
+      }).join('');
+      if (regs.length >= 2) tipoTurno = 'cortado';
+      else if (total <= 4) tipoTurno = 'media';
+      else if (total >= 7) tipoTurno = 'corrido';
+    } else if (plan) {
+      const bloques = plan.valor.split('|').map(p => {
+        const partes = p.trim().split('-').map(s => s.trim());
+        return { entrada: partes[0] || '', salida: partes[1] || '' };
+      });
+      turnos = `<span class="portal-week-shift-local">${plan.sucursal}</span>` +
+        bloques.map(b => `<span class="portal-week-shift">${b.entrada} → ${b.salida}</span>`).join('');
+      if (bloques.length >= 2) tipoTurno = 'cortado';
+      else {
+        const dur = _duracionHsBloquePortal(bloques[0].entrada, bloques[0].salida);
+        if (dur <= 4) tipoTurno = 'media';
+        else if (dur >= 7) tipoTurno = 'corrido';
+      }
+    } else {
+      turnos = '<div class="portal-week-free">Libre</div>';
+    }
+
+    cards.push(`
+      <div class="portal-week-card ${libre ? 'is-free' : ''} ${esHoy ? 'is-today' : ''} ${tipoTurno ? 'turno-' + tipoTurno : ''} ${plan ? 'is-planificado' : ''}">
+        <div class="portal-week-day">
+          <span>${diasLargos[i]}</span>
+          <span class="portal-week-day-num">${f.getDate()}</span>
+        </div>
+        <div class="portal-week-body">
+          ${turnos}
+          ${regs.length ? `<small>${total.toFixed(1)} hs</small>` : ''}
+        </div>
+      </div>`);
+  }
+  return cards.join('');
+}
+
+function _renderSemanaEmpleadoGrid() {
+  const grid = document.getElementById('empSemanaGrid');
+  if (!grid) return;
+  grid.innerHTML = _buildSemanaEmpleadoCards();
+  renderEventosEnSemana(_empPortalActual);
+}
+
 // ── Navegación de semanas en el portal empleado ───────
 function empNavSemana(delta, modo) {
   if (modo === 'reset') {
@@ -8743,55 +8861,12 @@ function empNavSemana(delta, modo) {
     else txt = (_empSemanaOffset > 0 ? '+' : '') + _empSemanaOffset + ' semanas · ' + desde + ' – ' + hasta;
     label.textContent = txt;
   }
-  // Re-renderizar el grid de la semana
+  // Re-renderizar el grid de la semana — ver _buildSemanaEmpleadoCards()
+  // (antes esta función duplicaba esa lógica acá mismo).
   const grid = document.getElementById('empSemanaGrid');
   if (!grid || !_empMisRegistros.length) return;
-  // Reconstruir cards manualmente (replica buildSemanaEmpleado sin depender del closure)
-  const MESES_NOMBRES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
-                         'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-  const diasLargos = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-  const lunes = getLunes(_empSemanaOffset);
-  const cards = [];
-  for (let i = 0; i < 7; i++) {
-    const f = new Date(lunes); f.setDate(lunes.getDate() + i);
-    const regs = _empMisRegistros.filter(r =>
-      String(r.AÑO) === String(f.getFullYear()) &&
-      r.MES === MESES_ES[f.getMonth()] &&
-      String(r.DIA) === String(f.getDate())
-    ).sort((a,b) => (a.H_ENTRADA||'').localeCompare(b.H_ENTRADA||''));
-    const total  = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
-    const esHoy  = f.toDateString() === new Date().toDateString();
-    const libre  = !regs.length;
-    let tipoTurno = '';
-    if (!libre) {
-      if (regs.length >= 2) tipoTurno = 'cortado';
-      else if (total <= 4) tipoTurno = 'media';
-      else if (total >= 7) tipoTurno = 'corrido';
-    }
-    function normTxt(txt) { return String(txt||'').trim().toUpperCase()==='FRANCO'?'Libre':String(txt||'').trim(); }
-    const turnos = libre
-      ? '<div class="portal-week-free">Libre</div>'
-      : regs.map(r => {
-          const ent = normTxt(r.H_ENTRADA), sal = normTxt(r.H_SALIDA);
-          if (!ent || !sal) return '<span class="portal-week-shift">Horario a confirmar</span>';
-          return '<span class="portal-week-shift">' + ent + ' → ' + sal + '</span>';
-        }).join('');
-    cards.push(
-      '<div class="portal-week-card ' + (libre?'is-free':'') + ' ' + (esHoy?'is-today':'') + ' ' + (tipoTurno?'turno-'+tipoTurno:'') + '">' +
-        '<div class="portal-week-day">' +
-          '<span>' + diasLargos[i] + '</span>' +
-          '<span class="portal-week-day-num">' + f.getDate() + '</span>' +
-        '</div>' +
-        '<div class="portal-week-body">' +
-          turnos +
-          (!libre ? '<small>' + total.toFixed(1) + ' hs</small>' : '') +
-        '</div>' +
-      '</div>'
-    );
-  }
-  grid.innerHTML = cards.join('');
-  // Re-inyectar eventos del período correcto
-  renderEventosEnSemana(_empPortalActual);
+  _renderSemanaEmpleadoGrid();
+  cargarPlanHorarioEmpleado(_empSemanaOffset);
 }
 
 var _vacSolicitudesCache = null; // cache: null = no cargado, [] = cargado vacío
@@ -9386,6 +9461,7 @@ var _empSucIdActual    = '';  // Etapa 3.2 (transición AVISOS): sucursal ya
                                // único punto de asignación de ambos).
 var _empMisRegistros   = [];  // registros del empleado activo (para re-render semana)
 var _anunciosEmpActual  = '';
+var _empPlanHorariosCache = {}; // semanaId -> {horarios} de /api/horarios-semanales, o null si falló
 
 async function verificarAnunciosEmpleado(nombreEmp) {
   try {
