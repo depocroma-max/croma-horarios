@@ -2445,7 +2445,13 @@ function renderAll() {
   renderCalendario(datos);
   renderResumenMes(datos);
   renderEmpleados(datos);
-  renderEnVivo();
+  // renderAll() se llama en cada refresh de datos (carga inicial, botón
+  // "Actualizar datos", auto-refresh de 5 min, navegación de semana) sin
+  // importar qué pestaña esté activa — antes esto pisaba "En vivo" con el
+  // legacy (DATOS GENERALES, nunca se actualiza) cada vez que corría,
+  // aunque ENVIVO_NODE=true. Mismo bug ya encontrado y corregido en
+  // croma-panel-main (commit 5d0a7b3) — acá nunca se había tocado.
+  if (ENVIVO_NODE) { if (envivoDataNode !== null) renderEnVivoNode(); } else { renderEnVivo(); }
   poblarFiltroEmpleados(datos);
 }
 
