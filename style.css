@@ -3475,6 +3475,33 @@ body {
 .portal-week-card.turno-media .portal-week-day-num { color: #15803d; }
 .portal-week-card.turno-media.is-today .portal-week-day-num { background: #16a34a; color: #fff; }
 
+/* Días YA fichados: verde = coincide con lo planificado, amarillo =
+   fichó pero no coincide (horas de más/menos, bloque faltante, o fichó
+   un día planificado como libre) — mismos colores que turno-media/
+   turno-cortado de arriba, clase separada porque ahí el criterio es otro
+   (duración del turno planificado a futuro, no coincidencia). */
+.portal-week-card.turno-match {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.portal-week-card.turno-match .portal-week-shift {
+  background: #bbf7d0;
+  color: #15803d;
+}
+.portal-week-card.turno-match .portal-week-day-num { color: #15803d; }
+.portal-week-card.turno-match.is-today .portal-week-day-num { background: #16a34a; color: #fff; }
+
+.portal-week-card.turno-incompleto {
+  background: #fefce8;
+  border-color: #fde68a;
+}
+.portal-week-card.turno-incompleto .portal-week-shift {
+  background: #fef08a;
+  color: #854d0e;
+}
+.portal-week-card.turno-incompleto .portal-week-day-num { color: #854d0e; }
+.portal-week-card.turno-incompleto.is-today .portal-week-day-num { background: #ca8a04; color: #fff; }
+
 /* .portal-week-day → ver bloque principal más arriba */
 .portal-week-body {
   display: flex;

@@ -8746,6 +8746,52 @@ function _buscarPlanEmpleadoDia(horariosPorSucursal, nombreEmpleado, diaKey) {
   return null;
 }
 
+// Distingue "esta semana no tiene NINGÚN horario cargado para este
+// empleado" (semana vieja, previa a esta función) de "tiene horario pero
+// este día puntual está libre" — la primera no permite juzgar match/no
+// match (sin color), la segunda sí (fichó un día que estaba libre = amarillo).
+function _empleadoApareceEnPlan(horariosPorSucursal, nombreEmpleado) {
+  if (!horariosPorSucursal) return false;
+  const nombreNorm = String(nombreEmpleado || '').trim().toLowerCase();
+  return Object.keys(horariosPorSucursal).some(sucursal =>
+    horariosPorSucursal[sucursal].some(fila => String(fila.empleado || '').trim().toLowerCase() === nombreNorm)
+  );
+}
+
+// "09:00-13:00" o "09:00-13:00 | 17:00-21:00" (turno cortado) → bloques.
+// Mismo formato que _parsearBloquesDia() del backend (croma-backend/src/
+// services/horarios-semanales.js), reimplementado acá porque es el único
+// consumidor client-side de este formato de texto.
+function _parsearBloquesTextoPortal(valor) {
+  return String(valor || '').split('|').map(p => {
+    const partes = p.trim().split('-').map(s => s.trim());
+    return { entrada: partes[0] || '', salida: partes[1] || '' };
+  }).filter(b => b.entrada);
+}
+
+// Mismo concepto de "ventana de gracia" que TOLERANCIA_ATRASO_MIN en el
+// motor de En vivo (croma-backend/src/services/envivo.js) — acá aplicado a
+// entrada Y salida para decidir si una fichada real "coincide" con el plan.
+const TOLERANCIA_MATCH_PORTAL_MIN = 5;
+
+// true = fichó exactamente la cantidad de bloques planificados, cada uno
+// con entrada y salida dentro de la tolerancia. Cualquier otra cosa
+// (bloque de más/de menos, hora fuera de tolerancia, hora inválida)
+// devuelve false — "incompleto", nunca se afirma un match parcial.
+function _matchFichadaConPlan(regs, bloquesPlan) {
+  if (regs.length !== bloquesPlan.length) return false;
+  for (let i = 0; i < bloquesPlan.length; i++) {
+    const plan = bloquesPlan[i];
+    const real = regs[i];
+    const eMinPlan = hhmmAMin(plan.entrada), sMinPlan = hhmmAMin(plan.salida);
+    const eMinReal = hhmmAMin(_normalizarLibreTxtPortal(real.H_ENTRADA)), sMinReal = hhmmAMin(_normalizarLibreTxtPortal(real.H_SALIDA));
+    if (isNaN(eMinPlan) || isNaN(sMinPlan) || isNaN(eMinReal) || isNaN(sMinReal)) return false;
+    if (Math.abs(eMinReal - eMinPlan) > TOLERANCIA_MATCH_PORTAL_MIN) return false;
+    if (Math.abs(sMinReal - sMinPlan) > TOLERANCIA_MATCH_PORTAL_MIN) return false;
+  }
+  return true;
+}
+
 // Trae (con caché por semana) el Horario semanal completo y re-renderiza
 // el grid de "Mi semana" cuando llega. GET /api/horarios-semanales no
 // restringe por rol (cualquier JWT válido, incluido empleado) — confirmado
@@ -8770,6 +8816,7 @@ function _buildSemanaEmpleadoCards() {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const diasLargos = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
   const planSemana = _empPlanHorariosCache[getSemanaId(_empSemanaOffset)];
+  const tieneAlgunPlanEsaSemana = _empleadoApareceEnPlan(planSemana, _empPortalActual);
   const cards = [];
 
   for (let i = 0; i < 7; i++) {
@@ -8783,9 +8830,12 @@ function _buildSemanaEmpleadoCards() {
     const total = regs.reduce((a, r) => a + (parseFloat(r.TOTAL_HS) || 0), 0);
     const esHoy = f.toDateString() === new Date().toDateString();
 
-    const plan = (!regs.length && fSinHora >= hoy)
-      ? _buscarPlanEmpleadoDia(planSemana, _empPortalActual, DIAS_KEY_PORTAL[i])
-      : null;
+    const planDia = _buscarPlanEmpleadoDia(planSemana, _empPortalActual, DIAS_KEY_PORTAL[i]);
+    const bloquesPlanDia = planDia ? _parsearBloquesTextoPortal(planDia.valor) : [];
+    // Solo se muestra como "planificado" (dashed, sin fichar todavía) para
+    // hoy en adelante — un día pasado sin fichada simplemente quedó libre,
+    // no tiene sentido mostrar retroactivamente lo que se había planeado.
+    const plan = (!regs.length && fSinHora >= hoy) ? planDia : null;
 
     const libre = !regs.length && !plan;
     let tipoTurno = '';
@@ -8797,19 +8847,24 @@ function _buildSemanaEmpleadoCards() {
         if (!ent || !sal) return '<span class="portal-week-shift">Horario a confirmar</span>';
         return `<span class="portal-week-shift">${ent} → ${sal}</span>`;
       }).join('');
-      if (regs.length >= 2) tipoTurno = 'cortado';
-      else if (total <= 4) tipoTurno = 'media';
-      else if (total >= 7) tipoTurno = 'corrido';
+      // Verde = cubrió el día y coincide con lo planificado (entrada/salida
+      // dentro de ±5 min, mismo criterio de tolerancia que "En vivo").
+      // Amarillo = fichó pero no coincide (horas de más/menos, falta un
+      // bloque del turno cortado, o fichó un día planificado como libre).
+      // Sin color = esa semana no tiene NINGÚN horario cargado para este
+      // empleado (semana vieja, previa a esta función) — no hay con qué
+      // comparar, así que no se afirma nada.
+      if (!tieneAlgunPlanEsaSemana) {
+        tipoTurno = '';
+      } else {
+        tipoTurno = _matchFichadaConPlan(regs, bloquesPlanDia) ? 'match' : 'incompleto';
+      }
     } else if (plan) {
-      const bloques = plan.valor.split('|').map(p => {
-        const partes = p.trim().split('-').map(s => s.trim());
-        return { entrada: partes[0] || '', salida: partes[1] || '' };
-      });
       turnos = `<span class="portal-week-shift-local">${plan.sucursal}</span>` +
-        bloques.map(b => `<span class="portal-week-shift">${b.entrada} → ${b.salida}</span>`).join('');
-      if (bloques.length >= 2) tipoTurno = 'cortado';
+        bloquesPlanDia.map(b => `<span class="portal-week-shift">${b.entrada} → ${b.salida}</span>`).join('');
+      if (bloquesPlanDia.length >= 2) tipoTurno = 'cortado';
       else {
-        const dur = _duracionHsBloquePortal(bloques[0].entrada, bloques[0].salida);
+        const dur = _duracionHsBloquePortal(bloquesPlanDia[0].entrada, bloquesPlanDia[0].salida);
         if (dur <= 4) tipoTurno = 'media';
         else if (dur >= 7) tipoTurno = 'corrido';
       }
