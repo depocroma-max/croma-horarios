@@ -284,6 +284,18 @@
     .time-btn.placeholder { color: var(--gray-400); }
     .time-chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--accent); pointer-events: none; }
 
+    /* horario recomendado (a partir del Horario semanal del encargado) */
+    .btn-recomendado {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 11px 14px; margin-bottom: 14px;
+      border: 1.5px dashed var(--accent); border-radius: var(--radius-md);
+      background: #fef2f2; color: var(--accent);
+      font-family: var(--font-body); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-recomendado:hover { background: #fde4e2; }
+    .btn-recomendado svg { flex-shrink: 0; }
+
     /* bottom sheet del picker */
     .sheet-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,.5);
@@ -634,6 +646,10 @@
       <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
       Horario
     </div>
+    <button type="button" class="btn-recomendado" id="btnHorarioRecomendado" style="display:none" onclick="aplicarHorarioRecomendado()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.3l-5 4.6L18.2 22 12 18.3 5.8 22 7 13.9l-5-4.6 7.1-.7z"/></svg>
+      <span id="btnHorarioRecomendadoTxt">Usar horario recomendado</span>
+    </button>
     <div class="horas-row">
       <div class="field">
         <label for="btnEntrada">Entrada</label>
@@ -1203,6 +1219,106 @@ async function mostrarFormulario() {
 
   mostrarScreen('screenForm');
   cargarHistorial(empNombre);
+  cargarHorarioRecomendado();
+}
+
+// ── Horario recomendado ──────────────────────────────────────
+// Precarga Entrada/Salida con el turno que el encargado ya cargó en
+// "Horario semanal" (GET /api/horarios-semanales, mismo endpoint que
+// alimenta "Mi semana" en app.js) para hoy. Solo se ofrece si ese plan
+// está cargado en la MISMA sucursal que el empleado eligió acá arriba —
+// si viene de otro local (vendedor externo, etc.) no hay con qué
+// recomendar, así que el botón simplemente no aparece.
+const DIAS_KEY_HORARIO_SEMANAL = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']; // índice = Date.getDay()
+
+// Mismo cálculo que getSemanaId()/getLunes() en app.js (formato "YYYY-WNN",
+// no ISO-8601 a propósito — debe coincidir con los IDs ya guardados en
+// HORARIOS). Reimplementado acá porque fichar.html es autocontenido.
+function getSemanaIdHoy() {
+  const hoyD = new Date();
+  const dow  = hoyD.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  const lunes = new Date(hoyD);
+  lunes.setDate(hoyD.getDate() + diff);
+  lunes.setHours(0, 0, 0, 0);
+  const anio = lunes.getFullYear();
+  const inicio = new Date(anio, 0, 1);
+  const semana = Math.ceil(((lunes - inicio) / 86400000 + inicio.getDay() + 1) / 7);
+  return anio + '-W' + String(semana).padStart(2, '0');
+}
+
+// "09:00-13:00" o "09:00-13:00 | 17:00-21:00" (turno cortado) → bloques.
+// Mismo formato que _parsearBloquesTextoPortal() en app.js.
+function _parsearBloquesHorario(valor) {
+  return String(valor || '').split('|').map(p => {
+    const partes = p.trim().split('-').map(s => s.trim());
+    return { entrada: partes[0] || '', salida: partes[1] || '' };
+  }).filter(b => b.entrada && b.salida);
+}
+
+let _horarioRecomendado = null; // { bloques: [{entrada,salida}, ...] } o null si no hay plan
+let _horarioRecomendadoIdx = 0;
+
+async function cargarHorarioRecomendado() {
+  _horarioRecomendado = null;
+  _horarioRecomendadoIdx = 0;
+  document.getElementById('btnHorarioRecomendado').style.display = 'none';
+  if (!sucursalGeo || !sesion) return;
+
+  try {
+    const semana = getSemanaIdHoy();
+    const resp = await fetch(`${BACKEND_URL}/api/horarios-semanales?semana=${encodeURIComponent(semana)}`, {
+      headers: { 'Authorization': `Bearer ${sesion.token}` },
+    });
+    const data = await resp.json();
+    if (!data.ok || !data.horarios) return;
+
+    // Filtrado por sucursal elegida en esta pantalla, no por la sucursal
+    // asignada del empleado — un vendedor externo cubriendo otro local
+    // solo debe ver la recomendación si el encargado cargó SU plan ahí.
+    const filas = data.horarios[sucursalGeo.local] || [];
+    const empNombreNorm = String(sesion.empleadoNombre || sesion.nombre || '').trim().toLowerCase();
+    const fila = filas.find(f => String(f.empleado || '').trim().toLowerCase() === empNombreNorm);
+    if (!fila) return;
+
+    const diaKey = DIAS_KEY_HORARIO_SEMANAL[new Date().getDay()];
+    const valor = String(fila[diaKey] || '').trim();
+    if (!valor || valor.toUpperCase() === 'LIBRE') return;
+
+    const bloques = _parsearBloquesHorario(valor);
+    if (!bloques.length) return;
+
+    _horarioRecomendado = { bloques };
+    _actualizarBotonRecomendado();
+  } catch (e) {
+    // Sin conexión o sin plan cargado: el botón no aparece y no bloquea
+    // la carga manual del turno.
+  }
+}
+
+function _actualizarBotonRecomendado() {
+  const btn = document.getElementById('btnHorarioRecomendado');
+  const txt = document.getElementById('btnHorarioRecomendadoTxt');
+  if (!_horarioRecomendado || !_horarioRecomendado.bloques.length) { btn.style.display = 'none'; return; }
+  const b = _horarioRecomendado.bloques[_horarioRecomendadoIdx];
+  const esCortado = _horarioRecomendado.bloques.length > 1;
+  txt.textContent = esCortado
+    ? `Usar turno ${_horarioRecomendadoIdx + 1}/${_horarioRecomendado.bloques.length} recomendado: ${b.entrada}–${b.salida}`
+    : `Usar horario recomendado: ${b.entrada}–${b.salida}`;
+  btn.style.display = '';
+}
+
+function aplicarHorarioRecomendado() {
+  if (!_horarioRecomendado) return;
+  const b = _horarioRecomendado.bloques[_horarioRecomendadoIdx];
+  window.setCampoHora('campoEntrada', b.entrada);
+  window.setCampoHora('campoSalida', b.salida);
+  // Turno cortado (dos bloques en el día): el próximo click ofrece el
+  // otro bloque en vez de repetir el mismo.
+  if (_horarioRecomendado.bloques.length > 1) {
+    _horarioRecomendadoIdx = (_horarioRecomendadoIdx + 1) % _horarioRecomendado.bloques.length;
+    _actualizarBotonRecomendado();
+  }
 }
 
 function hoy() {
@@ -1689,6 +1805,16 @@ function haversine(lat1, lon1, lat2, lon2) {
     const btn = document.getElementById(campoId === 'campoEntrada' ? 'btnEntrada' : 'btnSalida');
     btn.textContent = 'Elegir hora';
     btn.classList.add('placeholder');
+  };
+
+  // Mismo commit que el botón "OK" del picker, pero sin abrirlo — usado
+  // por aplicarHorarioRecomendado() para precargar Entrada/Salida.
+  window.setCampoHora = function(campoId, val) {
+    document.getElementById(campoId).value = val;
+    const btn = document.getElementById(campoId === 'campoEntrada' ? 'btnEntrada' : 'btnSalida');
+    btn.textContent = val;
+    btn.classList.remove('placeholder');
+    calcularTotal();
   };
 })();
 </script>
