@@ -285,16 +285,25 @@
     .time-chev { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--accent); pointer-events: none; }
 
     /* horario recomendado (a partir del Horario semanal del encargado) */
+    .wrap-recomendado {
+      display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 14px;
+    }
+    .wrap-recomendado.dos-turnos { grid-template-columns: 1fr 1fr; }
     .btn-recomendado {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      width: 100%; padding: 11px 14px; margin-bottom: 14px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      width: 100%; padding: 10px 8px;
       border: 1.5px dashed var(--accent); border-radius: var(--radius-md);
       background: #fef2f2; color: var(--accent);
       font-family: var(--font-body); font-size: 13px; font-weight: 500;
-      cursor: pointer; transition: background .15s;
+      cursor: pointer; transition: background .15s, border-color .15s;
+      text-align: center;
     }
     .btn-recomendado:hover { background: #fde4e2; }
     .btn-recomendado svg { flex-shrink: 0; }
+    .btn-recomendado .brec-label { display: flex; align-items: center; gap: 6px; letter-spacing: .3px; }
+    .btn-recomendado .brec-horas { font-family: var(--font-display); font-size: 15px; letter-spacing: .5px; color: var(--black); }
+    .btn-recomendado.aplicado { border-style: solid; background: #fff; }
+    .btn-recomendado.aplicado .brec-horas { color: var(--accent); }
 
     /* bottom sheet del picker */
     .sheet-overlay {
@@ -646,10 +655,7 @@
       <span class="card-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
       Horario
     </div>
-    <button type="button" class="btn-recomendado" id="btnHorarioRecomendado" style="display:none" onclick="aplicarHorarioRecomendado()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.3l-5 4.6L18.2 22 12 18.3 5.8 22 7 13.9l-5-4.6 7.1-.7z"/></svg>
-      <span id="btnHorarioRecomendadoTxt">Usar horario recomendado</span>
-    </button>
+    <div class="wrap-recomendado" id="wrapHorarioRecomendado" style="display:none"></div>
     <div class="horas-row">
       <div class="field">
         <label for="btnEntrada">Entrada</label>
@@ -1256,13 +1262,23 @@ function _parsearBloquesHorario(valor) {
   }).filter(b => b.entrada && b.salida);
 }
 
+// Etiqueta mañana/tarde/noche según la hora de entrada — evita que el
+// empleado tenga que adivinar cuál bloque es cuál con un solo botón que
+// alternaba (confuso: varios cargaban el turno equivocado). Ahora cada
+// bloque tiene su propio botón, visible al mismo tiempo.
+function _labelTurno(entrada) {
+  const h = parseInt(String(entrada).split(':')[0], 10);
+  if (isNaN(h)) return 'Turno';
+  if (h < 13) return 'Turno mañana';
+  if (h < 19) return 'Turno tarde';
+  return 'Turno noche';
+}
+
 let _horarioRecomendado = null; // { bloques: [{entrada,salida}, ...] } o null si no hay plan
-let _horarioRecomendadoIdx = 0;
 
 async function cargarHorarioRecomendado() {
   _horarioRecomendado = null;
-  _horarioRecomendadoIdx = 0;
-  document.getElementById('btnHorarioRecomendado').style.display = 'none';
+  document.getElementById('wrapHorarioRecomendado').style.display = 'none';
   if (!sucursalGeo || !sesion) return;
 
   try {
@@ -1296,29 +1312,33 @@ async function cargarHorarioRecomendado() {
   }
 }
 
-function _actualizarBotonRecomendado() {
-  const btn = document.getElementById('btnHorarioRecomendado');
-  const txt = document.getElementById('btnHorarioRecomendadoTxt');
-  if (!_horarioRecomendado || !_horarioRecomendado.bloques.length) { btn.style.display = 'none'; return; }
-  const b = _horarioRecomendado.bloques[_horarioRecomendadoIdx];
-  const esCortado = _horarioRecomendado.bloques.length > 1;
-  txt.textContent = esCortado
-    ? `Usar turno ${_horarioRecomendadoIdx + 1}/${_horarioRecomendado.bloques.length} recomendado: ${b.entrada}–${b.salida}`
-    : `Usar horario recomendado: ${b.entrada}–${b.salida}`;
-  btn.style.display = '';
+function _actualizarBotonRecomendado(idxAplicado) {
+  const wrap = document.getElementById('wrapHorarioRecomendado');
+  if (!_horarioRecomendado || !_horarioRecomendado.bloques.length) { wrap.style.display = 'none'; return; }
+
+  const bloques = _horarioRecomendado.bloques;
+  wrap.classList.toggle('dos-turnos', bloques.length > 1);
+  wrap.innerHTML = bloques.map((b, i) => `
+    <button type="button" class="btn-recomendado${i === idxAplicado ? ' aplicado' : ''}" onclick="aplicarHorarioRecomendado(${i})">
+      <span class="brec-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.3l-5 4.6L18.2 22 12 18.3 5.8 22 7 13.9l-5-4.6 7.1-.7z"/></svg>
+        ${bloques.length > 1 ? _labelTurno(b.entrada) : 'Horario recomendado'}
+      </span>
+      <span class="brec-horas">${b.entrada}–${b.salida}</span>
+    </button>
+  `).join('');
+  wrap.style.display = '';
 }
 
-function aplicarHorarioRecomendado() {
+function aplicarHorarioRecomendado(idx) {
   if (!_horarioRecomendado) return;
-  const b = _horarioRecomendado.bloques[_horarioRecomendadoIdx];
+  const b = _horarioRecomendado.bloques[idx];
+  if (!b) return;
   window.setCampoHora('campoEntrada', b.entrada);
   window.setCampoHora('campoSalida', b.salida);
-  // Turno cortado (dos bloques en el día): el próximo click ofrece el
-  // otro bloque en vez de repetir el mismo.
-  if (_horarioRecomendado.bloques.length > 1) {
-    _horarioRecomendadoIdx = (_horarioRecomendadoIdx + 1) % _horarioRecomendado.bloques.length;
-    _actualizarBotonRecomendado();
-  }
+  // Resalta el botón aplicado — el otro bloque (turno cortado) sigue
+  // disponible al lado por si el empleado ficha los dos por separado.
+  _actualizarBotonRecomendado(idx);
 }
 
 function hoy() {
