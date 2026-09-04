@@ -304,6 +304,12 @@
     .btn-recomendado .brec-horas { font-family: var(--font-display); font-size: 15px; letter-spacing: .5px; color: var(--black); }
     .btn-recomendado.aplicado { border-style: solid; background: #fff; }
     .btn-recomendado.aplicado .brec-horas { color: var(--accent); }
+    .btn-recomendado.ya-cargado {
+      border-style: solid; border-color: var(--gray-200); background: var(--gray-50);
+      color: var(--gray-400); cursor: not-allowed;
+    }
+    .btn-recomendado.ya-cargado .brec-horas { color: var(--gray-600); }
+    .btn-recomendado .brec-sub { font-size: 10px; letter-spacing: .2px; }
 
     /* bottom sheet del picker */
     .sheet-overlay {
@@ -1224,8 +1230,11 @@ async function mostrarFormulario() {
     `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
 
   mostrarScreen('screenForm');
-  cargarHistorial(empNombre);
-  cargarHorarioRecomendado();
+  // cargarHorarioRecomendado() necesita _fichadasHoyEmpleado (la llena
+  // cargarHistorial) para saber qué bloques ya se ficharon hoy — se
+  // encadena con .finally() para no bloquear que se vea la pantalla, pero
+  // sin arrancar antes de tener ese dato.
+  cargarHistorial(empNombre).finally(cargarHorarioRecomendado);
 }
 
 // ── Horario recomendado ──────────────────────────────────────
@@ -1274,7 +1283,21 @@ function _labelTurno(entrada) {
   return 'Turno noche';
 }
 
-let _horarioRecomendado = null; // { bloques: [{entrada,salida}, ...] } o null si no hay plan
+let _horarioRecomendado = null; // { bloques: [{entrada,salida,yaCargado}, ...] } o null si no hay plan
+let _fichadasHoyEmpleado = []; // la llena cargarHistorial() — fichadas de hoy ya guardadas
+
+// true si ya existe una fichada de hoy con entrada/salida dentro de ±5 min
+// del bloque — mismo criterio de tolerancia que TOLERANCIA_MATCH_PORTAL_MIN
+// en app.js ("Mi semana"). Evita ofrecer un turno que ya se cargó.
+function _bloqueYaFichado(bloque) {
+  const toMin = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + (m || 0); };
+  const be = toMin(bloque.entrada), bs = toMin(bloque.salida);
+  return _fichadasHoyEmpleado.some(f => {
+    const fe = toMin(f.entrada), fs = toMin(f.salida);
+    if ([be, bs, fe, fs].some(isNaN)) return false;
+    return Math.abs(fe - be) <= 5 && Math.abs(fs - bs) <= 5;
+  });
+}
 
 async function cargarHorarioRecomendado() {
   _horarioRecomendado = null;
@@ -1301,7 +1324,8 @@ async function cargarHorarioRecomendado() {
     const valor = String(fila[diaKey] || '').trim();
     if (!valor || valor.toUpperCase() === 'LIBRE') return;
 
-    const bloques = _parsearBloquesHorario(valor);
+    const bloques = _parsearBloquesHorario(valor)
+      .map(b => ({ ...b, yaCargado: _bloqueYaFichado(b) }));
     if (!bloques.length) return;
 
     _horarioRecomendado = { bloques };
@@ -1318,22 +1342,34 @@ function _actualizarBotonRecomendado(idxAplicado) {
 
   const bloques = _horarioRecomendado.bloques;
   wrap.classList.toggle('dos-turnos', bloques.length > 1);
-  wrap.innerHTML = bloques.map((b, i) => `
+  wrap.innerHTML = bloques.map((b, i) => {
+    if (b.yaCargado) {
+      return `
+      <button type="button" class="btn-recomendado ya-cargado" disabled>
+        <span class="brec-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          ${bloques.length > 1 ? _labelTurno(b.entrada) : 'Horario recomendado'}
+        </span>
+        <span class="brec-horas">${b.entrada}–${b.salida}</span>
+        <span class="brec-sub">Ya cargado hoy</span>
+      </button>`;
+    }
+    return `
     <button type="button" class="btn-recomendado${i === idxAplicado ? ' aplicado' : ''}" onclick="aplicarHorarioRecomendado(${i})">
       <span class="brec-label">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.3l-5 4.6L18.2 22 12 18.3 5.8 22 7 13.9l-5-4.6 7.1-.7z"/></svg>
         ${bloques.length > 1 ? _labelTurno(b.entrada) : 'Horario recomendado'}
       </span>
       <span class="brec-horas">${b.entrada}–${b.salida}</span>
-    </button>
-  `).join('');
+    </button>`;
+  }).join('');
   wrap.style.display = '';
 }
 
 function aplicarHorarioRecomendado(idx) {
   if (!_horarioRecomendado) return;
   const b = _horarioRecomendado.bloques[idx];
-  if (!b) return;
+  if (!b || b.yaCargado) return;
   window.setCampoHora('campoEntrada', b.entrada);
   window.setCampoHora('campoSalida', b.salida);
   // Resalta el botón aplicado — el otro bloque (turno cortado) sigue
@@ -1646,6 +1682,10 @@ async function cargarHistorial(empNombre) {
     const fechaHoy   = hoy();
     const toMin      = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + (m || 0); };
     const fichHoy    = json.fichadas.filter(f => fechaISO(f) === fechaHoy && f.salida);
+    // Expuesto para cargarHorarioRecomendado(): deshabilita los bloques del
+    // turno cortado que ya se fichearon hoy, para no ofrecer cargar dos
+    // veces la misma franja por error.
+    _fichadasHoyEmpleado = fichHoy;
     if (fichHoy.length) {
       // la fichada con la salida más tardía
       const ultima = fichHoy.reduce((a, b) => (toMin(b.salida) > toMin(a.salida) ? b : a));
