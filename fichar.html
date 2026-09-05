@@ -1230,11 +1230,14 @@ async function mostrarFormulario() {
     `${DIAS_ES[fObj.getDay()]} ${d} de ${MESES_ES[m - 1]}`;
 
   mostrarScreen('screenForm');
-  // cargarHorarioRecomendado() necesita _fichadasHoyEmpleado (la llena
-  // cargarHistorial) para saber qué bloques ya se ficharon hoy — se
-  // encadena con .finally() para no bloquear que se vea la pantalla, pero
-  // sin arrancar antes de tener ese dato.
-  cargarHistorial(empNombre).finally(cargarHorarioRecomendado);
+  // Antes esto esperaba a que cargarHistorial() (Apps Script, el fetch más
+  // lento de los dos) terminara para recién arrancar el fetch de horario
+  // semanal — sumaba los dos tiempos de red en vez de superponerlos. Ahora
+  // van en paralelo; si cargarHistorial() llena _fichadasHoyEmpleado
+  // después de que ya se pintaron los botones, recalcularYaCargado()
+  // los vuelve a marcar sin repetir el fetch de horario semanal.
+  cargarHistorial(empNombre);
+  cargarHorarioRecomendado();
 }
 
 // ── Horario recomendado ──────────────────────────────────────
@@ -1297,6 +1300,15 @@ function _bloqueYaFichado(bloque) {
     if ([be, bs, fe, fs].some(isNaN)) return false;
     return Math.abs(fe - be) <= 5 && Math.abs(fs - bs) <= 5;
   });
+}
+
+// Vuelve a marcar yaCargado sobre los bloques ya traídos (sin repetir el
+// fetch de horario semanal) — se llama cuando cargarHistorial() termina
+// después de que cargarHorarioRecomendado() ya pintó los botones.
+function _recalcularYaCargado() {
+  if (!_horarioRecomendado) return;
+  _horarioRecomendado.bloques = _horarioRecomendado.bloques.map(b => ({ ...b, yaCargado: _bloqueYaFichado(b) }));
+  _actualizarBotonRecomendado();
 }
 
 async function cargarHorarioRecomendado() {
@@ -1684,8 +1696,11 @@ async function cargarHistorial(empNombre) {
     const fichHoy    = json.fichadas.filter(f => fechaISO(f) === fechaHoy && f.salida);
     // Expuesto para cargarHorarioRecomendado(): deshabilita los bloques del
     // turno cortado que ya se fichearon hoy, para no ofrecer cargar dos
-    // veces la misma franja por error.
+    // veces la misma franja por error. Los dos fetches corren en paralelo
+    // (ver mostrarFormulario()), así que si el horario recomendado ya se
+    // pintó cuando esto llega, se recalcula acá en vez de perderse.
     _fichadasHoyEmpleado = fichHoy;
+    _recalcularYaCargado();
     if (fichHoy.length) {
       // la fichada con la salida más tardía
       const ultima = fichHoy.reduce((a, b) => (toMin(b.salida) > toMin(a.salida) ? b : a));
