@@ -1289,17 +1289,34 @@ function _labelTurno(entrada) {
 let _horarioRecomendado = null; // { bloques: [{entrada,salida,yaCargado}, ...] } o null si no hay plan
 let _fichadasHoyEmpleado = []; // la llena cargarHistorial() — fichadas de hoy ya guardadas
 
+function _hhmmAMin(hhmm) {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+
 // true si ya existe una fichada de hoy con entrada/salida dentro de ±5 min
 // del bloque — mismo criterio de tolerancia que TOLERANCIA_MATCH_PORTAL_MIN
 // en app.js ("Mi semana"). Evita ofrecer un turno que ya se cargó.
 function _bloqueYaFichado(bloque) {
-  const toMin = hhmm => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + (m || 0); };
-  const be = toMin(bloque.entrada), bs = toMin(bloque.salida);
+  const be = _hhmmAMin(bloque.entrada), bs = _hhmmAMin(bloque.salida);
   return _fichadasHoyEmpleado.some(f => {
-    const fe = toMin(f.entrada), fs = toMin(f.salida);
+    const fe = _hhmmAMin(f.entrada), fs = _hhmmAMin(f.salida);
     if ([be, bs, fe, fs].some(isNaN)) return false;
     return Math.abs(fe - be) <= 5 && Math.abs(fs - bs) <= 5;
   });
+}
+
+// Un bloque solo se ofrece desde 1h antes de su entrada en adelante (y
+// durante todo el turno / después, por si están fichando tarde) — evita
+// que a las 9:00 también se recomiende el turno de las 16:30 del mismo
+// turno cortado, que a esa hora no tiene sentido ofrecer todavía.
+const VENTANA_RECOMENDADO_ANTES_MIN = 60;
+function _dentroVentanaRecomendado(entrada) {
+  const entradaMin = _hhmmAMin(entrada);
+  if (isNaN(entradaMin)) return false;
+  const ahora = new Date();
+  const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
+  return ahoraMin >= entradaMin - VENTANA_RECOMENDADO_ANTES_MIN;
 }
 
 // Vuelve a marcar yaCargado sobre los bloques ya traídos (sin repetir el
@@ -1337,6 +1354,7 @@ async function cargarHorarioRecomendado() {
     if (!valor || valor.toUpperCase() === 'LIBRE') return;
 
     const bloques = _parsearBloquesHorario(valor)
+      .filter(b => _dentroVentanaRecomendado(b.entrada))
       .map(b => ({ ...b, yaCargado: _bloqueYaFichado(b) }));
     if (!bloques.length) return;
 
