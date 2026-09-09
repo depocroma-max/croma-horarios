@@ -1697,9 +1697,17 @@ async function cargarHistorial(empNombre) {
     const json = await resp.json();
     if (!json.ok || !json.fichadas || !json.fichadas.length) return;
 
-    // El backend manda 'fecha' como "Sat Jul 04" (sin año). Usamos 'marca'
-    // (timestamp ISO) para obtener la fecha real YYYY-MM-DD.
+    // getFichadasEmpleado() (Code-Jornada.js) ya manda 'fecha' formateada
+    // yyyy-MM-dd (fmtFechaCelda sobre la columna FECHA) — se usa directo.
+    // Antes acá se recalculaba desde 'marca' (columna "Marca temporal")
+    // porque en una versión vieja del backend 'fecha' venía como "Sat Jul
+    // 04" sin año; quedó de rollback por si 'marca' falta o vino con la
+    // hoja FICHADAS con columnas corridas (ver pendiente-fichadas-headers-
+    // corridos.md) — eso hacía que el turno de la mañana no se marcara
+    // "ya cargado" a la tarde porque la fecha derivada de 'marca' no
+    // coincidía con hoy().
     const fechaISO = f => {
+      if (f.fecha && /^\d{4}-\d{2}-\d{2}$/.test(f.fecha)) return f.fecha;
       if (!f.marca) return '';
       const dt = new Date(f.marca);
       if (isNaN(dt)) return '';
