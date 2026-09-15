@@ -5392,11 +5392,10 @@ async function confirmarAjusteJornada(empleado, fechaISO) {
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
 
   try {
-    const resp = await fetch(`${APPS_SCRIPT_URL}?accion=ajustar_jornada`, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' },
+    const json = await apiFichadas('/ajustar', {
+      method: 'POST',
       body: JSON.stringify(payload),
     });
-    const json = await resp.json();
 
     if (!json.ok) {
       err(json.mensaje || 'No se pudo guardar el ajuste.');
