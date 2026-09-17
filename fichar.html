@@ -1306,17 +1306,23 @@ function _bloqueYaFichado(bloque) {
   });
 }
 
-// Un bloque solo se ofrece desde 1h antes de su entrada en adelante (y
-// durante todo el turno / después, por si están fichando tarde) — evita
-// que a las 9:00 también se recomiende el turno de las 16:30 del mismo
-// turno cortado, que a esa hora no tiene sentido ofrecer todavía.
-const VENTANA_RECOMENDADO_ANTES_MIN = 60;
+function _minutosAhora() {
+  const ahora = new Date();
+  return ahora.getHours() * 60 + ahora.getMinutes();
+}
+
+// Ventana en la que un bloque es candidato a recomendarse: desde 30 min
+// antes de su entrada hasta 1h después. Fuera de esa ventana no se
+// ofrece — evita que a las 9:00 se recomiende también el turno de las
+// 16:30 del mismo turno cortado (y que uno ya fichado hace horas siga
+// apareciendo sin sentido).
+const VENTANA_RECOMENDADO_ANTES_MIN = 30;
+const VENTANA_RECOMENDADO_DESPUES_MIN = 60;
 function _dentroVentanaRecomendado(entrada) {
   const entradaMin = _hhmmAMin(entrada);
   if (isNaN(entradaMin)) return false;
-  const ahora = new Date();
-  const ahoraMin = ahora.getHours() * 60 + ahora.getMinutes();
-  return ahoraMin >= entradaMin - VENTANA_RECOMENDADO_ANTES_MIN;
+  const ahoraMin = _minutosAhora();
+  return ahoraMin >= entradaMin - VENTANA_RECOMENDADO_ANTES_MIN && ahoraMin <= entradaMin + VENTANA_RECOMENDADO_DESPUES_MIN;
 }
 
 // Vuelve a marcar yaCargado sobre los bloques ya traídos (sin repetir el
@@ -1353,12 +1359,25 @@ async function cargarHorarioRecomendado() {
     const valor = String(fila[diaKey] || '').trim();
     if (!valor || valor.toUpperCase() === 'LIBRE') return;
 
-    const bloques = _parsearBloquesHorario(valor)
-      .filter(b => _dentroVentanaRecomendado(b.entrada))
-      .map(b => ({ ...b, yaCargado: _bloqueYaFichado(b) }));
+    const todosLosBloques = _parsearBloquesHorario(valor);
+    const esTurnoCortado = todosLosBloques.length > 1;
+
+    let bloques = todosLosBloques.filter(b => _dentroVentanaRecomendado(b.entrada));
     if (!bloques.length) return;
 
-    _horarioRecomendado = { bloques };
+    // Turno cortado: si por la ventana (poco probable, quedan separados
+    // por horas) entraran los dos, nos quedamos solo con el más cercano
+    // a la hora actual — nunca se ofrecen los dos bloques a la vez.
+    if (bloques.length > 1) {
+      const ahoraMin = _minutosAhora();
+      bloques = [bloques.reduce((cercano, b) =>
+        Math.abs(_hhmmAMin(b.entrada) - ahoraMin) < Math.abs(_hhmmAMin(cercano.entrada) - ahoraMin) ? b : cercano
+      )];
+    }
+
+    bloques = bloques.map(b => ({ ...b, yaCargado: _bloqueYaFichado(b) }));
+
+    _horarioRecomendado = { bloques, esTurnoCortado };
     _actualizarBotonRecomendado();
   } catch (e) {
     // Sin conexión o sin plan cargado: el botón no aparece y no bloquea
@@ -1371,6 +1390,7 @@ function _actualizarBotonRecomendado(idxAplicado) {
   if (!_horarioRecomendado || !_horarioRecomendado.bloques.length) { wrap.style.display = 'none'; return; }
 
   const bloques = _horarioRecomendado.bloques;
+  const etiqueta = b => _horarioRecomendado.esTurnoCortado ? _labelTurno(b.entrada) : 'Horario recomendado';
   wrap.classList.toggle('dos-turnos', bloques.length > 1);
   wrap.innerHTML = bloques.map((b, i) => {
     if (b.yaCargado) {
@@ -1378,7 +1398,7 @@ function _actualizarBotonRecomendado(idxAplicado) {
       <button type="button" class="btn-recomendado ya-cargado" disabled>
         <span class="brec-label">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          ${bloques.length > 1 ? _labelTurno(b.entrada) : 'Horario recomendado'}
+          ${etiqueta(b)}
         </span>
         <span class="brec-horas">${b.entrada}–${b.salida}</span>
         <span class="brec-sub">Ya cargado hoy</span>
@@ -1388,7 +1408,7 @@ function _actualizarBotonRecomendado(idxAplicado) {
     <button type="button" class="btn-recomendado${i === idxAplicado ? ' aplicado' : ''}" onclick="aplicarHorarioRecomendado(${i})">
       <span class="brec-label">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.3l-5 4.6L18.2 22 12 18.3 5.8 22 7 13.9l-5-4.6 7.1-.7z"/></svg>
-        ${bloques.length > 1 ? _labelTurno(b.entrada) : 'Horario recomendado'}
+        ${etiqueta(b)}
       </span>
       <span class="brec-horas">${b.entrada}–${b.salida}</span>
     </button>`;
