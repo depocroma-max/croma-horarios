@@ -7186,10 +7186,13 @@ function estadoBadge(estado) {
 }
 
 // ── CONFIG ────────────────────────────────────────────
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_config (GAS, doGet, sin auth). Ahora usa apiConfig() —
+// mismo helper que ya usa el guardado de este mismo módulo, manda el JWT
+// automáticamente. Shape de respuesta sin cambios ({ok,config}).
 async function cargarConfigAdmin() {
   try {
-    const resp = await fetch(vacApiUrl('get_config'));
-    const json = await resp.json();
+    const json = await apiConfig('', { method: 'GET' });
     if (json.ok) {
       _configCache = json.config || {};
       const el = document.getElementById('cfgEmailAdmin');
