@@ -8278,11 +8278,13 @@ function eventosApiUrl(accion, params) {
   return url;
 }
 
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_eventos (GAS, doGet, sin auth). Ahora usa apiEventos() (JWT
+// automático). Shape de respuesta sin cambios ({ok,eventos}).
 async function cargarEventos(force) {
   if (!force && _eventosCache !== null) return _eventosCache;
   try {
-    const resp = await fetch(eventosApiUrl('get_eventos'));
-    const json = await resp.json();
+    const json = await apiEventos('', { method: 'GET' });
     _eventosCache = json.ok ? (json.eventos || []) : [];
   } catch(e) {
     if (_eventosCache === null) _eventosCache = [];
@@ -8559,12 +8561,15 @@ async function eliminarEvento(id) {
 }
 
 // ── Mostrar eventos en Mi semana del empleado ──────────
+// NOTA: esta función no tiene invocaciones activas hoy (ver comentario más
+// abajo, "queda como variable legacy sin escritor activo") — se migra
+// igual, por completitud, para que no quede ningún fetch directo a GAS en
+// el archivo aunque el código esté muerto.
 var _eventosEmpCache = [];
 
 async function cargarEventosEmpleado(nombreEmp) {
   try {
-    const resp = await fetch(eventosApiUrl('get_eventos', { empleado: nombreEmp }));
-    const json = await resp.json();
+    const json = await apiEventos('?empleado=' + encodeURIComponent(nombreEmp), { method: 'GET' });
     if (!json.ok) return;
     const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
     const sucId  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombreEmp; }) || {}).LOCAL || '';
