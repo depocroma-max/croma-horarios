@@ -9324,12 +9324,14 @@ function sonarNotificacion() {
 }
 
 // ── ADMIN: cargar y renderizar lista de anuncios ──────
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_anuncios (GAS, doGet, sin auth). Ahora usa apiAnuncios() (JWT
+// automático). Shape de respuesta sin cambios ({ok,anuncios}).
 async function cargarListaAnuncios() {
   const el = document.getElementById('adminAnunciosList');
   if (!el) return;
   try {
-    const resp = await fetch(anunciosApiUrl('get_anuncios'));
-    const json = await resp.json();
+    const json = await apiAnuncios('', { method: 'GET' });
     if (!json.ok) throw new Error(json.error || 'Error');
     _anunciosCache = json.anuncios || [];
     renderListaAnuncios(_anunciosCache);
@@ -9531,6 +9533,9 @@ var _empMisRegistros   = [];  // registros del empleado activo (para re-render s
 var _anunciosEmpActual  = '';
 var _empPlanHorariosCache = {}; // semanaId -> {horarios} de /api/horarios-semanales, o null si falló
 
+// NOTA: sin invocaciones activas hoy (ver comentario más abajo, "queda
+// sin ningún caller activo") — se migra igual, por completitud, para que
+// no quede ningún fetch directo a GAS en el archivo aunque esté muerta.
 async function verificarAnunciosEmpleado(nombreEmp) {
   try {
     const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
@@ -9539,8 +9544,7 @@ async function verificarAnunciosEmpleado(nombreEmp) {
                     (_empMisRegistros[0] || {}).LOCAL ||
                     (state.datos.find(r => r.EMPLEADO === nombreEmp) || {}).LOCAL ||
                     '').toString().trim();
-    const resp = await fetch(anunciosApiUrl('get_anuncios', { empleado: nombreEmp, sucursal: sucId }));
-    const json = await resp.json();
+    const json = await apiAnuncios(`?empleado=${encodeURIComponent(nombreEmp)}&sucursal=${encodeURIComponent(sucId)}`, { method: 'GET' });
     if (!json.ok) return;
     // Filtrar suc_X en el front (el backend los pasa todos para que filtremos aquí)
     const todos = (json.anuncios || []).filter(a => {
