@@ -4857,7 +4857,8 @@ function _limpiarFiltrosAdmin() {
 // ══════════════════════════════════════════════════════
 //  AJUSTE DE JORNADA — Fase 3 (conectado a backend real)
 //  Fuente de verdad: hoja FICHADAS vía accion=ajustar_jornada (Fase 2, GAS).
-//  Lectura: accion=get_fichadas_empleado (ya devuelve id_fichada/estado).
+//  Lectura: GET /api/fichadas/empleado (Node, Fase 8A; antes GAS
+//  accion=get_fichadas_empleado) — devuelve id_fichada/estado.
 //  JORNADAS_AJUSTE_CACHE es solo el resultado de la última búsqueda real
 //  (para que el modal no tenga que volver a pedirlo al backend) — no es mock.
 // ══════════════════════════════════════════════════════
@@ -5162,8 +5163,10 @@ async function buscarJornadasAjuste() {
   resEl.innerHTML = "<div class='ajuste-empty-state'><div class='spinner' role='status' aria-label='Cargando'></div><p class='text-secondary'>Buscando jornadas...</p></div>";
 
   try {
-    const url  = `${APPS_SCRIPT_URL}?accion=get_fichadas_empleado&empleado=${encodeURIComponent(empleado)}&incluir_anuladas=1`;
-    const json = await fetchJSONretry(url);
+    // Fase 8A: lectura vía croma-backend (JWT admin/jefe/horarios, Sheets API)
+    // en vez de accion=get_fichadas_empleado (GAS) — mismo contrato
+    // {ok, fichadas}. fichar.html/kiosco.html siguen en GAS (fuera de 8A).
+    const json = await apiFichadas(`/empleado?empleado=${encodeURIComponent(empleado)}&incluir_anuladas=1`, { method: 'GET' });
     if (!json.ok) throw new Error(json.error || 'Error al cargar las jornadas');
 
     const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
