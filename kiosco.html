@@ -375,12 +375,26 @@
   </div>
 </div>
 
+<!-- ACTIVACIÓN DEL DISPOSITIVO (Fase 8C) -->
+<div class="screen-flex" id="screenActivar">
+  <div class="err-card">
+    <div class="err-icon">🔑</div>
+    <div class="err-title" id="actTitle">Activar este kiosco</div>
+    <div class="err-msg" id="actMsg">Ingresá el código de activación que te pasó el administrador.</div>
+    <input id="actCodigo" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH"
+      style="margin-top:18px;width:100%;max-width:280px;padding:14px;font-size:22px;letter-spacing:4px;text-align:center;text-transform:uppercase;border:1.5px solid #e8e8e4;border-radius:12px;font-family:'DM Sans',sans-serif;" />
+    <button class="btn-submit" id="actBtn" style="margin-top:20px" onclick="activarConCodigoIngresado()">Activar</button>
+    <button class="btn-cancel" id="actVolver" style="margin-top:10px" onclick="window.location.replace(window.location.pathname)">Volver</button>
+  </div>
+</div>
+
 <!-- SELECTOR DE SUCURSAL -->
 <div class="screen" id="screenSucursal">
   <div class="suc-sel-wrap">
     <div class="page-title">SELECCIONÁ EL LOCAL</div>
     <p class="page-sub">Elegí la sucursal donde está instalado este kiosco</p>
     <div class="suc-grid" id="sucGrid"></div>
+    <p style="text-align:center;margin-top:28px"><button class="btn-cancel" style="max-width:320px" onclick="mostrarActivacion()">Activar este kiosco con un código</button></p>
   </div>
 </div>
 
@@ -564,6 +578,9 @@ function leerTokenKiosco() {
 const tokenKioscoInstalado = leerTokenKiosco();
 const modoEscritura = tokenKioscoInstalado ? 'NODE' : 'LEGACY_GAS';
 
+// Fase 8C: identifica la versión de este frontend en el panel de kioscos.
+const KIOSCO_VERSION = '20260925-1';
+
 const SUCURSALES = [
   { id: '01',      nombre: '01 PASEO',           color: '#2563EB', colorLight: '#EFF6FF', icon: 'store'        },
   { id: '05',      nombre: '05 WAVE',            color: '#10B981', colorLight: '#ECFDF5', icon: 'waves'        },
@@ -577,6 +594,11 @@ const SUCURSALES = [
 
 const DIAS_ES  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+// 09 CIPO SAN MARTIN está cerrada (desde 24/09/2026): se conserva en SUCURSALES
+// solo para nombres/colores de datos históricos, pero NO se ofrece ni se acepta
+// como local de un kiosco.
+const SUCURSALES_OPERATIVAS = SUCURSALES.filter(function(s) { return s.id !== '09'; });
 
 let sucursal       = null;
 let todosEmpleados = [];
@@ -604,10 +626,31 @@ function hideSplash() {
 }
 
 // ── INIT ──
-(async function init() {
+async function init() {
   const params  = new URLSearchParams(window.location.search);
+
+  // Fase 8C — activación: kiosco.html?activar=CODIGO (link generado por el
+  // administrador) canjea el código UNA vez y guarda la credencial del
+  // dispositivo. "?activar=" vacío abre la pantalla para tipear el código.
+  if (params.has('activar')) {
+    hideSplash();
+    const codigoLink = params.get('activar');
+    if (codigoLink) { await activarConCodigo(codigoLink); }
+    else { mostrarActivacion(); }
+    return;
+  }
+
+  // Fase 8C — MODO NODE: con credencial instalada la sucursal, los empleados
+  // y las fichadas de hoy salen de UNA llamada autenticada; ?local= se ignora.
+  if (modoEscritura === 'NODE') {
+    hideSplash();
+    await cargarTodoNode();
+    return;
+  }
+
+  // ── MODO LEGACY_GAS (kioscos todavía sin activar) — sin cambios ──
   const localId = params.get('local') || '';
-  sucursal = SUCURSALES.find(s => s.id === localId) || null;
+  sucursal = SUCURSALES_OPERATIVAS.find(s => s.id === localId) || null;
 
   if (!sucursal) {
     hideSplash();
@@ -621,7 +664,67 @@ function hideSplash() {
 
   hideSplash();
   await cargarTodo();
-})();
+}
+// Se ejecuta recién cuando TODO el script terminó de evaluarse: las const de más
+// abajo (CACHE_PERFILES, CACHE_NODE…) ya existen. Antes init() corría en el
+// tramo de evaluación y la lectura de caché caía en la zona muerta temporal.
+window.addEventListener('DOMContentLoaded', init);
+
+// ── Fase 8C: ACTIVACIÓN DEL DISPOSITIVO ─────────────────────────────────
+function mostrarActivacion(mensaje, titulo) {
+  document.getElementById('actTitle').textContent = titulo || 'Activar este kiosco';
+  document.getElementById('actMsg').textContent   = mensaje || 'Ingresá el código de activación que te pasó el administrador.';
+  document.getElementById('actCodigo').style.display = '';
+  document.getElementById('actBtn').style.display    = '';
+  document.getElementById('actBtn').disabled = false;
+  document.getElementById('actBtn').textContent = 'Activar';
+  mostrarScreen('screenActivar');
+  setTimeout(function() { document.getElementById('actCodigo').focus(); }, 100);
+}
+
+function activarConCodigoIngresado() {
+  const codigo = document.getElementById('actCodigo').value.trim();
+  if (!codigo) { document.getElementById('actMsg').textContent = 'Escribí el código de activación.'; return; }
+  activarConCodigo(codigo);
+}
+
+async function activarConCodigo(codigo) {
+  document.getElementById('actTitle').textContent = 'Activando…';
+  document.getElementById('actMsg').textContent   = 'Un momento.';
+  document.getElementById('actCodigo').style.display = 'none';
+  document.getElementById('actBtn').style.display    = 'none';
+  mostrarScreen('screenActivar');
+
+  let resp, json = null;
+  try {
+    resp = await fetch(BACKEND_URL + '/api/kiosco/activar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigo: codigo, version: KIOSCO_VERSION }),
+    });
+    json = await resp.json().catch(function() { return null; });
+  } catch (e) {
+    mostrarActivacion('No se pudo conectar con el servidor. Revisá internet e intentá de nuevo.', 'Sin conexión');
+    return;
+  }
+
+  if (resp.ok && json && json.ok && TOKEN_KIOSCO_RE.test(json.token || '')) {
+    try {
+      localStorage.setItem(CROMA_KIOSCO_TOKEN_KEY, json.token);
+      // Datos de versiones anteriores: perfiles completos (con celular) y caché por sucursal.
+      Object.keys(localStorage).filter(function(k) { return k === CACHE_PERFILES || k.indexOf('croma_kiosco_fichadas_') === 0; })
+        .forEach(function(k) { localStorage.removeItem(k); });
+    } catch (e) {
+      mostrarActivacion('Este navegador no permite guardar la activación. Revisá que no esté en modo privado.', 'No se pudo guardar');
+      return;
+    }
+    document.getElementById('actTitle').textContent = 'Kiosco activado';
+    document.getElementById('actMsg').textContent   = (json.dispositivo && json.dispositivo.local ? json.dispositivo.local + ' — ' : '') + 'Listo, ya podés usar este kiosco.';
+    setTimeout(function() { window.location.replace(window.location.pathname); }, 1500);
+    return;
+  }
+
+  mostrarActivacion((json && json.error) || 'No se pudo activar. Pedí un código nuevo al administrador.', 'No se pudo activar');
+}
 
 function irASelectorSucursal() {
   renderSucGrid();
@@ -629,7 +732,7 @@ function irASelectorSucursal() {
 }
 
 function renderSucGrid() {
-  document.getElementById('sucGrid').innerHTML = SUCURSALES.map(function(s) {
+  document.getElementById('sucGrid').innerHTML = SUCURSALES_OPERATIVAS.map(function(s) {
     return '<div class="suc-card" role="button" tabindex="0" aria-label="Seleccionar sucursal ' + s.nombre + '" onclick="window.location.href=\'kiosco.html?local=' + s.id + '\'">' +
       '<div class="suc-card-icon" style="background:' + s.colorLight + ';color:' + s.color + '">' + icon(s.icon) + '</div>' +
       '<div class="suc-card-name">' + s.nombre + '</div>' +
@@ -660,6 +763,80 @@ async function fetchJSON(url, intentos) {
 
 // ── CARGA ──
 const CACHE_PERFILES = 'croma_kiosco_perfiles';
+
+// El kiosco solo necesita estos campos de cada empleado — nunca celular ni
+// datos personales (en modo legacy GAS entrega el perfil completo).
+function empleadoMinimo(e) {
+  return { nombre: e.nombre, sucursal_id: e.sucursal_id, foto_url: e.foto_url || '', activo: true };
+}
+
+// ── Fase 8C: MODO NODE — una sola lectura autenticada del dispositivo ───
+const CACHE_NODE = 'croma_kiosco_datos_v2';
+let desfaseMinServidor = 0; // hora del servidor - hora de esta PC, en minutos
+
+function minutosLocales() { const a = new Date(); return a.getHours() * 60 + a.getMinutes(); }
+function minutosServidorAhora() { return (((minutosLocales() + desfaseMinServidor) % 1440) + 1440) % 1440; }
+
+async function fetchDatosNode() {
+  let resp;
+  try {
+    resp = await fetch(BACKEND_URL + '/api/kiosco/datos?v=' + encodeURIComponent(KIOSCO_VERSION),
+      { headers: { 'Authorization': 'Kiosk ' + tokenKioscoInstalado } });
+  } catch (e) { throw Object.assign(new Error('Sin conexión'), { tipo: 'red' }); }
+  const json = await resp.json().catch(function() { return null; });
+  if (resp.status === 401 || resp.status === 403) throw Object.assign(new Error('Dispositivo no autorizado'), { tipo: 'no_autorizado' });
+  if (!resp.ok || !json || json.ok !== true) throw Object.assign(new Error((json && json.error) || 'Error del servidor'), { tipo: 'servidor' });
+  return json;
+}
+
+function aplicarDatosNode(d) {
+  const suc = SUCURSALES.find(function(x) { return x.id === d.sucursal.codigo; }) || { id: d.sucursal.codigo, nombre: d.sucursal.local };
+  if (!sucursal || sucursal.id !== suc.id) {
+    sucursal = suc;
+    document.title = 'Croma · Kiosco ' + sucursal.nombre;
+    document.getElementById('topbarSuc').textContent = sucursal.nombre;
+  }
+  todosEmpleados = d.empleados.map(function(e) { return { nombre: e.nombre, sucursal_id: e.sucursal_id, foto_url: e.foto_url, activo: true }; });
+  fichadasHoy    = d.fichadas_hoy;
+  const partes = d.ahora.hora.split(':').map(Number);
+  desfaseMinServidor = (partes[0] * 60 + partes[1]) - minutosLocales();
+  try { localStorage.setItem(CACHE_NODE, JSON.stringify({ fecha: d.ahora.fecha, sucursal: d.sucursal, empleados: d.empleados, fichadas: d.fichadas_hoy })); } catch(e) {}
+}
+
+function mostrarReactivacionRequerida() {
+  mostrarActivacion('Este kiosco necesita reactivarse. Pedile al administrador un código de activación (o abrí el link que te envíe).', 'Kiosco no autorizado');
+}
+
+async function cargarTodoNode() {
+  // Pintar YA desde la caché mínima (sin celular) y refrescar por atrás.
+  let tieneCache = false;
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_NODE) || 'null');
+    if (c && c.sucursal && c.empleados && c.empleados.length) {
+      aplicarDatosNode({ sucursal: c.sucursal, empleados: c.empleados, fichadas_hoy: (c.fecha === hoy() ? c.fichadas : []) || [], ahora: { fecha: c.fecha, hora: new Date().toTimeString().slice(0, 5) } });
+      renderEmpleados();
+      mostrarScreen('screenEmpleados');
+      tieneCache = true;
+    }
+  } catch(e) {}
+  if (!tieneCache) mostrarScreen('screenLoading');
+
+  try {
+    aplicarDatosNode(await fetchDatosNode());
+    renderEmpleados();
+    mostrarScreen('screenEmpleados');
+    iniciarAutoRefresh();
+  } catch(err) {
+    if (err.tipo === 'no_autorizado') { mostrarReactivacionRequerida(); return; }
+    if (tieneCache) { iniciarAutoRefresh(); return; }
+    document.getElementById('errTitle').textContent = 'No se pudo cargar';
+    document.getElementById('errMsg').textContent = 'El servidor no respondió bien (' + err.message + '). Tocá reintentar.';
+    const btn = document.getElementById('errBtn');
+    btn.textContent = 'Reintentar';
+    btn.onclick = cargarTodoNode;
+    mostrarScreen('screenError');
+  }
+}
 // Las fichadas se cachean por sucursal + fecha, así se descartan solas cada día.
 function cacheFichadasKey() {
   const now = new Date();
@@ -694,7 +871,7 @@ async function cargarTodo() {
       fetchJSON(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
     ]);
 
-    const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
+    const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; }).map(empleadoMinimo);
     if (emps.length) {
       todosEmpleados = emps;
       try { localStorage.setItem(CACHE_PERFILES, JSON.stringify(emps)); } catch(e) {}
@@ -731,13 +908,22 @@ function iniciarAutoRefresh() {
 
 async function refrescarDatos() {
   if (!sucursal) return;
+  if (modoEscritura === 'NODE') {
+    try {
+      aplicarDatosNode(await fetchDatosNode());
+      if (document.getElementById('screenEmpleados').classList.contains('active')) renderEmpleados();
+    } catch(e) {
+      if (e.tipo === 'no_autorizado' && document.getElementById('screenEmpleados').classList.contains('active')) mostrarReactivacionRequerida();
+    }
+    return;
+  }
   try {
     const [jsonPerf, jsonFich] = await Promise.all([
       fetchJSON(APPS_SCRIPT_URL + '?accion=perfiles'),
       fetchJSON(APPS_SCRIPT_URL + '?accion=get_fichadas_hoy_local'),
     ]);
 
-    const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; });
+    const emps = (jsonPerf.empleados || []).filter(function(e) { return e.activo; }).map(empleadoMinimo);
     if (emps.length) {
       todosEmpleados = emps;
       try { localStorage.setItem(CACHE_PERFILES, JSON.stringify(emps)); } catch(e) {}
@@ -894,6 +1080,29 @@ function hoy() {
 
 async function verificarTurnoActivo() {
   if (!usuariosSel) return;
+
+  // Fase 8C — MODO NODE: no se consulta el historial de nadie. Las fichadas de
+  // HOY de todos los locales (con horas reales HH:MM y hora del servidor) ya
+  // vienen en /api/kiosco/datos, así también se detecta el turno en curso de
+  // un empleado que viene de otra sucursal.
+  if (modoEscritura === 'NODE') {
+    const toMinN = function(hhmm) { const p = String(hhmm || '').split(':').map(Number); return (p[0] || 0) * 60 + (p[1] || 0); };
+    const mias = fichadasHoy.filter(function(f) { return f.empleado === usuariosSel.nombre && f.hora_salida; });
+    if (!mias.length) return;
+    const ultimaN = mias.reduce(function(a, b) { return toMinN(b.hora_salida) > toMinN(a.hora_salida) ? b : a; });
+    const hintN = document.getElementById('submitHint');
+    const btnN  = document.getElementById('btnSubmit');
+    if (minutosServidorAhora() < toMinN(ultimaN.hora_salida)) {
+      btnN.disabled = true;
+      hintN.textContent = 'Turno en curso (' + ultimaN.hora_entrada + '–' + ultimaN.hora_salida + '). El botón se habilitará cuando finalice.';
+      hintN.style.color = '#dc2626';
+    } else {
+      hintN.textContent = 'Ya tiene un turno hoy (' + ultimaN.hora_entrada + '–' + ultimaN.hora_salida + '). Podés cargar otro.';
+      hintN.style.color = 'var(--gray-400)';
+    }
+    return;
+  }
+
   try {
     var empNombre = usuariosSel.nombre;
     var url  = APPS_SCRIPT_URL + '?accion=get_fichadas_empleado&empleado=' + encodeURIComponent(empNombre);
@@ -1117,7 +1326,8 @@ async function enviarFichada() {
     } else {
       payload = {
         empleado:          usuariosSel.nombre,
-        fecha,
+        // fecha: NO se manda — la fecha operativa de la fichada la fija el servidor
+        // (America/Argentina/Buenos_Aires), no el reloj de esta PC (Fase 8C).
         hora_entrada:      entrada,
         hora_salida:       salida,
         nota,
@@ -1167,7 +1377,8 @@ async function enviarFichada() {
         // key contra un dispositivo no autorizado).
         intentoFichadaKioscoPendiente = null;
         btn.disabled = false; btn.textContent = 'Guardar turno';
-        alert('Dispositivo no autorizado. Este kiosco requiere reconfiguración — avisá a un administrador. (No se guardó ningún turno.)');
+        alert('Dispositivo no autorizado. Este kiosco requiere reactivación — pedile un código al administrador. (No se guardó ningún turno.)');
+        mostrarReactivacionRequerida();
         return;
       }
 
