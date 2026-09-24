@@ -805,13 +805,11 @@
 <script src="croma-icons.js?v=20260803-1a"></script>
 <script>
 // ── CONFIG ──
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
 const BACKEND_URL = 'https://api.croma-app.com.ar';
 
 const SUCURSALES = [
   { id: '01',      nombre: '01 PASEO',           color: '#2563EB' },
   { id: '05',      nombre: '05 WAVE',            color: '#10B981' },
-  { id: '09',      nombre: '09 CIPO SAN MARTIN', color: '#F97316' },
   { id: '10',      nombre: '10 PERITO MORENO',   color: '#DB2777' },
   { id: '12',      nombre: '12 CENTENARIO',       color: '#7C3AED' },
   { id: '14',      nombre: '14 ROCA',            color: '#92400E' },
@@ -833,6 +831,10 @@ let geoPos = null;         // { lat, lon }
 // resabio de eso al cargar la página — ver ADMINISTRACIÓN UNIFICADA /
 // fix de seguridad en Code-Jornada.js y app.js (croma-horarios-main).
 try { localStorage.removeItem('croma_usuarios_cache'); } catch(e) {}
+// Fase 8B: ya no se cachean perfiles ni geo en el navegador (el perfil
+// completo de todos los empleados, celular incluido, quedaba en
+// localStorage). Se borra cualquier resabio de versiones anteriores.
+try { localStorage.removeItem('croma_perfiles_cache'); localStorage.removeItem('croma_geo_cache'); } catch(e) {}
 
 // ── SESIÓN (Fase 7C) ────────────────────────────────────────────────────
 // Antes: `sesion` (sin token — el JWT de /auth/login se descartaba, ver
@@ -961,55 +963,60 @@ async function arrancarConSesion() {
   await cargarSucursalYGeo();
 }
 
-// Trae datos con "stale-while-revalidate": si hay copia en caché la devuelve
-// al instante y refresca en segundo plano; si no, espera el fetch.
-async function fetchConCache(cacheKey, accion, extraer, onFresh) {
-  let usadoCache = false;
+// ── DATOS NECESARIOS PARA FICHAR (Fase 8B) ──
+// Todo sale de croma-backend con el JWT de la sesión — ya no hay ninguna
+// llamada a Apps Script en este archivo. La identidad (empleado y sucursal
+// propia) la resuelve el servidor a partir del token; el cliente nunca
+// manda un nombre de empleado para consultar.
+async function fetchNodeAutenticado(ruta) {
+  const s = leerSesion();
+  if (!s || !s.token) throw Object.assign(new Error('Sesión sin token'), { tipo: 'sesion_invalida' });
+  let resp;
   try {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      onFresh(JSON.parse(cached));
-      usadoCache = true;
-    }
-  } catch(e) {}
+    resp = await fetch(`${BACKEND_URL}${ruta}`, { headers: { 'Authorization': `Bearer ${s.token}` } });
+  } catch (e) {
+    throw Object.assign(new Error('Error de red'), { tipo: 'red' });
+  }
+  if (resp.status === 401) throw Object.assign(new Error('Sesión inválida'), { tipo: 'sesion_invalida' });
+  let json = null;
+  try { json = await resp.json(); } catch (e) {}
+  if (!resp.ok || !json || json.ok !== true) {
+    throw Object.assign(new Error((json && json.error) || 'Error del servidor'), { tipo: 'error_servidor' });
+  }
+  return json;
+}
 
-  const refrescar = fetch(`${APPS_SCRIPT_URL}?accion=${accion}`)
-    .then(r => r.json())
-    .then(json => {
-      const datos = extraer(json);
-      if (datos != null) {
-        onFresh(datos);
-        try { localStorage.setItem(cacheKey, JSON.stringify(datos)); } catch(e) {}
-      }
-    })
-    .catch(() => {});
-
-  // Si teníamos caché, no bloqueamos el flujo esperando el refresco.
-  if (!usadoCache) await refrescar;
+function sesionVencidaEnLectura() {
+  limpiarSesion();
+  mostrarAlertaCroma(
+    'Sesión vencida',
+    'Iniciá sesión de nuevo para fichar.',
+    'Aceptar',
+    () => { cerrarAlertaCroma(); mostrarScreen('screenLogin'); }
+  );
 }
 
 async function cargarSucursalYGeo() {
+  // Puede volver a ejecutarse desde "Reintentar": dejar la pantalla en estado "verificando".
+  mostrarScreen('screenGeo');
+  document.getElementById('geoSpinner').style.display = '';
+  document.getElementById('geoIcon').style.display = 'none';
+  document.getElementById('geoTitle').textContent = 'Verificando ubicación';
+  document.getElementById('geoDist').style.display = 'none';
+  document.getElementById('geoMsg').textContent = 'Asegurate de tener el GPS activado y dar permiso cuando te lo pida el navegador.';
+  document.getElementById('geoBtn').style.display = 'none';
+
   // Todo en paralelo: perfil, geo y GPS son independientes entre sí.
 
-  // 1. Perfil del empleado para saber su sucursal asignada (con caché)
-  const pPerfil = fetchConCache(
-    'croma_perfiles_cache', 'perfiles',
-    json => json.empleados || null,
-    empleados => {
-      const empNombre = sesion.empleadoNombre || sesion.nombre;
-      const perfil = empleados.find(e =>
-        e.nombre.toLowerCase() === empNombre.toLowerCase()
-      );
-      if (perfil) sesion.sucursalId = perfil.sucursal_id;
-    }
-  );
+  // 1. Sucursal propia (solo identidad + sucursal_id, resueltos por el servidor)
+  const pPerfil = fetchNodeAutenticado('/api/fichadas/mi-sucursal').then(j => {
+    sesion.sucursalId = j.empleado.sucursal_id;
+  });
 
-  // 2. Coordenadas geo de las sucursales (con caché)
-  const pGeo = fetchConCache(
-    'croma_geo_cache', 'get_sucursales_geo',
-    json => json.sucursales || null,
-    sucursales => { sucursalesGeo = sucursales; }
-  );
+  // 2. Coordenadas y radio de las sucursales donde se puede fichar
+  const pGeo = fetchNodeAutenticado('/api/sucursales-geo').then(j => {
+    sucursalesGeo = j.sucursales;
+  });
 
   // 3. Obtener geolocalización (reutiliza un fix reciente si lo hay)
   const pGps = new Promise(resolve => {
@@ -1021,13 +1028,40 @@ async function cargarSucursalYGeo() {
     );
   });
 
-  await Promise.all([pPerfil, pGeo, pGps]);
+  const [rPerfil, rGeo] = await Promise.allSettled([pPerfil, pGeo, pGps]);
+
+  // Fail-closed: si no se pudieron cargar los datos necesarios NO se sigue
+  // (antes un error dejaba la lista de sucursales vacía y se salteaba la
+  // comprobación de ubicación sin avisar).
+  const fallos = [rPerfil, rGeo].filter(r => r.status === 'rejected');
+  if (fallos.some(f => f.reason && f.reason.tipo === 'sesion_invalida')) {
+    sesionVencidaEnLectura();
+    return;
+  }
+  if (fallos.length) {
+    mostrarErrorDatosFichar();
+    return;
+  }
 
   if (!geoPos) {
     mostrarGeoRequerido();
     return;
   }
   mostrarSelectorSucursal();
+}
+
+function mostrarErrorDatosFichar() {
+  mostrarScreen('screenGeo');
+  document.getElementById('geoSpinner').style.display = 'none';
+  const icon = document.getElementById('geoIcon');
+  icon.style.display = 'flex'; icon.className = 'geo-icon err';
+  document.getElementById('geoTitle').textContent = 'No pudimos verificar tu ubicación';
+  document.getElementById('geoDist').style.display = 'none';
+  document.getElementById('geoMsg').textContent =
+    'Reintentá en unos segundos. Si sigue fallando, avisá a un administrador.';
+  document.getElementById('geoBtn').style.display = '';
+  document.getElementById('geoBtn').textContent = 'Reintentar';
+  document.getElementById('geoBtn').onclick = cargarSucursalYGeo;
 }
 
 function mostrarGeoRequerido() {
@@ -1117,6 +1151,13 @@ async function elegirSucursal(suc, geo, dist, dentro) {
     if (!confirmado) return;
   }
 
+  // Fail-closed (Fase 8B): sin coordenadas utilizables de esa sucursal no se
+  // puede verificar la ubicación — antes se salteaba la comprobación en silencio.
+  if (!geo || !geo.lat || !geo.lon) {
+    mostrarErrorDatosFichar();
+    return;
+  }
+
   // Verificar geo contra la sucursal elegida
   if (geoPos && geo && geo.lat && geo.lon && !dentro) {
     mostrarScreen('screenGeo');
@@ -1129,7 +1170,8 @@ async function elegirSucursal(suc, geo, dist, dentro) {
     distEl.textContent = `${dist} m de ${suc.nombre} (máx. ${geo.radio_m || 150} m)`;
     document.getElementById('geoMsg').textContent = 'No estás cerca de esa sucursal. Volvé a elegir o reintentar la ubicación.';
     document.getElementById('geoBtn').style.display = '';
-    document.getElementById('geoBtnContinuar').style.display = 'none';
+    const btnContinuar = document.getElementById('geoBtnContinuar'); // no existe en el HTML actual
+    if (btnContinuar) btnContinuar.style.display = 'none';
     document.getElementById('geoBtn').textContent = 'Volver a elegir';
     document.getElementById('geoBtn').onclick = mostrarSelectorSucursal;
     return;
@@ -1712,10 +1754,10 @@ function nuevoTurno() {
 // ── HISTORIAL ──
 async function cargarHistorial(empNombre) {
   try {
-    const url  = `${APPS_SCRIPT_URL}?accion=get_fichadas_empleado&empleado=${encodeURIComponent(empNombre)}`;
-    const resp = await fetch(url);
-    const json = await resp.json();
-    if (!json.ok || !json.fichadas || !json.fichadas.length) return;
+    // Fase 8B: GET /api/fichadas/mis-fichadas — el servidor toma el empleado
+    // del JWT; no se manda ningún nombre. Mismo contrato que GAS ({ok, fichadas}).
+    const json = await fetchNodeAutenticado('/api/fichadas/mis-fichadas');
+    if (!json.fichadas || !json.fichadas.length) return;
 
     // getFichadasEmpleado() (Code-Jornada.js) ya manda 'fecha' formateada
     // yyyy-MM-dd (fmtFechaCelda sobre la columna FECHA) — se usa directo.
@@ -1785,6 +1827,7 @@ async function cargarHistorial(empNombre) {
     });
     wrap.style.display = '';
   } catch(e) {
+    if (e && e.tipo === 'sesion_invalida') { sesionVencidaEnLectura(); return; }
     // No pudimos traer el historial: no sabemos si ya cargó un turno hoy,
     // así que avisamos en vez de dejar el botón habilitado en silencio.
     const hint = document.getElementById('submitHint');
