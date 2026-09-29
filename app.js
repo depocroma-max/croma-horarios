@@ -1642,12 +1642,12 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabVacaciones" style="display:none;padding:1.5rem">
         <div id="vacAdminContent_inner">
-          <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+          <p style="color:var(--text-muted);font-size:13px">Cargando vacaciones...</p>
         </div>
       </div>
       <div class="detalle-tabla-wrap" id="detalleTabBancoHoras" style="display:none;padding:1.5rem">
         <div id="bancoHorasAdminContent_inner">
-          <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+          <p style="color:var(--text-muted);font-size:13px">Cargando banco de horas...</p>
         </div>
       </div>
       <div class="detalle-footer">
@@ -1706,7 +1706,7 @@ function abrirDetalleDia(dia, mesIdx, anio) {
     regs.sort((a,b) => (a.EMPLEADO||'').localeCompare(b.EMPLEADO||''));
     bodyHtml += regs.map(r => {
       const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
-      const nomLabel = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : r.EMPLEADO;
+      const nomLabel = numMatch ? `<span style="color:var(--text-muted);font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : r.EMPLEADO;
       const tipo = clasificarTurno(r.H_ENTRADA, r.H_SALIDA);
       const pill = pillHTML(tipo);
       return `<tr>
@@ -2039,9 +2039,9 @@ function generarEvolucionHTML(datos, nombreEmp, suc) {
 
   return `
     <div style="margin-bottom:1rem;display:flex;gap:2rem">
-      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${meses.length}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Meses</span></div>
-      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${totalH.toFixed(0)}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Hs totales</span></div>
-      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${promH.toFixed(0)}</span><br><span style="font-size:11px;color:#94a3b8;text-transform:uppercase">Hs promedio/mes</span></div>
+      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${meses.length}</span><br><span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Meses</span></div>
+      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${totalH.toFixed(0)}</span><br><span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Hs totales</span></div>
+      <div><span style="font-size:22px;font-weight:700;font-family:'Bebas Neue'">${promH.toFixed(0)}</span><br><span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Hs promedio/mes</span></div>
     </div>
     <table class="detalle-tabla">
       <thead><tr><th>Mes</th><th>Días</th><th>Horas</th><th>Hs extra</th><th>Hs feriado</th><th>Sábados</th></tr></thead>
@@ -2118,7 +2118,7 @@ function renderReportes(datos) {
   const htmlEmps = listaEmps.map(([nombre, d], i) => {
     const s = SUCURSALES_TODAS.find(x => x.id === d.local) || { color: '#888' };
     const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
-    const label = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
+    const label = numMatch ? `<span style="color:var(--text-muted);font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
     return `<div class="reporte-row" style="gap:10px">
       <span class="rep-rank">${i+1}</span>
       <span class="reporte-nombre" style="flex:1;min-width:0">${label}</span>
@@ -2136,7 +2136,7 @@ function renderReportes(datos) {
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0;display:inline-block"></span>
           <span class="reporte-nombre" style="flex:1">${s.nombre}</span>
-          <span style="font-size:12px;color:#64748b">${d.emps.size} emp.</span>
+          <span style="font-size:12px;color:var(--text-secondary)">${d.emps.size} emp.</span>
           <span class="reporte-val" style="font-size:16px">${d.horas.toFixed(0)}h</span>
         </div>
         <div class="reporte-bar-wrap" style="margin:0;height:5px">
@@ -2176,7 +2176,7 @@ function renderReportes(datos) {
       const diff = h1 - h2;
       const s = SUCURSALES_TODAS.find(x => x.id === (horasPorEmp[nombre]?.local || '')) || { color: '#888' };
       const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
-      const label = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
+      const label = numMatch ? `<span style="color:var(--text-muted);font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
       const diffHtml = diff > 0
         ? `<span class="comp-diff comp-diff-up">+${diff.toFixed(0)}h</span>`
         : diff < 0
@@ -2428,7 +2428,7 @@ function renderResumenMes(datos) {
   lista.forEach(e => {
     const s = suc(e.local);
     const numMatch2 = e.nombre.match(/^(\d+)\s+(.+)$/);
-    const nomLabel = numMatch2 ? `<span style="color:#94a3b8;font-size:11px;margin-right:4px">#${numMatch2[1]}</span>${numMatch2[2]}` : e.nombre;
+    const nomLabel = numMatch2 ? `<span style="color:var(--text-muted);font-size:11px;margin-right:4px">#${numMatch2[1]}</span>${numMatch2[2]}` : e.nombre;
     html += `<tr onclick="abrirDetalleEmpleadoPeriodo('${e.nombre.replace(/'/g,"\\'")}', 'mes')" style="cursor:pointer">
       <td class="td-emp td-emp-link">${nomLabel}</td>
       <td><span class="suc-badge-mini" style="background:${s.colorLight};color:${s.color}">${s.nombre}</span></td>
@@ -2675,7 +2675,7 @@ function buildUrlForm() {
         placeholder="https://script.google.com/macros/s/.../exec"
         value="${saved['unica'] || ''}" />
     </div>
-    <p style="font-size:12px;color:#94a3b8;margin:0.5rem 0 1rem 0">
+    <p style="font-size:12px;color:var(--text-muted);margin:0.5rem 0 1rem 0">
       Un solo Apps Script conecta PASEO, WAVE, CIPO, PERITO, CENTE, ROCA180, DEPO y OFICINA.
     </p>
   `;
@@ -3092,11 +3092,11 @@ function abrirFormCertificado(nombreEmp, desdeAdmin) {
           <label class="emp-filtro-label">Rango de fechas</label>
           <div style="display:flex;gap:8px">
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-              <span style="font-size:11px;color:#94a3b8">Desde</span>
+              <span style="font-size:11px;color:var(--text-muted)">Desde</span>
               <input type="date" class="admin-input" id="certDesde" aria-label="Desde" onchange="renderCertRango()" />
             </div>
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-              <span style="font-size:11px;color:#94a3b8">Hasta</span>
+              <span style="font-size:11px;color:var(--text-muted)">Hasta</span>
               <input type="date" class="admin-input" id="certHasta" aria-label="Hasta" onchange="renderCertRango()" />
             </div>
           </div>
@@ -3594,8 +3594,8 @@ function mostrarVistaEmpleadoSinDatos(nombreEmp) {
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem">
       <div>${icon('fileText','icon-48')}</div>
       <h2 style="font-family:'Bebas Neue';font-size:24px;letter-spacing:2px">Sin registros</h2>
-      <p style="color:#64748b;font-size:14px">No se encontraron registros para <strong>${nombreEmp}</strong>.</p>
-      <p style="color:#94a3b8;font-size:12px">Verificá que el nombre de usuario coincida exactamente con el registro en el sistema.</p>
+      <p style="color:var(--text-secondary);font-size:14px">No se encontraron registros para <strong>${nombreEmp}</strong>.</p>
+      <p style="color:var(--text-muted);font-size:12px">Verificá que el nombre de usuario coincida exactamente con el registro en el sistema.</p>
     </div>
   `;
 }
@@ -3606,7 +3606,7 @@ function mostrarVistaEmpleadoError() {
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem">
       <div>${icon('alertTriangle','icon-48')}</div>
       <h2 style="font-family:'Bebas Neue';font-size:24px;letter-spacing:2px">Error de conexión</h2>
-      <p style="color:#64748b;font-size:14px">No se pudo conectar con el servidor.</p>
+      <p style="color:var(--text-secondary);font-size:14px">No se pudo conectar con el servidor.</p>
       <button class="btn-connect" style="width:auto;padding:10px 24px" onclick="cargarDatosEmpleado()">Reintentar</button>
     </div>
   `;
@@ -3753,7 +3753,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
     const hsTotal = regs.reduce((a,r) => a + (parseFloat(r.TOTAL_HS)||0), 0);
     const turnosHtml = regs.filter(r => r.H_ENTRADA && r.H_SALIDA).map(r =>
       `<strong>${normalizarLibreTxt(r.H_ENTRADA)} → ${normalizarLibreTxt(r.H_SALIDA)}</strong>`
-    ).join('<span style="color:#94a3b8;margin:0 4px">·</span>');
+    ).join('<span style="color:var(--text-muted);margin:0 4px">·</span>');
     return `<span class="portal-next-date">${fecha}</span>${turnosHtml}<small>${hsTotal.toFixed(1)} hs</small>`;
   }
 
@@ -3936,7 +3936,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       <!-- SELECTOR DE PERÍODO -->
       <div class="emp-vista-toolbar">
         <div style="display:flex;align-items:center;gap:8px">
-          <label style="font-size:13px;color:#64748b;font-weight:500" for="evSelectMes">Período:</label>
+          <label style="font-size:13px;color:var(--text-secondary);font-weight:500" for="evSelectMes">Período:</label>
           <select id="evSelectMes" class="filter-select" style="font-size:13px">
             ${opcionesMes}
           </select>
@@ -3998,7 +3998,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
         <div class="portal-mas-card">
           <div id="evTabVacaciones">
-            <p style="color:#94a3b8;font-size:13px">Cargando vacaciones...</p>
+            <p style="color:var(--text-muted);font-size:13px">Cargando vacaciones...</p>
           </div>
         </div>
       </div>
@@ -4007,7 +4007,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <button type="button" class="portal-mas-volver" onclick="switchMasSeccion('lista')">${icon('arrowLeft','icon-14')} Más</button>
         <div class="portal-mas-card">
           <div id="evTabBancoHoras">
-            <p style="color:#94a3b8;font-size:13px">Cargando banco de horas...</p>
+            <p style="color:var(--text-muted);font-size:13px">Cargando banco de horas...</p>
           </div>
         </div>
       </div>
@@ -4018,7 +4018,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           <div class="emp-vista-toolbar">
             <div>
               <h2 style="font-family:var(--font-display);font-size:18px;letter-spacing:.5px;color:#0d0d0d;margin:0">Mis recibos</h2>
-              <p style="font-size:12px;color:#94a3b8;margin:2px 0 0">Tus recibos de sueldo publicados van a aparecer acá.</p>
+              <p style="font-size:12px;color:var(--text-muted);margin:2px 0 0">Tus recibos de sueldo publicados van a aparecer acá.</p>
             </div>
             <button class="detalle-footer-refresh" onclick="_recargarRecibosPortal()" title="Actualizar" aria-label="Actualizar">${icon('refresh','icon-14')}</button>
           </div>
@@ -4204,7 +4204,7 @@ async function abrirMiPerfil() {
           <div style="padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:14px;color:#374151;border:1px solid #e2e8f0">
             ${celularActual || 'Sin cargar'}
           </div>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
             Para actualizarlo, pedile a un administrador que lo edite desde tu ficha de empleado.
           </span>
         </div>
@@ -4222,7 +4222,7 @@ async function abrirMiPerfil() {
         <div class="admin-form-grupo">
           <input type="password" class="admin-input" id="miPerfilPinRepetir" aria-label="Repetir PIN nuevo"
             placeholder="Repetir PIN nuevo" maxlength="8" autocomplete="off" />
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
             Dejá los tres campos de PIN vacíos si no querés cambiarlo
           </span>
         </div>
@@ -4398,7 +4398,7 @@ function renderAdminInline() {
       : "<span class='pill pill-franco' style='font-size:10px'>No</span>";
     return "<tr>" +
       "<td><strong>" + cat.nombre + "</strong></td>" +
-      "<td style='font-size:12px;color:#64748b'>" + esc(cat.descripcion || '—') + "</td>" +
+      "<td style='font-size:12px;color:var(--text-secondary)'>" + esc(cat.descripcion || '—') + "</td>" +
       "<td>" + percibeHTML + "</td>" +
       "<td><button class='btn-admin-edit' onclick=\"abrirEditarCategoria('" + cat.id + "')\" >Editar</button></td>" +
       "</tr>";
@@ -4539,7 +4539,7 @@ function renderAdminInline() {
         "</div>" +
         "<div class='admin-table-wrap' style='padding:1.5rem;margin-top:1rem'>" +
           "<h3 style='font-size:14px;font-weight:600;margin:0 0 4px;color:#1e293b'>Emails por sucursal</h3>" +
-          "<p style='font-size:12px;color:#94a3b8;margin:0 0 1.25rem'>Se usan para notificar eventos del calendario a cada sucursal.</p>" +
+          "<p style='font-size:12px;color:var(--text-muted);margin:0 0 1.25rem'>Se usan para notificar eventos del calendario a cada sucursal.</p>" +
           SUCURSALES.map(function(s) {
             return "<div class='admin-form-grupo' style='margin-bottom:10px'>" +
               "<label class='emp-filtro-label' for='cfgSucEmail_" + s.id + "'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:" + s.color + ";margin-right:6px'></span>" + s.nombre + "</label>" +
@@ -4553,8 +4553,8 @@ function renderAdminInline() {
         "</div>" +
         "<div class='admin-table-wrap' style='padding:1.5rem;margin-top:1rem'>" +
           "<h3 style='font-size:14px;font-weight:600;margin:0 0 4px;color:#1e293b'>Lista de correos para eventos</h3>" +
-          "<p style='font-size:12px;color:#94a3b8;margin:0 0 1.25rem'>Estos correos estarán disponibles para elegir al crear un evento del calendario.</p>" +
-          "<div id='cfgEmailsLista'><p style='font-size:12px;color:#94a3b8'>Cargando...</p></div>" +
+          "<p style='font-size:12px;color:var(--text-muted);margin:0 0 1.25rem'>Estos correos estarán disponibles para elegir al crear un evento del calendario.</p>" +
+          "<div id='cfgEmailsLista'><p style='font-size:12px;color:var(--text-muted)'>Cargando...</p></div>" +
           "<div style='display:flex;gap:8px;margin-top:12px'>" +
             "<input type='text' class='admin-input' id='cfgNuevoNombre' aria-label='Nombre del contacto' placeholder='Nombre' style='margin:0;flex:1' />" +
             "<input type='email' class='admin-input' id='cfgNuevoEmail' aria-label='Email del contacto' placeholder='correo@ejemplo.com' style='margin:0;flex:2' />" +
@@ -5890,7 +5890,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
   const nombreCampoHtml = esNuevo
     ? `<input type="text" class="admin-input" id="formEmpNombre" placeholder="Ej: Aixa Rojas" autocomplete="off" />`
     : `<input type="text" class="admin-input" id="formEmpNombre" value="${emp.nombre}" readonly />
-       <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+       <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
          El nombre no puede modificarse desde esta pantalla porque está vinculado a registros históricos.
        </span>`;
 
@@ -5964,7 +5964,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
             <label class="emp-filtro-label" for="formEmpNombreLegal">Nombre legal completo${esNuevo ? ' *' : ''}</label>
             <input type="text" class="admin-input" id="formEmpNombreLegal" value="${emp.nombre_legal || ''}"
               placeholder="Ej: Aixa Rojas Fernández" autocomplete="off" ${esNuevo ? 'required' : ''} />
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
               Se utiliza para recibos de sueldo y documentación formal. No modifica el nombre usado en fichadas e historial.
             </span>
           </div>
@@ -5972,34 +5972,34 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
             <label class="emp-filtro-label" for="formEmpApodo">Apodo</label>
             <input type="text" class="admin-input" id="formEmpApodo" value="${emp.apodo || ''}"
               placeholder="Ej: Turco" autocomplete="off" maxlength="30" />
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
               Opcional. Aparece junto al nombre en las tarjetas de Empleados y se puede buscar por él.
             </span>
           </div>
           <div class="admin-form-grupo admin-form-grid-full">
             <label class="emp-filtro-label">Número de vendedor Sysneo</label>
             <span class="${_infoSysneoAdmin(emp).clase}">${_infoSysneoAdmin(emp).label}</span>
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Se edita desde la pestaña Datos laborales.</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Se edita desde la pestaña Datos laborales.</span>
           </div>
           <div class="admin-foto-preview admin-form-grid-full" id="adminFotoPreview">
             ${emp.foto_url
               ? `<img src="${emp.foto_url}" onerror="this.parentElement.innerHTML='Sin foto'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0">`
-              : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8">Sin foto</div>`}
+              : `<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted)">Sin foto</div>`}
           </div>
           <div class="admin-form-grupo">
             <label class="emp-filtro-label" for="formEmpFotoUrl">URL de foto (Google Drive)</label>
             <input type="url" class="admin-input" id="formEmpFotoUrl" value="${emp.foto_url || ''}"
               placeholder="https://drive.google.com/..." oninput="previewFoto(this.value)" />
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Compartir foto como "Cualquiera con el enlace puede ver" y pegar la URL aquí</span>
           </div>
           <div class="admin-form-grupo">
             <label class="emp-filtro-label" for="formEmpCelular">Celular (WhatsApp)</label>
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:13px;color:#64748b;white-space:nowrap">+549</span>
+              <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap">+549</span>
               <input type="text" class="admin-input" id="formEmpCelular" value="${emp.celular || ''}"
                 placeholder="2994123456" inputmode="numeric" autocomplete="off" style="flex:1;margin:0" />
             </div>
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Sin el 0 ni el 15 — solo los 10 dígitos</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Sin el 0 ni el 15 — solo los 10 dígitos</span>
           </div>
           </div>
         </div>
@@ -6037,7 +6037,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
                 placeholder="Opcional" autocomplete="off" style="flex:1;margin:0" />
               <span class="${_infoSysneoAdmin(emp).clase}">${_infoSysneoAdmin(emp).label}</span>
             </div>
-            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
               Este número se crea manualmente en Sysneo y acá se guarda únicamente como referencia. Croma Horarios no se conecta ni sincroniza con Sysneo.
             </span>
           </div>
@@ -6112,7 +6112,7 @@ function _renderTabAccesoEmpleado(emp, crearAccesoInicial) {
       <label class="emp-filtro-label" for="formEmpPin">PIN</label>
       <div><button type="button" class="btn-admin-edit" id="formEmpBtnCambiarPin" onclick="_mostrarCampoPinEmpleado()">Cambiar PIN</button></div>
       <input type="text" class="admin-input" id="formEmpPin" placeholder="PIN nuevo" maxlength="8" inputmode="numeric" autocomplete="off" style="display:none;margin-top:8px" />
-      <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Dejalo así para conservar el PIN actual</span>
+      <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Dejalo así para conservar el PIN actual</span>
     </div>
     <div class="admin-form-grupo">
       <label class="emp-filtro-label" for="formEmpAccesoEstado">Estado del acceso</label>
@@ -6215,11 +6215,11 @@ function _renderTabRecibosEmpleado(emp) {
   return `
     <div style="margin-bottom:14px">
       <div style="font-family:var(--font-display);font-size:17px;letter-spacing:.5px;color:#0d0d0d">Recibos de sueldo</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:2px">Los recibos publicados para este colaborador van a aparecer acá.</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Los recibos publicados para este colaborador van a aparecer acá.</div>
     </div>
     ${avisoNombreLegal}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b;cursor:pointer">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
         <input type="checkbox" id="formEmpRecibosHistorial" onchange="_toggleHistorialRecibos(this.checked)" /> Ver historial completo
       </label>
       <button class="btn-admin-edit" type="button" id="formEmpBtnSubirRecibo" ${nombreLegal ? '' : 'disabled'} onclick="_abrirModalRecibo('subir')">${icon('plus','icon-14')} Subir recibo</button>
@@ -6313,10 +6313,10 @@ function _renderListadoRecibos() {
     const idEnc = String(r.id).replace(/'/g, "\\'");
     const nombreArchivoEsc = String(r.nombre_archivo || '').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     return `<tr>
-      <td>${_formatearPeriodoRecibo(r.periodo)}<div style="font-size:11px;color:#94a3b8">v${r.version}</div></td>
+      <td>${_formatearPeriodoRecibo(r.periodo)}<div style="font-size:11px;color:var(--text-muted)">v${r.version}</div></td>
       <td>${badge}</td>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nombreArchivoEsc}">${nombreArchivoEsc}</td>
-      <td>${_formatearFechaRecibo(r.fecha_subida)}${r.subido_por ? `<div style="font-size:11px;color:#94a3b8">${r.subido_por}</div>` : ''}</td>
+      <td>${_formatearFechaRecibo(r.fecha_subida)}${r.subido_por ? `<div style="font-size:11px;color:var(--text-muted)">${r.subido_por}</div>` : ''}</td>
       <td class="al-c">
         <div style="display:flex;gap:6px;justify-content:center">
           <button class="btn-admin-edit" type="button" title="Descargar" onclick="_recibosDescargarAdmin('${idEnc}', this)">${icon('download','icon-14')}</button>
@@ -6366,7 +6366,7 @@ function _abrirModalRecibo(modo, reciboId) {
   const periodoCampoHtml = modo === 'reemplazar'
     ? `<input type="text" class="admin-input" id="reciboPeriodoDisplay" value="${esc(_formatearPeriodoRecibo(filaAnterior.periodo))}" readonly />
        <input type="hidden" id="reciboPeriodoFijo" value="${esc(filaAnterior.periodo)}" />
-       <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Versión actual: v${filaAnterior.version}. Se creará una nueva versión y esta quedará marcada como reemplazada.</span>`
+       <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Versión actual: v${filaAnterior.version}. Se creará una nueva versión y esta quedará marcada como reemplazada.</span>`
     : `<input type="month" class="admin-input" id="reciboPeriodo" />`;
 
   const html = `
@@ -6814,7 +6814,7 @@ function abrirAsignarSysneo(nombre) {
         <div class="admin-form-grupo">
           <label class="emp-filtro-label" for="sysneoRapidoValor">Número</label>
           <input type="text" class="admin-input" id="sysneoRapidoValor" value="${emp.numero_vendedor_sysneo || ''}" placeholder="Opcional" autocomplete="off" />
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
             Este número se crea manualmente en Sysneo y acá se guarda únicamente como referencia. Croma Horarios no se conecta ni sincroniza con Sysneo.
           </span>
         </div>
@@ -6856,7 +6856,7 @@ async function _guardarSysneoRapido() {
 function previewFoto(url) {
   const preview = document.getElementById('adminFotoPreview');
   if (!preview) return;
-  if (!url) { preview.innerHTML = '<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:#94a3b8">Sin foto</div>'; return; }
+  if (!url) { preview.innerHTML = '<div style="width:80px;height:80px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted)">Sin foto</div>'; return; }
   // Convertir link de Drive a thumbnail si corresponde
   const driveMatch = url.match(/\/d\/([^/]+)/);
   const imgUrl = driveMatch ? `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w200` : url;
@@ -7512,16 +7512,16 @@ function renderEmailsLista() {
   const el = document.getElementById('cfgEmailsLista');
   if (!el) return;
   if (!lista.length) {
-    el.innerHTML = '<p style="font-size:12px;color:#94a3b8;padding:4px 0">Sin correos agregados.</p>';
+    el.innerHTML = '<p style="font-size:12px;color:var(--text-muted);padding:4px 0">Sin correos agregados.</p>';
     return;
   }
   el.innerHTML = lista.map(function(c, i) {
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9">' +
       '<div style="flex:1">' +
         '<div style="font-size:13px;font-weight:500;color:#1e293b">' + c.nombre + '</div>' +
-        '<div style="font-size:12px;color:#64748b">' + c.email + '</div>' +
+        '<div style="font-size:12px;color:var(--text-secondary)">' + c.email + '</div>' +
       '</div>' +
-      '<button onclick="eliminarEmailContacto(' + i + ')" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px;line-height:1" title="Eliminar">' + icon('x','icon-14') + '</button>' +
+      '<button onclick="eliminarEmailContacto(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;line-height:1" title="Eliminar">' + icon('x','icon-14') + '</button>' +
     '</div>';
   }).join('');
 }
@@ -7561,7 +7561,7 @@ async function guardarEmailsContactos(lista, statusEl) {
 async function cargarVacacionesAdmin(nombreEmp) {
   const container = document.getElementById('vacAdminContent_inner');
   if (!container) return;
-  container.innerHTML = '<p style="color:#94a3b8;font-size:13px">Cargando...</p>';
+  container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Cargando...</p>';
   const anioActual = new Date().getFullYear();
   try {
     const [respVac, respSol] = await Promise.all([
@@ -7590,7 +7590,7 @@ function renderVacacionesAdminHTML(nombreEmp, vac, solicitudes, anio) {
         <td>${formatFechaISO(s.fecha_desde)} – ${formatFechaISO(s.fecha_hasta)}</td>
         <td style="text-align:center">${s.dias}</td>
         <td>${estadoBadge(s.estado)}</td>
-        <td style="font-size:11px;color:#64748b">${esc(s.nota_admin) || '—'}</td>
+        <td style="font-size:11px;color:var(--text-secondary)">${esc(s.nota_admin) || '—'}</td>
         <td>
           ${s.estado === 'pendiente' ? `
             <div style="display:flex;gap:6px">
@@ -7601,7 +7601,7 @@ function renderVacacionesAdminHTML(nombreEmp, vac, solicitudes, anio) {
             </div>` : '—'}
         </td>
       </tr>`).join('')
-    : `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin solicitudes</td></tr>`;
+    : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin solicitudes</td></tr>`;
 
   return `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
@@ -7663,13 +7663,13 @@ function renderVacacionesEmpleadoHTML(nombreEmp, vac, solicitudes) {
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <div>
             <div style="font-size:13px;font-weight:500">${formatFechaISO(s.fecha_desde)} — ${formatFechaISO(s.fecha_hasta)}</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px">${s.dias} días corridos</div>
-            ${s.nota_admin ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px">Nota: ${esc(s.nota_admin)}</div>` : ''}
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">${s.dias} días corridos</div>
+            ${s.nota_admin ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Nota: ${esc(s.nota_admin)}</div>` : ''}
           </div>
           ${estadoBadge(s.estado)}
         </div>
       </div>`).join('')
-    : `<p style="color:#94a3b8;font-size:13px">No tenés solicitudes.</p>`;
+    : `<p style="color:var(--text-muted);font-size:13px">No tenés solicitudes.</p>`;
 
   return `
     <div class="emp-portal-vac-stats">
@@ -7690,7 +7690,7 @@ async function cargarSolicitudesAdmin() {
   const container = document.getElementById('avzSolicitudesContainer');
   if (!container) return;
   if (_vacSolicitudesCache === null) {
-    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   }
   try {
     const todas = await fetchSolicitudesCache(false);
@@ -7700,7 +7700,7 @@ async function cargarSolicitudesAdmin() {
     if (tabBtn) tabBtn.textContent = 'Solicitudes' + (sols.length ? ' (' + sols.length + ')' : '');
 
     if (!sols.length) {
-      container.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:14px">No hay solicitudes pendientes</div>';
+      container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:14px">No hay solicitudes pendientes</div>';
       return;
     }
 
@@ -7713,7 +7713,7 @@ async function cargarSolicitudesAdmin() {
         <td><strong>${s.empleado.replace(/^\d+\s+/,'')}</strong></td>
         <td>${formatFechaISO(s.fecha_desde)} – ${formatFechaISO(s.fecha_hasta)}</td>
         <td style="text-align:center">${s.dias}</td>
-        <td style="font-size:11px;color:#64748b">${s.fecha_solicitud ? formatFechaISO(s.fecha_solicitud.substring(0,10)) : '—'}</td>
+        <td style="font-size:11px;color:var(--text-secondary)">${s.fecha_solicitud ? formatFechaISO(s.fecha_solicitud.substring(0,10)) : '—'}</td>
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7"
@@ -7891,7 +7891,7 @@ function abrirModalSolicitudVac(empEnc, esAdmin) {
             <span style="font-size:13px;color:#374151">Días corridos:</span>
             <span id="diasVacCalc" style="font-size:18px;font-weight:700;color:#2563eb">1</span>
           </div>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
             Se cuentan días corridos (incluyendo fines de semana y feriados, según ley argentina)
           </span>
         </div>
@@ -8107,7 +8107,7 @@ function _renderListadoRecibosPortal() {
   const filasDesktop = lista.map(r => {
     const idEnc = String(r.id).replace(/'/g, "\\'");
     const archivoEsc = String(r.nombre_archivo || '').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-    const versionTxt = r.version > 1 ? `<div style="font-size:11px;color:#94a3b8">v${r.version}</div>` : '';
+    const versionTxt = r.version > 1 ? `<div style="font-size:11px;color:var(--text-muted)">v${r.version}</div>` : '';
     return `<tr>
       <td>${_formatearPeriodoRecibo(r.periodo)}${versionTxt}</td>
       <td>${r.empresa || '—'}</td>
@@ -8243,7 +8243,7 @@ function toggleBellDropdown() {
         return '<div class="bell-dd-item">' +
           '<div style="flex:1">' +
             '<strong>' + nom + '</strong>' +
-            '<div style="font-size:11px;color:#64748b">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' · ' + s.dias + ' días</div>' +
+            '<div style="font-size:11px;color:var(--text-secondary)">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + ' · ' + s.dias + ' días</div>' +
             '<button class="bell-dd-cal-btn" onclick="_calVacMes=' + mesIdx + ';_calVacAnio=' + anioSol + ';setView(\'calendario\');document.getElementById(\'bellDropdown\')?.remove()">' + icon('calendar','icon-14') + ' Ver en calendario</button>' +
           '</div>' +
           '<div style="display:flex;flex-direction:column;gap:3px">' +
@@ -8315,8 +8315,8 @@ function toggleBellDropdownEmp() {
       const rows = sols.slice(0,5).map(function(s) {
         return '<div class="bell-dd-item">' +
           '<div><div style="font-size:12px">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + '</div>' +
-          '<div style="font-size:11px;color:#64748b">' + s.dias + ' dias</div>' +
-          (s.nota_admin ? '<div style="font-size:11px;color:#94a3b8">' + esc(s.nota_admin) + '</div>' : '') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-secondary)">' + s.dias + ' dias</div>' +
+          (s.nota_admin ? '<div style="font-size:11px;color:var(--text-muted)">' + esc(s.nota_admin) + '</div>' : '') + '</div>' +
           estadoBadge(s.estado) +
           '</div>';
       }).join('');
@@ -8346,7 +8346,7 @@ async function cargarCalendarioVacaciones() {
   if (!container) return;
   // Solo mostrar spinner si no hay cache aún
   if (_vacSolicitudesCache === null) {
-    container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+    container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   }
   try {
     const [todas, eventos] = await Promise.all([
@@ -8427,7 +8427,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     const eventosRows = eventosDelDia.map(function(ev) {
       const vencido = (ev.fecha_fin || ev.fecha) < hoyISO;
       return '<div class="cal-vac-evento' + (vencido ? ' cal-vac-evento-vencido' : '') + '" title="' + esc(ev.descripcion) + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
-        '<span style="font-size:9px">' + (vencido ? '📋' : '📌') + '</span>' +
+        '<span style="display:inline-flex;font-size:9px">' + icon(vencido ? 'fileText' : 'mapPin', 'icon-12') + '</span>' +
         '<span style="font-size:9px;font-weight:600;color:' + (vencido ? '#94a3b8' : '#7c3aed') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(ev.titulo) + (vencido ? ' (Vencido)' : '') + '</span>' +
       '</div>';
     }).join('');
@@ -8479,7 +8479,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       '<td>' + estadoBadge(s.estado) + '</td>' +
       '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">' + icon('alertTriangle','icon-14') + ' Conflicto</span>' : '—') + '</td>' +
       '<td>' + acciones + '</td></tr>';
-  }).join('') : '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
+  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
 
   const headersSem = diasSem.map(function(d) { return '<div class="cal-vac-header">' + d + '</div>'; }).join('');
 
@@ -8599,11 +8599,11 @@ async function abrirNuevoEvento(fechaPreset) {
           <label class="emp-filtro-label">Fecha *</label>
           <div style="display:flex;gap:10px;align-items:center">
             <div style="flex:1">
-              <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Desde</div>
+              <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Desde</div>
               <input type="date" class="admin-input" id="eventoFecha" aria-label="Fecha desde" value="${fechaVal}" onchange="eventoFechaDesdeChange()" style="margin:0" />
             </div>
             <div style="flex:1">
-              <div style="font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Hasta</div>
+              <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Hasta</div>
               <input type="date" class="admin-input" id="eventoFechaFin" aria-label="Fecha hasta" value="${fechaVal}" style="margin:0" />
             </div>
           </div>
@@ -8637,7 +8637,7 @@ async function abrirNuevoEvento(fechaPreset) {
             ${sucCheckboxes}
           </div>
           <div id="eventoDestEspWrap" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px">
-            ${empOpts || '<p style="font-size:12px;color:#94a3b8;padding:8px 0">No hay empleados con usuario configurado</p>'}
+            ${empOpts || '<p style="font-size:12px;color:var(--text-muted);padding:8px 0">No hay empleados con usuario configurado</p>'}
           </div>
         </div>
 
@@ -8646,7 +8646,7 @@ async function abrirNuevoEvento(fechaPreset) {
             <input type="checkbox" id="eventoLocalCerrado" style="width:16px;height:16px;accent-color:#dc2626" onchange="toggleLocalCerrado(this.checked)" />
             <span style="font-size:13px;font-weight:600;color:#dc2626"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:currentColor;margin-right:6px"></span>Local cerrado</span>
           </label>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">Los empleados verán "LOCAL CERRADO" en su semana en vez de "Libre"</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Los empleados verán "LOCAL CERRADO" en su semana en vez de "Libre"</span>
         </div>
 
         <div class="admin-form-grupo" style="background:#f8fafc;border-radius:10px;padding:12px;border:1px solid #e2e8f0">
@@ -8654,7 +8654,7 @@ async function abrirNuevoEvento(fechaPreset) {
             <input type="checkbox" id="eventoConAnuncio" style="width:16px;height:16px;accent-color:#7c3aed" onchange="toggleEventoAnuncio(this.checked)" />
             <span style="font-size:13px;font-weight:500;color:#374151">${icon('bell','icon-14')} Enviar también como anuncio</span>
           </label>
-          <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block">El evento aparecerá en el calendario Y como notificación al empleado</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">El evento aparecerá en el calendario Y como notificación al empleado</span>
           <div id="eventoAnuncioWrap" style="display:none;margin-top:10px">
             <input type="text" class="admin-input" id="eventoAnuncioMsg" aria-label="Mensaje adicional del anuncio" placeholder="Mensaje adicional del anuncio (opcional)" />
           </div>
@@ -8669,7 +8669,7 @@ async function abrirNuevoEvento(fechaPreset) {
               '<input type="checkbox" id="eventoEmailAdmins" style="width:16px;height:16px;accent-color:#0369a1" />' +
               '<div>' +
                 '<div style="font-size:13px;font-weight:600;color:#0369a1;display:flex;align-items:center;gap:6px">' + icon('mail','icon-14') + ' Notificar a Administración</div>' +
-                '<div style="font-size:11px;color:#64748b;margin-top:2px">' + lista + '</div>' +
+                '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">' + lista + '</div>' +
               '</div>' +
             '</label>' +
           '</div>';
@@ -8969,9 +8969,9 @@ function renderEventosEnSemana(nombreEmp) {
           const vencido = isoFecha < hoy.toISOString().substring(0,10);
           const icsBtn = '<button class="evento-ics-btn" onclick="descargarICS(' + JSON.stringify(ev).replace(/'/g,"&#39;") + ')" title="Agregar a mi calendario">' + icon('calendar','icon-14') + '</button>';
           return '<div class="evento-semana-chip' + (vencido ? ' evento-semana-chip-vencido' : '') + '">' +
-            '<span class="evento-semana-icono">' + (vencido ? '📋' : '📌') + '</span>' +
+            '<span class="evento-semana-icono">' + icon(vencido ? 'fileText' : 'mapPin', 'icon-14') + '</span>' +
             '<div style="flex:1">' +
-              '<div class="evento-semana-titulo">' + esc(ev.titulo) + (vencido ? ' <span style="font-weight:400;color:#94a3b8;font-size:10px">(Vencido)</span>' : '') + '</div>' +
+              '<div class="evento-semana-titulo">' + esc(ev.titulo) + (vencido ? ' <span style="font-weight:400;color:var(--text-muted);font-size:10px">(Vencido)</span>' : '') + '</div>' +
               (ev.descripcion ? '<div class="evento-semana-desc">' + esc(ev.descripcion) + '</div>' : '') +
             '</div>' +
             icsBtn +
@@ -9231,15 +9231,15 @@ function renderCalendarioView() {
       '<button class="admin-tab" onclick="switchVacTab(\'anuncios\',this)">Anuncios</button>' +
     '</div>' +
     '<div id="vacCalendarioContainer" class="admin-tab-content">' +
-      '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>' +
+      '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>' +
     '</div>' +
     '<div id="vacAnunciosContainer" class="admin-tab-content" style="display:none">' +
       '<div class="admin-toolbar">' +
-        '<span style="font-size:12px;color:#94a3b8">Enviá mensajes a tus empleados — aparecen en su pantalla con sonido</span>' +
+        '<span style="font-size:12px;color:var(--text-muted)">Enviá mensajes a tus empleados — aparecen en su pantalla con sonido</span>' +
         // "Nuevo anuncio" (sistema viejo) jubilado a favor del panel Avisos —
         // ver avisosProvider Etapa 6/9. Botón oculto, no borrado.
       '</div>' +
-      '<div id="adminAnunciosList"><div style="padding:2rem;text-align:center;color:#94a3b8;font-size:13px">Cargando...</div></div>' +
+      '<div id="adminAnunciosList"><div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:13px">Cargando...</div></div>' +
     '</div>' +
     '</div>';
 
@@ -9259,7 +9259,7 @@ function switchVacTab(tab, btn) {
 async function cargarBancoDias() {
   const container = document.getElementById('adminTabDiasVacaciones');
   if (!container) return;
-  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   const anio = new Date().getFullYear();
   try {
     const resp = await fetch(vacApiUrl('get_vacaciones', { anio: anio }));
@@ -9305,7 +9305,7 @@ async function cargarBancoDias() {
       '<div style="padding:1.5rem">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">' +
         '<div style="display:flex;align-items:center;gap:6px">' +
-          '<label style="font-size:13px;color:#64748b;font-weight:500" for="bancoDiasAnioSelect">Año:</label>' +
+          '<label style="font-size:13px;color:var(--text-secondary);font-weight:500" for="bancoDiasAnioSelect">Año:</label>' +
           '<select class="filter-select" id="bancoDiasAnioSelect" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
         '</div>' +
         '<button class="btn-admin-edit" onclick="inicializarVacAdmin(' + anio + ')" style="margin-left:auto">↺ Inicializar ' + anio + '</button>' +
@@ -9332,7 +9332,7 @@ async function cargarBancoDias() {
 async function cargarBancoDiasAnio(anio) {
   const container = document.getElementById('adminTabDiasVacaciones');
   if (!container) return;
-  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   try {
     const resp = await fetch(vacApiUrl('get_vacaciones', { anio: anio }));
     const json = await resp.json();
@@ -9370,7 +9370,7 @@ async function cargarBancoDiasAnio(anio) {
       '<div style="padding:1.5rem">' +
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">' +
         '<div style="display:flex;align-items:center;gap:6px">' +
-          '<label style="font-size:13px;color:#64748b;font-weight:500" for="bancoDiasAnioSelect">Año:</label>' +
+          '<label style="font-size:13px;color:var(--text-secondary);font-weight:500" for="bancoDiasAnioSelect">Año:</label>' +
           '<select class="filter-select" id="bancoDiasAnioSelect" onchange="cargarBancoDiasAnio(parseInt(this.value))">' + anioOpts + '</select>' +
         '</div>' +
         '<button class="btn-admin-edit" onclick="inicializarVacAdmin(' + anio + ')" style="margin-left:auto">↺ Inicializar ' + anio + '</button>' +
@@ -9391,7 +9391,7 @@ async function cargarBancoDiasAnio(anio) {
 async function cargarBancoHorasAdmin() {
   const container = document.getElementById('adminTabBancoHoras');
   if (!container) return;
-  container.innerHTML = '<div style="padding:1.5rem"><p style="color:#94a3b8;font-size:13px">Cargando...</p></div>';
+  container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   try {
     const resp = await fetch(vacApiUrl('get_banco_horas_todos'));
     const json = await resp.json();
@@ -9451,7 +9451,7 @@ async function cargarBancoHorasEmpleado(nombreEmp) {
 async function cargarBancoHorasDetalleAdmin(nombreEmp) {
   const container = document.getElementById('bancoHorasAdminContent_inner');
   if (!container) return;
-  container.innerHTML = '<p style="color:#94a3b8;font-size:13px">Cargando...</p>';
+  container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Cargando...</p>';
   try {
     const resp = await fetch(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
     const json = await resp.json();
@@ -9474,11 +9474,11 @@ function renderBancoHorasHTML(data) {
         return '<tr>' +
           '<td>' + (m.fecha_movimiento || '—') + '</td>' +
           '<td style="color:' + tipoColor + ';font-weight:600">' + tipoLabel + ' hs</td>' +
-          '<td style="font-size:12px;color:#64748b">' + (m.concepto || '—') + '</td>' +
-          '<td style="font-size:12px;color:#94a3b8">' + (m.fecha_referencia || '—') + '</td>' +
+          '<td style="font-size:12px;color:var(--text-secondary)">' + (m.concepto || '—') + '</td>' +
+          '<td style="font-size:12px;color:var(--text-muted)">' + (m.fecha_referencia || '—') + '</td>' +
         '</tr>';
       }).join('')
-    : '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:1.5rem;font-size:13px">Sin movimientos</td></tr>';
+    : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin movimientos</td></tr>';
 
   return '<div style="display:grid;grid-template-columns:1fr;gap:1rem;margin-bottom:1.5rem">' +
     '<div class="detalle-stat"><span class="detalle-stat-val" style="color:' + saldoColor + '">' + saldo + ' hs</span><span class="detalle-stat-lbl">Saldo banco</span></div>' +
@@ -9608,7 +9608,7 @@ function renderListaAnuncios(anuncios) {
   const el = document.getElementById('adminAnunciosList');
   if (!el) return;
   if (!anuncios.length) {
-    el.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:13px">No hay anuncios enviados aún.<br>Creá el primero con el botón de arriba.</div>';
+    el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:13px">No hay anuncios enviados aún.<br>Creá el primero con el botón de arriba.</div>';
     return;
   }
   el.innerHTML = anuncios.map(a => {
@@ -9678,7 +9678,7 @@ async function abrirNuevoAnuncio() {
           <label class="emp-filtro-label" for="anuncioVigencia">Vigencia (opcional)</label>
           <div style="display:flex;align-items:center;gap:10px">
             <input type="date" class="admin-input" id="anuncioVigencia" style="margin:0;flex:1" />
-            <span style="font-size:11px;color:#94a3b8;white-space:nowrap">Si no se pone, caduca a los 30 días</span>
+            <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">Si no se pone, caduca a los 30 días</span>
           </div>
         </div>
         <div class="admin-form-grupo">
@@ -9688,8 +9688,8 @@ async function abrirNuevoAnuncio() {
             <span>${icon('users','icon-14')} Todos los empleados</span>
           </label>
           <div id="anuncioDestLista" style="display:none;flex-direction:column;gap:4px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;max-height:200px;overflow-y:auto">
-            ${empOpts || '<span style="font-size:12px;color:#94a3b8">No hay empleados con usuario vinculado</span>'}
-            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8">
+            ${empOpts || '<span style="font-size:12px;color:var(--text-muted)">No hay empleados con usuario vinculado</span>'}
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:var(--text-muted)">
               Hacé clic en el botón <strong style="color:#25D366">WA</strong> para enviar también por WhatsApp a ese empleado
             </div>
           </div>
@@ -9951,7 +9951,7 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
     const claseItem = (leido || vencido) ? 'anuncio-hist-leido' : 'anuncio-hist-nuevo';
     const icono     = (leido || vencido) ? icon('fileText','icon-14') : icon('bell','icon-14');
     let badge = '';
-    if (vencido)      badge = '<span class="anuncio-hist-badge" style="background:#e2e8f0;color:#94a3b8">Vencido</span>';
+    if (vencido)      badge = '<span class="anuncio-hist-badge" style="background:#e2e8f0;color:var(--text-muted)">Vencido</span>';
     else if (!leido)  badge = '<span class="anuncio-hist-badge">Nuevo</span>';
     const vigStr = a.vigencia ? ' · hasta ' + a.vigencia : '';
     return '<div class="anuncio-hist-item ' + claseItem + '" id="anuncioHist' + i + '">' +

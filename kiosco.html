@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="tridente_solo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="croma-ds.css?v=20260706-suc" />
+  <link rel="stylesheet" href="croma-ds.css?v=20260929-1" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -310,7 +310,9 @@
       width: 100%; max-width: 400px;
       box-shadow: 0 4px 24px rgba(0,0,0,.08);
     }
-    .err-icon  { font-size: 40px; margin-bottom: 16px; }
+    .err-icon  { display: flex; justify-content: center; margin-bottom: 16px; }
+    .err-icon svg { width: 40px; height: 40px; }
+    .err-icon-warn { color: #d97706; }
     .err-title { font-family: var(--font-display); font-size: 28px; letter-spacing: 1px; margin-bottom: 10px; color: var(--accent); }
     .err-msg   { font-size: 14px; color: var(--gray-600); line-height: 1.6; }
 
@@ -368,7 +370,7 @@
 <!-- ERROR -->
 <div class="screen-flex" id="screenError">
   <div class="err-card">
-    <div class="err-icon">⚠️</div>
+    <div class="err-icon err-icon-warn" data-icon="alertTriangle" aria-hidden="true"></div>
     <div class="err-title" id="errTitle">Sin configuración</div>
     <div class="err-msg" id="errMsg">Usá la URL con el parámetro del local, por ejemplo:<br><br><code>kiosco.html?local=05</code></div>
     <button class="btn-submit" id="errBtn" style="margin-top:28px" onclick="irASelectorSucursal()">Seleccionar sucursal</button>
@@ -378,10 +380,10 @@
 <!-- ACTIVACIÓN DEL DISPOSITIVO (Fase 8C) -->
 <div class="screen-flex" id="screenActivar">
   <div class="err-card">
-    <div class="err-icon">🔑</div>
+    <div class="err-icon" data-icon="key" aria-hidden="true"></div>
     <div class="err-title" id="actTitle">Activar este kiosco</div>
     <div class="err-msg" id="actMsg">Ingresá el código de activación que te pasó el administrador.</div>
-    <input id="actCodigo" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH"
+    <input id="actCodigo" type="text" aria-label="Código de activación" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH"
       style="margin-top:18px;width:100%;max-width:280px;padding:14px;font-size:22px;letter-spacing:4px;text-align:center;text-transform:uppercase;border:1.5px solid #e8e8e4;border-radius:12px;font-family:'DM Sans',sans-serif;" />
     <button class="btn-submit" id="actBtn" style="margin-top:20px" onclick="activarConCodigoIngresado()">Activar</button>
     <button class="btn-cancel" id="actVolver" style="margin-top:10px" onclick="window.location.replace(window.location.pathname)">Volver</button>
@@ -549,6 +551,7 @@
 </div>
 
 <script src="croma-icons.js?v=20260803-1a"></script>
+<script>document.querySelectorAll('.err-icon[data-icon]').forEach(function (el) { el.innerHTML = icon(el.dataset.icon); });</script>
 <script>
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEwxqe32k8lzi0_8sj1zAjj7Fd9mT5viE79jRxQsFWWl_MSnEGYspH8tDBOPWicTEF/exec';
 const BACKEND_URL = 'https://api.croma-app.com.ar';

@@ -422,3 +422,14 @@
 .dt-menu-item:hover { background: var(--gray-100); }
 .dt-menu-item--peligro { color: var(--danger); }
 .dt-menu-item--peligro:hover { background: var(--danger-bg); }
+
+/* ============================================================
+   MOVIMIENTO REDUCIDO — respeta la preferencia del sistema.
+   Se conservan los spinners de carga (indican actividad).
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  *:not(.spinner):not(.geo-spinner), *:not(.spinner):not(.geo-spinner)::before, *:not(.spinner):not(.geo-spinner)::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important;
+  }
+}
