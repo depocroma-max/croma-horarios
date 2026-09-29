@@ -5,6 +5,12 @@
    H_ENTRADA | H_SALIDA | NOTA | TOTAL_HS
    ===================================================== */
 
+// Escapa texto libre (notas, títulos, descripciones) antes de interpolarlo en
+// HTML generado con innerHTML/templates. Valores null/undefined => ''.
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 // ── CONFIGURACIÓN ──────────────────────────────────────
 // SUCURSALES_TODAS: catálogo completo (lookups y reportes históricos, incluye ocultas).
 // SUCURSALES: solo las activas (vistas operativas, formularios, En Vivo).
@@ -1402,7 +1408,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td>${f.fechaStr}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
-        <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
+        <td colspan="2"><span class="tag-cert">CERT</span> ${esc(f.nota)}</td>
         <td></td>
         <td>—</td>
         <td>—</td>
@@ -1435,7 +1441,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
         <td>${f.hsFeriado > 0 ? `<span class="hs-feriado">${f.hsFeriado.toFixed(1)}</span>` : '—'}</td>
         <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
         <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
-        <td class="nota-cell">${f.nota || ''}</td>
+        <td class="nota-cell">${esc(f.nota)}</td>
       </tr>`;
     }).join('');
     actualizarTablaDetalle();
@@ -1500,7 +1506,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
                 <div class="detalle-sub" id="detalleSub">${suc.nombre} · ${periodoInicial}</div>
                 ${(empresaEmp || jornadaEmp) ? `<div class="detalle-chips">
                   ${empresaEmp ? `<span class="detalle-chip detalle-chip-empresa">${icon('building','icon-12')}${empresaEmp}</span>` : ''}
-                  ${jornadaEmp ? `<span class="detalle-chip detalle-chip-jornada"${catEmp?.descripcion ? ` title="${catEmp.descripcion}"` : ''}>${icon('clock','icon-12')}${jornadaEmp}</span>` : ''}
+                  ${jornadaEmp ? `<span class="detalle-chip detalle-chip-jornada"${catEmp?.descripcion ? ` title="${esc(catEmp.descripcion)}"` : ''}>${icon('clock','icon-12')}${jornadaEmp}</span>` : ''}
                 </div>` : ''}
               </div>
             </div>
@@ -1593,7 +1599,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
             ${filasIni.map(f => {
               if (f.esCert) return `<tr class="fila-certificado" data-fecha="${f.fechaISO}" data-hs="${f.hsTotal}" data-extra="0" data-feriado="0" data-sab="${f.esSab?1:0}" data-cert="1">
                 <td>${f.fechaStr}</td><td>${f.diaSem}</td><td class="hora-reg">—</td>
-                <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
+                <td colspan="2"><span class="tag-cert">CERT</span> ${esc(f.nota)}</td>
                 <td></td><td>—</td><td>—</td><td></td><td>—</td>
                 <td><button onclick="eliminarCertificado('${f.certId}','${nombreEmp.replace(/'/g,"\\'")}','${f.fechaISO.substring(0,7)}')" style="background:none;border:none;cursor:pointer;color:#dc2626" title="Borrar" aria-label="Borrar certificado">${icon('x','icon-12')}</button></td>
               </tr>`;
@@ -1614,7 +1620,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
               <td>${f.hsFeriado > 0 ? `<span class="hs-feriado">${f.hsFeriado.toFixed(1)}</span>` : '—'}</td>
               <td>${f.esSab ? '<span class="check-sab">✓</span>' : ''}</td>
               <td><span class="local-tag" style="color:${suc.color}">${f.localStr}</span></td>
-              <td class="nota-cell">${f.nota || ''}</td>
+              <td class="nota-cell">${esc(f.nota)}</td>
             </tr>`;}).join('')}
           </tbody>
           <tfoot id="detalleTfoot">
@@ -1709,7 +1715,7 @@ function abrirDetalleDia(dia, mesIdx, anio) {
         <td class="turno-cell">${r.H_ENTRADA || '—'} - ${r.H_SALIDA || '—'}</td>
         <td>${pill}</td>
         <td><strong>${parseFloat(r.TOTAL_HS||0).toFixed(1)}</strong></td>
-        <td class="nota-cell">${r.NOTA || ''}</td>
+        <td class="nota-cell">${esc(r.NOTA)}</td>
       </tr>`;
     }).join('');
   });
@@ -3758,7 +3764,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td>${f.fechaStr}</td>
         <td>${f.diaSem}</td>
         <td class="hora-reg">—</td>
-        <td colspan="2"><span class="tag-cert">CERT</span> ${f.nota}</td>
+        <td colspan="2"><span class="tag-cert">CERT</span> ${esc(f.nota)}</td>
         <td></td>
         <td>—</td>
         <td>—</td>
@@ -3776,7 +3782,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
         <td>${f.hsExtra>0?`<span class="hs-extra">${f.hsExtra.toFixed(1)}</span>`:'—'}</td>
         <td>${f.hsFeriado>0?`<span class="hs-feriado">${f.hsFeriado.toFixed(1)}</span>`:'—'}</td>
         <td>${f.esSab?'<span class="check-sab">✓</span>':''}</td>
-        <td class="nota-cell">${f.nota||''}</td>
+        <td class="nota-cell">${esc(f.nota)}</td>
       </tr>`;
     }).join('');
   }
@@ -3795,7 +3801,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
           </div>
           <div class="ev-card-turnos">
             <span class="tag-cert">CERT</span>
-            <span class="ev-card-turno">${f.nota}</span>
+            <span class="ev-card-turno">${esc(f.nota)}</span>
           </div>
         </div>`;
       const clases = [f.esSab?'ev-card-sabado':'', f.esDom?'ev-card-domingo':'', f.esFer?'ev-card-feriado':''].filter(Boolean).join(' ');
@@ -3803,7 +3809,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
       const extraHtml  = f.hsExtra > 0 ? `<span class="ev-card-extra">+${f.hsExtra.toFixed(1)} extra</span>` : '';
       const feriadoHtml = f.hsFeriado > 0 ? `<span class="ev-card-feriado-hs">+${f.hsFeriado.toFixed(1)} feriado</span>` : '';
       const sabHtml    = f.esSab ? `<span class="ev-card-sab">Sáb ✓</span>` : '';
-      const notaHtml   = f.nota  ? `<div class="ev-card-nota">${f.nota}</div>` : '';
+      const notaHtml   = f.nota  ? `<div class="ev-card-nota">${esc(f.nota)}</div>` : '';
       return `
         <div class="ev-card ${clases}">
           <div class="ev-card-top">
@@ -4392,7 +4398,7 @@ function renderAdminInline() {
       : "<span class='pill pill-franco' style='font-size:10px'>No</span>";
     return "<tr>" +
       "<td><strong>" + cat.nombre + "</strong></td>" +
-      "<td style='font-size:12px;color:#64748b'>" + (cat.descripcion || '—') + "</td>" +
+      "<td style='font-size:12px;color:#64748b'>" + esc(cat.descripcion || '—') + "</td>" +
       "<td>" + percibeHTML + "</td>" +
       "<td><button class='btn-admin-edit' onclick=\"abrirEditarCategoria('" + cat.id + "')\" >Editar</button></td>" +
       "</tr>";
@@ -4415,7 +4421,7 @@ function renderAdminInline() {
       "<td><span style='font-size:12.5px;color:var(--text-secondary)'>" + _fechaDisplay(c.fecha) + "</span></td>" +
       "<td><span class='badge badge-info'>" + c.tipo + "</span></td>" +
       "<td class='al-c'><span style='font-size:12.5px;color:var(--text-secondary)'>" + c.hs + "h</span></td>" +
-      "<td><span style='font-size:12.5px;color:var(--text-secondary)'>" + (c.nota || '—') + "</span></td>" +
+      "<td><span style='font-size:12.5px;color:var(--text-secondary)'>" + esc(c.nota || '—') + "</span></td>" +
       "<td class='al-c'><div class='dt-row-actions' style='justify-content:center'><button class='dt-btn-icon dt-btn-icon--danger' title='Borrar certificado' onclick=\"eliminarCertificadoAdmin('" + c.id + "')\">" + icon('trash', 'icon-16') + "</button></div></td>" +
       "</tr>";
   }).join('');
@@ -5529,7 +5535,7 @@ function abrirModalAjusteJornada(empleado, fechaISO) {
         <div class="admin-form-grupo ajuste-diff-row">
           <div class="ajuste-diff-antes">
             <span class="ajuste-diff-tag">Antes</span>
-            <span>${j.observacion ? j.observacion : '<span class="text-muted">Sin observación</span>'}</span>
+            <span>${j.observacion ? esc(j.observacion) : '<span class="text-muted">Sin observación</span>'}</span>
           </div>
           <div class="ajuste-diff-arrow">${icon('arrowRight', 'icon-16')}</div>
           <div class="ajuste-diff-despues">
@@ -6880,7 +6886,7 @@ function abrirEditarCategoria(catId) {
         </div>
         <div class="admin-form-grupo">
           <label class="emp-filtro-label" for="catDesc">Descripción</label>
-          <input type="text" class="admin-input" id="catDesc" value="${cat?.descripcion||''}" placeholder="Ej: 8h Lun-Vie, 4h Sáb" />
+          <input type="text" class="admin-input" id="catDesc" value="${esc(cat?.descripcion)}" placeholder="Ej: 8h Lun-Vie, 4h Sáb" />
         </div>
         <div class="admin-form-grupo">
           <label class="emp-filtro-label" for="catRegla">Regla de cálculo</label>
@@ -7584,7 +7590,7 @@ function renderVacacionesAdminHTML(nombreEmp, vac, solicitudes, anio) {
         <td>${formatFechaISO(s.fecha_desde)} – ${formatFechaISO(s.fecha_hasta)}</td>
         <td style="text-align:center">${s.dias}</td>
         <td>${estadoBadge(s.estado)}</td>
-        <td style="font-size:11px;color:#64748b">${s.nota_admin || '—'}</td>
+        <td style="font-size:11px;color:#64748b">${esc(s.nota_admin) || '—'}</td>
         <td>
           ${s.estado === 'pendiente' ? `
             <div style="display:flex;gap:6px">
@@ -7658,7 +7664,7 @@ function renderVacacionesEmpleadoHTML(nombreEmp, vac, solicitudes) {
           <div>
             <div style="font-size:13px;font-weight:500">${formatFechaISO(s.fecha_desde)} — ${formatFechaISO(s.fecha_hasta)}</div>
             <div style="font-size:12px;color:#64748b;margin-top:2px">${s.dias} días corridos</div>
-            ${s.nota_admin ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px">Nota: ${s.nota_admin}</div>` : ''}
+            ${s.nota_admin ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px">Nota: ${esc(s.nota_admin)}</div>` : ''}
           </div>
           ${estadoBadge(s.estado)}
         </div>
@@ -8310,7 +8316,7 @@ function toggleBellDropdownEmp() {
         return '<div class="bell-dd-item">' +
           '<div><div style="font-size:12px">' + formatFechaISO(s.fecha_desde) + ' - ' + formatFechaISO(s.fecha_hasta) + '</div>' +
           '<div style="font-size:11px;color:#64748b">' + s.dias + ' dias</div>' +
-          (s.nota_admin ? '<div style="font-size:11px;color:#94a3b8">' + s.nota_admin + '</div>' : '') + '</div>' +
+          (s.nota_admin ? '<div style="font-size:11px;color:#94a3b8">' + esc(s.nota_admin) + '</div>' : '') + '</div>' +
           estadoBadge(s.estado) +
           '</div>';
       }).join('');
@@ -8420,9 +8426,9 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     });
     const eventosRows = eventosDelDia.map(function(ev) {
       const vencido = (ev.fecha_fin || ev.fecha) < hoyISO;
-      return '<div class="cal-vac-evento' + (vencido ? ' cal-vac-evento-vencido' : '') + '" title="' + (ev.descripcion || '') + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
+      return '<div class="cal-vac-evento' + (vencido ? ' cal-vac-evento-vencido' : '') + '" title="' + esc(ev.descripcion) + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
         '<span style="font-size:9px">' + (vencido ? '📋' : '📌') + '</span>' +
-        '<span style="font-size:9px;font-weight:600;color:' + (vencido ? '#94a3b8' : '#7c3aed') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ev.titulo + (vencido ? ' (Vencido)' : '') + '</span>' +
+        '<span style="font-size:9px;font-weight:600;color:' + (vencido ? '#94a3b8' : '#7c3aed') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(ev.titulo) + (vencido ? ' (Vencido)' : '') + '</span>' +
       '</div>';
     }).join('');
     celdasHTML += '<div class="cal-vac-cell' +
@@ -8965,8 +8971,8 @@ function renderEventosEnSemana(nombreEmp) {
           return '<div class="evento-semana-chip' + (vencido ? ' evento-semana-chip-vencido' : '') + '">' +
             '<span class="evento-semana-icono">' + (vencido ? '📋' : '📌') + '</span>' +
             '<div style="flex:1">' +
-              '<div class="evento-semana-titulo">' + ev.titulo + (vencido ? ' <span style="font-weight:400;color:#94a3b8;font-size:10px">(Vencido)</span>' : '') + '</div>' +
-              (ev.descripcion ? '<div class="evento-semana-desc">' + ev.descripcion + '</div>' : '') +
+              '<div class="evento-semana-titulo">' + esc(ev.titulo) + (vencido ? ' <span style="font-weight:400;color:#94a3b8;font-size:10px">(Vencido)</span>' : '') + '</div>' +
+              (ev.descripcion ? '<div class="evento-semana-desc">' + esc(ev.descripcion) + '</div>' : '') +
             '</div>' +
             icsBtn +
           '</div>';
@@ -9616,12 +9622,12 @@ function renderListaAnuncios(anuncios) {
     return `<div class="anuncio-admin-item">
       <div class="anuncio-admin-meta">
         <span class="anuncio-admin-fecha">${icon('calendar','icon-14')} ${a.fecha}</span>
-        <span class="anuncio-admin-dest">${icon('users','icon-14')} ${destLabel}</span>
+        <span class="anuncio-admin-dest">${icon('users','icon-14')} ${esc(destLabel)}</span>
         <button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-size:11px;margin-left:auto"
           onclick="eliminarAnuncioAdmin('${a.id}')">${icon('trash','icon-14')} Eliminar</button>
       </div>
-      <div class="anuncio-admin-titulo">${a.titulo}</div>
-      <div class="anuncio-admin-msg">${a.mensaje}</div>
+      <div class="anuncio-admin-titulo">${esc(a.titulo)}</div>
+      <div class="anuncio-admin-msg">${esc(a.mensaje)}</div>
     </div>`;
   }).join('');
 }
@@ -9951,11 +9957,11 @@ function renderAnunciosSeccion(anuncios, nombreEmp) {
     return '<div class="anuncio-hist-item ' + claseItem + '" id="anuncioHist' + i + '">' +
       '<div class="anuncio-hist-top">' +
         '<span class="anuncio-hist-icono">' + icono + '</span>' +
-        '<div class="anuncio-hist-titulo">' + a.titulo + '</div>' +
+        '<div class="anuncio-hist-titulo">' + esc(a.titulo) + '</div>' +
         badge +
         '<span class="anuncio-hist-fecha">' + a.fecha.substring(0, 10) + vigStr + '</span>' +
       '</div>' +
-      '<div class="anuncio-hist-msg">' + a.mensaje + '</div>' +
+      '<div class="anuncio-hist-msg">' + esc(a.mensaje) + '</div>' +
     '</div>';
   }).join('');
 
@@ -9985,10 +9991,10 @@ function mostrarBannerAnuncios(anuncios, nombreEmp) {
     <div class="anuncio-banner-card" id="anuncioBanner${i}">
       <div class="anuncio-banner-top">
         <span class="anuncio-banner-icono">${icon('bell','icon-16')}</span>
-        <div class="anuncio-banner-titulo">${a.titulo}</div>
+        <div class="anuncio-banner-titulo">${esc(a.titulo)}</div>
         <button class="anuncio-banner-close" onclick="marcarAnuncioLeido('${a.id}',${i},'${encodeURIComponent(nombreEmp)}')">${icon('x','icon-16')}</button>
       </div>
-      <div class="anuncio-banner-msg">${a.mensaje}</div>
+      <div class="anuncio-banner-msg">${esc(a.mensaje)}</div>
       <div class="anuncio-banner-fecha">${a.fecha}</div>
     </div>
   `).join('');
