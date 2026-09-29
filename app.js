@@ -6,10 +6,14 @@
    ===================================================== */
 
 // ── CONFIGURACIÓN ──────────────────────────────────────
-const SUCURSALES = [
+// SUCURSALES_TODAS: catálogo completo (lookups y reportes históricos, incluye ocultas).
+// SUCURSALES: solo las activas (vistas operativas, formularios, En Vivo).
+// Ambas se sobreescriben en el lugar con GET /api/sucursales (ver
+// aplicarSucursalesServidor); estos valores son el fallback si el backend falla.
+const SUCURSALES_TODAS = [
   { id: '01',      hoja: 'PASEO',   nombre: '01 PASEO',           color: '#2563EB', colorLight: '#EFF6FF', icon: 'store'        },
   { id: '05',      hoja: 'WAVE',    nombre: '05 WAVE',            color: '#10B981', colorLight: '#ECFDF5', icon: 'waves'        },
-  { id: '09',      hoja: 'CIPO',    nombre: '09 CIPO SAN MARTIN', color: '#F97316', colorLight: '#FFF7ED', icon: 'shoppingBag'  },
+  { id: '09',      hoja: 'CIPO',    nombre: '09 CIPO SAN MARTIN', color: '#F97316', colorLight: '#FFF7ED', icon: 'shoppingBag', activa: false },
   { id: '10',      hoja: 'PERITO',  nombre: '10 PERITO MORENO',   color: '#DB2777', colorLight: '#FDF2F8', icon: 'warehouse'    },
   { id: '12',      hoja: 'CENTE',   nombre: '12 CENTENARIO',      color: '#7C3AED', colorLight: '#F5F3FF', icon: 'shoppingCart' },
   { id: '14',      hoja: 'ROCA180', nombre: '14 ROCA',            color: '#92400E', colorLight: '#FEF3C7', icon: 'mountain'     },
@@ -17,8 +21,23 @@ const SUCURSALES = [
   { id: 'OFICINA', hoja: 'OFICINA', nombre: 'OFICINA',            color: '#0891B2', colorLight: '#ECFEFF', icon: 'briefcase'    },
 ];
 
-// Mapa indexado por id — lookup O(1) (derivado de SUCURSALES, sin duplicar datos)
-const SUCURSALES_UI = Object.fromEntries(SUCURSALES.map(s => [s.id, s]));
+const SUCURSALES = SUCURSALES_TODAS.filter(s => s.activa !== false);
+
+// Mapa indexado por id — lookup O(1) (derivado de SUCURSALES_TODAS, sin duplicar datos)
+const SUCURSALES_UI = Object.fromEntries(SUCURSALES_TODAS.map(s => [s.id, s]));
+
+// Reemplaza el contenido de las 3 estructuras en el lugar (son const y hay
+// referencias sueltas por todo el archivo). Un campo faltante en la respuesta
+// se completa con el fallback local de esa sucursal.
+function aplicarSucursalesServidor(lista) {
+  if (!Array.isArray(lista) || !lista.length) return;
+  const fallback = Object.fromEntries(SUCURSALES_TODAS.map(s => [s.id, s]));
+  const nuevas = lista.map(s => Object.assign({}, fallback[s.id] || {}, s));
+  SUCURSALES_TODAS.splice(0, SUCURSALES_TODAS.length, ...nuevas);
+  SUCURSALES.splice(0, SUCURSALES.length, ...nuevas.filter(s => s.activa !== false));
+  Object.keys(SUCURSALES_UI).forEach(k => delete SUCURSALES_UI[k]);
+  nuevas.forEach(s => { SUCURSALES_UI[s.id] = s; });
+}
 
 const DIAS      = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const MESES_ES  = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
@@ -373,7 +392,7 @@ function renderGrilla(datos) {
 
   let html = '';
 
-  SUCURSALES.forEach(suc => {
+  SUCURSALES_TODAS.forEach(suc => {
     if (sucursal !== 'all' && sucursal !== suc.id) return;
 
     const filasSuc = semana.filter(r => r.LOCAL === suc.id);
@@ -846,7 +865,7 @@ function renderEmpleados(datos) {
     })].join('');
 
   const localOpts = [`<option value="all">Todos los locales</option>`,
-    ...SUCURSALES.map(s =>
+    ...SUCURSALES_TODAS.map(s =>
       `<option value="${s.id}" ${s.id === selLocal ? 'selected' : ''}>${s.nombre}</option>`
     )].join('');
 
@@ -859,7 +878,7 @@ function renderEmpleados(datos) {
     })].join('');
 
   // Grilla de tarjetas (cuando no hay empleado específico)
-  const suc = (id) => SUCURSALES.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
+  const suc = (id) => SUCURSALES_TODAS.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
 
   const empMap = {};
   // Agrupar primero por empleado+día para calcular total diario
@@ -1188,7 +1207,7 @@ async function abrirDetalleEmpleadoDesdePanel(nombreEmp, sucId) {
 
 function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, periodoForzado) {
   const datos = state.datos;
-  const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
+  const suc = SUCURSALES_TODAS.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
 
   // Registros ya filtrados, ordenados por fecha (más reciente primero)
   const registrosTodos = registrosFiltrados.sort((a, b) => {
@@ -1263,7 +1282,7 @@ function abrirDetalleEmpleadoConDatos(nombreEmp, sucId, registrosFiltrados, peri
       const hsFeriado = calcularHsFeriado(hsTotal, fecha);
       const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
       const localStr = regs.map(r => {
-        const s = SUCURSALES.find(x => x.id === r.LOCAL);
+        const s = SUCURSALES_TODAS.find(x => x.id === r.LOCAL);
         return s ? s.nombre : r.LOCAL;
       }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
@@ -1677,7 +1696,7 @@ function abrirDetalleDia(dia, mesIdx, anio) {
 
   let bodyHtml = '';
   Object.entries(porSuc).forEach(([sucId, regs]) => {
-    const s = SUCURSALES.find(x => x.id === sucId) || { color:'#888', colorLight:'#eee', nombre: sucId };
+    const s = SUCURSALES_TODAS.find(x => x.id === sucId) || { color:'#888', colorLight:'#eee', nombre: sucId };
     regs.sort((a,b) => (a.EMPLEADO||'').localeCompare(b.EMPLEADO||''));
     bodyHtml += regs.map(r => {
       const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
@@ -1846,7 +1865,7 @@ function descargarExcelEmpleado(nombreEmp, nomMostrar, sucNombre) {
     const hsFeriado = calcularHsFeriado(hsTotal, fecha);
     const nota    = regs.map(r => r.NOTA).filter(Boolean).join(' / ');
     const local   = regs.map(r => {
-      const s = SUCURSALES.find(x => x.id === r.LOCAL);
+      const s = SUCURSALES_TODAS.find(x => x.id === r.LOCAL);
       return s ? s.nombre : r.LOCAL;
     }).filter((v,i,a) => a.indexOf(v)===i).join(', ');
 
@@ -2076,7 +2095,7 @@ function renderReportes(datos) {
     porSuc[r.LOCAL].emps.add(r.EMPLEADO);
     porSuc[r.LOCAL].horas += parseFloat(r.TOTAL_HS) || 0;
   });
-  const maxSucH = Math.max(...SUCURSALES.map(s => porSuc[s.id]?.horas || 0)) || 1;
+  const maxSucH = Math.max(...SUCURSALES_TODAS.map(s => porSuc[s.id]?.horas || 0)) || 1;
 
   // Opciones de filtros
   const periodoOpts = [`<option value="all">Todos los períodos</option>`,
@@ -2086,12 +2105,12 @@ function renderReportes(datos) {
     })].join('');
 
   const localOpts = [`<option value="all">Todas las sucursales</option>`,
-    ...SUCURSALES.map(s =>
+    ...SUCURSALES_TODAS.map(s =>
       `<option value="${s.id}" ${s.id === selLocal ? 'selected' : ''}>${s.nombre}</option>`
     )].join('');
 
   const htmlEmps = listaEmps.map(([nombre, d], i) => {
-    const s = SUCURSALES.find(x => x.id === d.local) || { color: '#888' };
+    const s = SUCURSALES_TODAS.find(x => x.id === d.local) || { color: '#888' };
     const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
     const label = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
     return `<div class="reporte-row" style="gap:10px">
@@ -2149,7 +2168,7 @@ function renderReportes(datos) {
       const h1 = horasPorEmp[nombre]?.horas || 0;
       const h2 = horasComp[nombre] || 0;
       const diff = h1 - h2;
-      const s = SUCURSALES.find(x => x.id === (horasPorEmp[nombre]?.local || '')) || { color: '#888' };
+      const s = SUCURSALES_TODAS.find(x => x.id === (horasPorEmp[nombre]?.local || '')) || { color: '#888' };
       const numMatch = nombre.match(/^(\d+)\s+(.+)$/);
       const label = numMatch ? `<span style="color:#94a3b8;font-size:11px">#${numMatch[1]}</span> ${numMatch[2]}` : nombre;
       const diffHtml = diff > 0
@@ -2380,7 +2399,7 @@ function renderResumenMes(datos) {
     return;
   }
 
-  const suc = (id) => SUCURSALES.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
+  const suc = (id) => SUCURSALES_TODAS.find(s => s.id === id) || { color: '#888', colorLight: '#eee', nombre: id };
 
   let html = `<div class="resumen-mes-wrap">
     <h3 class="resumen-mes-titulo">Resumen del mes — ${getMesLabel(offset)}</h3>
@@ -3593,7 +3612,7 @@ function renderVistaEmpleado(nombreEmp, sucId, misRegistros) {
   // sesión/empleado anterior. Independiente de _recibosFicha (admin).
   _recibosPortal = { cargado: false, lista: [] };
 
-  const suc = SUCURSALES.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
+  const suc = SUCURSALES_TODAS.find(s => s.id === sucId) || { color: '#888', colorLight: '#eee', nombre: sucId };
   const perfil = EMPLEADOS_PERFILES[nombreEmp] || {};
   const cat = CATEGORIAS_CONFIG.find(c => c.id === perfil.categoria_id);
 
@@ -4308,7 +4327,7 @@ function renderAdminInline() {
 
   const filasEmps = empleadosAdmin.map(emp => {
     const nombre    = emp.nombre;
-    const suc       = SUCURSALES.find(s => s.id === (emp.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { id: '', nombre: '—', color: 'var(--gray-400)' };
+    const suc       = SUCURSALES_TODAS.find(s => s.id === (emp.sucursal_id || state.datos.find(r => r.EMPLEADO === nombre)?.LOCAL)) || { id: '', nombre: '—', color: 'var(--gray-400)' };
     const numMatch  = nombre.match(/^(\d+)\s+(.+)$/);
     const nomMostrar= numMatch ? numMatch[2] : nombre;
     const avatarUrl = emp.foto_url || '';
@@ -4414,6 +4433,7 @@ function renderAdminInline() {
       "<button class='rail-item' onclick=\"switchAdminTab('ajusteJornada',this)\">" + icon('clock','icon-16') + "<span>Ajuste de jornada</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('fichadas',this)\">" + icon('download','icon-16') + "<span>Fichadas</span></button>" +
       ((sesionActual?.rol === 'admin' || sesionActual?.rol === 'jefe') ? "<button class='rail-item' onclick=\"switchAdminTab('kioscos',this)\">" + icon('store','icon-16') + "<span>Kioscos</span></button>" : '') +
+      ((sesionActual?.rol === 'admin' || sesionActual?.rol === 'jefe') ? "<button class='rail-item' onclick=\"switchAdminTab('sucursales',this)\">" + icon('warehouse','icon-16') + "<span>Sucursales</span></button>" : '') +
       "<button class='rail-item' onclick=\"switchAdminTab('recibos',this)\">" + icon('fileText','icon-16') + "<span>Recibos</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('diasVacaciones',this)\">" + icon('palmtree','icon-16') + "<span>Días de Vacaciones</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('bancoHoras',this)\">" + icon('timer','icon-16') + "<span>Banco de horas</span></button>" +
@@ -4541,6 +4561,7 @@ function renderAdminInline() {
     "<div id='adminTabAjusteJornada' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabFichadas' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabKioscos' class='admin-tab-content' style='display:none'></div>" +
+    "<div id='adminTabSucursales' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabRecibos' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabDiasVacaciones' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabBancoHoras' class='admin-tab-content' style='display:none'></div>" +
@@ -4562,6 +4583,8 @@ function switchAdminTab(tab, btn) {
   document.getElementById('adminTabFichadas').style.display     = tab === 'fichadas'       ? 'block' : 'none';
   const _tabKioscos = document.getElementById('adminTabKioscos');
   if (_tabKioscos) _tabKioscos.style.display = tab === 'kioscos' ? 'block' : 'none';
+  const _tabSucursales = document.getElementById('adminTabSucursales');
+  if (_tabSucursales) _tabSucursales.style.display = tab === 'sucursales' ? 'block' : 'none';
   document.getElementById('adminTabRecibos').style.display      = tab === 'recibos'        ? 'block' : 'none';
   document.getElementById('adminTabDiasVacaciones').style.display = tab === 'diasVacaciones' ? 'block' : 'none';
   document.getElementById('adminTabBancoHoras').style.display   = tab === 'bancoHoras'     ? 'block' : 'none';
@@ -4569,6 +4592,7 @@ function switchAdminTab(tab, btn) {
   if (tab === 'ajusteJornada') renderAjusteJornadaTab();
   if (tab === 'fichadas') renderFichadasTab();
   if (tab === 'kioscos') renderKioscosAdminTab();
+  if (tab === 'sucursales') renderSucursalesAdminTab();
   if (tab === 'recibos') renderRecibosAdminTab();
   if (tab === 'diasVacaciones') cargarBancoDias();
   if (tab === 'bancoHoras') cargarBancoHorasAdmin();
@@ -4936,6 +4960,74 @@ function renderAjusteJornadaTab() {
     "</div>";
 }
 
+// ── SUCURSALES — Administración › Sucursales ─────────
+// Ocultar / volver a mostrar sucursales. Backend: /api/sucursales (JWT
+// admin/jefe). Ocultar no borra nada: el historial (horas, fichadas,
+// reportes) sigue mostrándose; solo desaparece de En Vivo, formularios y
+// del fichaje (kiosco y portal). 09 CIPO SAN MARTIN está cerrada
+// definitivamente y no se puede reactivar.
+function renderSucursalesAdminTab() {
+  const cont = document.getElementById('adminTabSucursales');
+  if (!cont) return;
+  cont.innerHTML =
+    "<div class='admin-head'>" +
+      "<h1>Sucursales</h1>" +
+      "<p>Ocultá una sucursal que ya no opera o volvé a mostrarla. Ocultar no borra nada: el historial se conserva. Una sucursal oculta deja de aparecer en En Vivo y formularios, y no se puede fichar en ella.</p>" +
+    "</div>" +
+    "<div class='dt-wrap'><div class='dt-scroll'>" +
+      "<table class='dt-table'>" +
+        "<thead><tr><th>Sucursal</th><th>Estado</th><th>Acciones</th></tr></thead>" +
+        "<tbody id='sucursalesBody'><tr><td colspan='3' style='text-align:center;padding:2rem;color:var(--text-muted)'>Cargando…</td></tr></tbody>" +
+      "</table>" +
+    "</div></div>";
+  cargarSucursalesAdmin();
+}
+
+async function cargarSucursalesAdmin() {
+  const body = document.getElementById('sucursalesBody');
+  if (!body) return;
+  const json = await apiSucursales('', { method: 'GET' });
+  if (!json || json.ok !== true) {
+    body.innerHTML = "<tr><td colspan='3' style='text-align:center;padding:2rem;color:var(--red,#dc2626)'>" + _kioscoEsc((json && json.error) || 'No se pudieron cargar las sucursales.') + "</td></tr>";
+    return;
+  }
+  aplicarSucursalesServidor(json.sucursales);
+  body.innerHTML = json.sucursales.map(s => {
+    const estado = s.activa
+      ? "<span style='color:#059669;font-weight:600'>Visible</span>"
+      : "<span style='color:var(--text-muted);font-weight:600'>Oculta" + (s.cerrada ? ' — cerrada' : '') + "</span>";
+    let accion;
+    if (s.cerrada) accion = "<span style='font-size:12px;color:var(--text-muted)'>Cerrada definitivamente</span>";
+    else if (s.activa) accion = "<button class='btn-demo' style='padding:4px 10px;font-size:12px;color:#dc2626' onclick=\"sucursalToggle('" + s.id + "',false)\">Ocultar</button>";
+    else accion = "<button class='btn-demo' style='padding:4px 10px;font-size:12px' onclick=\"sucursalToggle('" + s.id + "',true)\">Mostrar</button>";
+    return "<tr" + (s.activa ? '' : " style='opacity:.65'") + ">" +
+      "<td><span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:" + _kioscoEsc(s.color) + ";margin-right:8px'></span><strong>" + _kioscoEsc(s.nombre) + "</strong></td>" +
+      "<td>" + estado + "</td>" +
+      "<td>" + accion + "</td>" +
+    "</tr>";
+  }).join('');
+}
+
+function sucursalToggle(id, activa) {
+  const s = SUCURSALES_TODAS.find(x => x.id === id);
+  const nombre = _kioscoEsc(s ? s.nombre : id);
+  const aplicar = async () => {
+    const json = await apiSucursales('/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ activa }) });
+    showToast(json && json.ok ? (activa ? 'Sucursal visible' : 'Sucursal oculta') : ((json && json.error) || 'No se pudo actualizar'));
+    await cargarSucursalesAdmin();
+    poblarFiltroSucursales();
+    if (state.datos && state.datos.length) renderAll();
+  };
+  if (activa) { aplicar(); return; }
+  mostrarConfirm({
+    titulo: 'Ocultar sucursal',
+    mensaje: "¿Ocultar <strong>" + nombre + "</strong>? Deja de aparecer en En Vivo y formularios y no se podrá fichar en ella (kiosco y portal). El historial se conserva y se puede volver a mostrar.",
+    textoOk: 'Ocultar',
+    peligro: true,
+    onOk: aplicar,
+  });
+}
+
 // ── KIOSCOS — Administración › Kioscos (Fase 8C) ──────
 // Gestión de dispositivos Kiosco: ver estado, generar una activación (código
 // de un solo uso + link, 24 h), revocar y reasignar sucursal. Backend:
@@ -4955,7 +5047,7 @@ function _kioscoFecha(iso) {
 }
 
 function _kioscoSucNombre(codigo) {
-  const s = SUCURSALES.find(x => x.id === codigo);
+  const s = SUCURSALES_TODAS.find(x => x.id === codigo);
   return s ? s.nombre : codigo;
 }
 
@@ -5109,7 +5201,7 @@ function renderFichadasTab() {
       "</select>" +
       "<select class='f-select' id='fichSucursal' aria-label='Sucursal' onchange='_fichadasConsultar()'>" +
         "<option value=''>Todas las sucursales</option>" +
-        SUCURSALES.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('') +
+        SUCURSALES_TODAS.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('') +
       "</select>" +
       "<input type='text' class='f-select' id='fichColaborador' aria-label='Buscar colaborador' list='fichColaboradorList' placeholder='Todos los colaboradores (nómina completa)' oninput='_fichadasConsultarDebounced()' style='min-width:220px' />" +
       "<datalist id='fichColaboradorList'>" + empNombres.map(n => `<option value="${n}">`).join('') + "</datalist>" +
@@ -5177,7 +5269,7 @@ function _fichadasDescribirAlcance(f) {
   else if (f.mes)           periodo = `${MESES_LBL[Number(f.mes) - 1]} (todos los años)`;
   else                      periodo = 'Todo el historial';
 
-  const sucNombre = f.sucursal ? (SUCURSALES.find(s => s.id === f.sucursal)?.nombre || f.sucursal) : 'Todas';
+  const sucNombre = f.sucursal ? (SUCURSALES_TODAS.find(s => s.id === f.sucursal)?.nombre || f.sucursal) : 'Todas';
 
   return {
     periodo,
@@ -5598,6 +5690,7 @@ const apiEmpleados = (path, opciones) => _apiFetch('/api/empleados', path, opcio
 const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opciones);
 const apiFichadas  = (path, opciones) => _apiFetch('/api/fichadas', path, opciones);
 const apiKioscos   = (path, opciones) => _apiFetch('/api/kioscos', path, opciones);
+const apiSucursales = (path, opciones) => _apiFetch('/api/sucursales', path, opciones);
 const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opciones);
 // Fase 6B: reemplaza accion=solicitar_vac/responder_solicitud/inicializar_vac/
 // ajustar_vac/agregar_vacacion_admin (GAS público, sin auth) por estos 5
@@ -5776,7 +5869,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
   const tieneAcceso = !!emp._usuario;
 
   const sucOpts = ['<option value="">Sin asignar</option>']
-    .concat(SUCURSALES.map(s => `<option value="${s.id}" ${emp.sucursal_id === s.id ? 'selected' : ''}>${s.nombre}</option>`)).join('');
+    .concat(SUCURSALES_TODAS.filter(s => s.activa !== false || s.id === emp.sucursal_id).map(s => `<option value="${s.id}" ${emp.sucursal_id === s.id ? 'selected' : ''}>${s.nombre}</option>`)).join('');
   const catOpts = ['<option value="">Sin categoría</option>']
     .concat(CATEGORIAS_CONFIG.map(c => `<option value="${c.id}" ${emp.categoria_id === c.id ? 'selected' : ''}>${c.nombre}</option>`)).join('');
   const empOpts = ['<option value="">Sin empresa</option>']
@@ -5812,7 +5905,7 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
   // ya están disponibles en `emp` (Perfil/Laboral/Acceso), no agrega
   // ningún dato ni lógica nueva — es un resumen de lectura.
   const infoAcceso = _infoAccesoAdmin(emp);
-  const sucNombreEmp = emp.sucursal_id ? (SUCURSALES.find(s => s.id === emp.sucursal_id)?.nombre || '') : '';
+  const sucNombreEmp = emp.sucursal_id ? (SUCURSALES_TODAS.find(s => s.id === emp.sucursal_id)?.nombre || '') : '';
   const inicialAvatar = (nomMostrar || '?').charAt(0).toUpperCase();
   const avatarHtml = emp.foto_url
     ? `<img src="${emp.foto_url}" alt="" onerror="this.parentElement.textContent='${inicialAvatar}'" />`
@@ -7087,10 +7180,30 @@ function init() {
     topSearch?.classList.remove('expanded');
   });
 
-  // Poblar select de sucursales
+  // Poblar select de sucursales y traer el catálogo vigente del backend
+  poblarFiltroSucursales();
+  cargarSucursalesServidor();
+}
+
+function poblarFiltroSucursales() {
   const selSuc = document.getElementById('filterSucursal');
+  if (!selSuc) return;
+  const actual = selSuc.value;
   selSuc.innerHTML = '<option value="all">Todas las sucursales</option>' +
-    SUCURSALES.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
+    SUCURSALES_TODAS.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
+  if (actual) selSuc.value = actual;
+}
+
+// GET /api/sucursales (público). Si falla, queda el fallback hardcodeado.
+async function cargarSucursalesServidor() {
+  try {
+    const resp = await fetch(BACKEND_URL + '/api/sucursales');
+    const json = await resp.json().catch(() => null);
+    if (!json || json.ok !== true) return;
+    aplicarSucursalesServidor(json.sucursales);
+    poblarFiltroSucursales();
+    if (typeof state !== 'undefined' && state.datos && state.datos.length) renderAll();
+  } catch (e) { /* sin backend: se usa el fallback */ }
 }
 
 document.addEventListener('DOMContentLoaded', init);
@@ -7150,7 +7263,7 @@ function mostrarDropdownBusqueda(matches) {
   }
 
   dropdown.innerHTML = matches.map(r => {
-    const s = SUCURSALES.find(x => x.id === r.LOCAL) || { color: '#888', colorLight: '#eee', nombre: r.LOCAL };
+    const s = SUCURSALES_TODAS.find(x => x.id === r.LOCAL) || { color: '#888', colorLight: '#eee', nombre: r.LOCAL };
     const numMatch = r.EMPLEADO.match(/^(\d+)\s+(.+)$/);
     const numVend  = numMatch ? `<span class="search-num">#${numMatch[1]}</span>` : '';
     const nombre   = numMatch ? numMatch[2] : r.EMPLEADO;
@@ -8252,7 +8365,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     .map(function(a) { return '<option value="' + a + '"' + (_calVacAnio === a ? ' selected' : '') + '>' + a + '</option>'; }).join('');
 
   const sucOpts = '<option value="all">Todos los locales</option>' +
-    SUCURSALES.map(function(s) {
+    SUCURSALES_TODAS.map(function(s) {
       return '<option value="' + s.id + '"' + (_calVacFiltroLocal === s.id ? ' selected' : '') + '>' + s.nombre + '</option>';
     }).join('');
 
@@ -8296,7 +8409,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     const empRows = emps.map(function(s) {
       const nom   = s.empleado.replace(/^\d+\s+/, '').split(' ')[0];
       const perfEmp2 = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfEmp2.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '';
-      const suc   = SUCURSALES.find(function(x) { return x.id === local; }) || { color: '#94a3b8', colorLight: '#f1f5f9' };
+      const suc   = SUCURSALES_TODAS.find(function(x) { return x.id === local; }) || { color: '#94a3b8', colorLight: '#f1f5f9' };
       const esPend = s.estado === 'pendiente';
       return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
         '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' ·' : '') + '</span></div>';
@@ -8332,7 +8445,7 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
   const tablaSols = solsMes.length ? solsMes.map(function(s) {
     const nom   = s.empleado.replace(/^\d+\s+/, '');
     const perfSol2 = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfSol2.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '-';
-    const suc   = SUCURSALES.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
+    const suc   = SUCURSALES_TODAS.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
     const conflictoSol = solsFiltradas.some(function(o) {
       return o.id !== s.id &&
         (EMPLEADOS_PERFILES[o.empleado]?.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL) === local &&
@@ -9166,7 +9279,7 @@ async function cargarBancoDias() {
       const disponible= vac ? vac.dias_disponibles: '—';
       const perfil    = EMPLEADOS_PERFILES[nombre] || {};
       const local     = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
-      const suc       = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      const suc       = SUCURSALES_TODAS.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
       const nomEnc    = encodeURIComponent(nombre);
       const dispColor = typeof disponible === 'number' ? (disponible > 7 ? '#059669' : disponible > 0 ? '#f59e0b' : '#dc2626') : '#94a3b8';
       return '<tr>' +
@@ -9234,7 +9347,7 @@ async function cargarBancoDiasAnio(anio) {
       const disponible= vac ? vac.dias_disponibles: '—';
       const perfil    = EMPLEADOS_PERFILES[nombre] || {};
       const local     = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
-      const suc       = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      const suc       = SUCURSALES_TODAS.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
       const nomEnc    = encodeURIComponent(nombre);
       const dispColor = typeof disponible === 'number' ? (disponible > 7 ? '#059669' : disponible > 0 ? '#f59e0b' : '#dc2626') : '#94a3b8';
       return '<tr>' +
@@ -9291,7 +9404,7 @@ async function cargarBancoHorasAdmin() {
       const saldoColor = entrada.saldo_hs > 0 ? '#059669' : entrada.saldo_hs < 0 ? '#dc2626' : '#374151';
       const perfil = EMPLEADOS_PERFILES[nombre] || {};
       const local  = perfil.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
-      const suc    = SUCURSALES.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      const suc    = SUCURSALES_TODAS.find(function(s) { return s.id === local; }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
       return '<tr>' +
         '<td><strong>' + nom + '</strong></td>' +
         '<td><span class="suc-badge-mini" style="background:' + suc.colorLight + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +

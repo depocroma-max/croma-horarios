@@ -20,6 +20,22 @@
   ];
   const SUCURSALES_SELECCIONABLES = SUCURSALES.filter(function (s) { return s.id !== 'todas'; });
 
+  // Administración › Sucursales: las sucursales ocultas dejan de ser destinatarios
+  // seleccionables. Si el backend no responde queda la lista fija de arriba.
+  (function () {
+    try {
+      const b = window.CromaSesion ? window.CromaSesion.BACKEND_URL : '';
+      if (!b) return;
+      fetch(b + '/api/sucursales').then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || j.ok !== true) return;
+        const ocultas = j.sucursales.filter(function (s) { return !s.activa; }).map(function (s) { return s.id; });
+        for (let i = SUCURSALES_SELECCIONABLES.length - 1; i >= 0; i--) {
+          if (ocultas.indexOf(SUCURSALES_SELECCIONABLES[i].id) !== -1) SUCURSALES_SELECCIONABLES.splice(i, 1);
+        }
+      }).catch(function () {});
+    } catch (e) { /* sin backend */ }
+  })();
+
   const TIPO_META = {
     informacion:   { label: 'Información',   icono: 'ⓘ' },
     evento:        { label: 'Evento',        icono: '●' },

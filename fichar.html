@@ -1097,7 +1097,12 @@ function mostrarSelectorSucursal() {
 
   document.getElementById('sucSelSub').textContent = 'Seleccioná el local donde vas a cargar el turno.';
 
-  SUCURSALES.forEach(suc => {
+  // sucursalesGeo ya excluye las ocultas en Administración › Sucursales; si no
+  // llegó (fallo de red) se ofrece la lista fija.
+  const _visibles = sucursalesGeo.length
+    ? SUCURSALES.filter(s => sucursalesGeo.some(g => g.local.toUpperCase() === s.nombre.toUpperCase()))
+    : SUCURSALES;
+  _visibles.forEach(suc => {
     const geo = sucursalesGeo.find(g => g.local.toUpperCase() === suc.nombre.toUpperCase());
     let dist = null;
     let dentro = false;
