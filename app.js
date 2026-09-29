@@ -5670,6 +5670,7 @@ const apiMiPerfil  = (path, opciones) => _apiFetch('/api/mi-perfil', path, opcio
 const apiFichadas  = (path, opciones) => _apiFetch('/api/fichadas', path, opciones);
 const apiKioscos   = (path, opciones) => _apiFetch('/api/kioscos', path, opciones);
 const apiSucursales = (path, opciones) => _apiFetch('/api/sucursales', path, opciones);
+const apiBancoHoras = (path, opciones) => _apiFetch('/api/banco-horas', path, opciones);
 const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opciones);
 // Fase 6B: reemplaza accion=solicitar_vac/responder_solicitud/inicializar_vac/
 // ajustar_vac/agregar_vacacion_admin (GAS público, sin auth) por estos 5
@@ -9358,8 +9359,9 @@ async function cargarBancoHorasAdmin() {
   if (!container) return;
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   try {
-    const resp = await fetch(vacApiUrl('get_banco_horas_todos'));
-    const json = await resp.json();
+    // Antes: accion=get_banco_horas_todos (GAS). Ahora croma-backend (JWT admin/jefe/horarios).
+    // Rollback: volver a `fetch(vacApiUrl('get_banco_horas_todos'))`.
+    const json = await apiBancoHoras('', { method: 'GET' });
     if (!json.ok) throw new Error(json.error || 'Error');
     const empleados = json.empleados || [];
 
@@ -9401,8 +9403,9 @@ async function cargarBancoHorasEmpleado(nombreEmp) {
   const container = document.getElementById('evTabBancoHoras');
   if (!container) return;
   try {
-    const resp = await _fetchConTimeout(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
-    const json = await resp.json();
+    // Antes: accion=get_banco_horas (GAS). Ahora croma-backend: para rol empleado el
+    // servidor usa SIEMPRE la identidad del JWT y ignora ?empleado=.
+    const json = await apiBancoHoras('/empleado?empleado=' + encodeURIComponent(nombreEmp), { method: 'GET' });
     if (!json.ok) throw new Error(json.error || 'Error');
     container.innerHTML = renderBancoHorasHTML(json);
     // Sincroniza la tarjeta "Saldo banco" de Inicio, si está montada (Portal Empleado).
@@ -9418,8 +9421,7 @@ async function cargarBancoHorasDetalleAdmin(nombreEmp) {
   if (!container) return;
   container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Cargando...</p>';
   try {
-    const resp = await fetch(vacApiUrl('get_banco_horas', { empleado: nombreEmp }));
-    const json = await resp.json();
+    const json = await apiBancoHoras('/empleado?empleado=' + encodeURIComponent(nombreEmp), { method: 'GET' });
     if (!json.ok) throw new Error(json.error || 'Error');
     container.innerHTML = renderBancoHorasHTML(json);
   } catch(e) {
