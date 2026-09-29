@@ -2493,9 +2493,6 @@ function poblarFiltroEmpleados(datos) {
 // datos_portal_empleado del Portal), se usa directo sin pegarle a GAS de
 // nuevo — mismo parseo/side-effects de siempre, sin duplicar la lógica.
 async function cargarPerfiles(prefetched) {
-  const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
-  if (!prefetched && !url) return;
-
   try {
     // Fase 2A Sheets API: antes pegaba directo a GAS (?accion=perfiles).
     // Cubre tanto Panel/Admin (cargarDatos) como Administración (línea de
@@ -2530,22 +2527,6 @@ async function cargarPerfiles(prefetched) {
     }
   } catch(err) {
     console.warn('No se pudieron cargar perfiles:', err);
-  }
-}
-
-async function guardarPerfil(perfil) {
-  const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
-  try {
-    const datos = encodeURIComponent(JSON.stringify(perfil));
-    const resp = await fetch(`${url}?accion=guardar_perfil&datos=${datos}`);
-    const json = await resp.json();
-    if (json.ok) {
-      EMPLEADOS_PERFILES[perfil.nombre] = { ...perfil, _editadoLocal: true };
-    } else {
-      showToast('Error al guardar: ' + (json.error || 'desconocido'));
-    }
-  } catch(e) {
-    showToast('Error de conexión al guardar');
   }
 }
 
@@ -2593,13 +2574,6 @@ async function cargarDatos(urls) {
   cargarCertificados();
   cargarVacacionesAprobadas();
   cargarNombresLegales(); // visible para cualquier rol logueado (ver diseño)
-
-  const urlUnica = urls['unica'] || null;
-  if (!urlUnica) {
-    showToast('Falta la URL del Apps Script');
-    state.cargando = false;
-    return;
-  }
 
   try {
     // Fase 1 Sheets API: antes pegaba directo a GAS (?accion=horarios).
@@ -3391,7 +3365,6 @@ function actualizarIndicadorSesion() {
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 horas — cache válido aunque cierren el navegador
 
 async function cargarDatosEmpleado() {
-  const url = APPS_SCRIPT_URL;
   const nombreEmp = sesionActual?.empleadoNombre || sesionActual?.nombre || '';
   const cacheKey  = `croma_horarios_${nombreEmp.replace(/\s+/g,'_')}`;
 
@@ -3409,7 +3382,7 @@ async function cargarDatosEmpleado() {
         setConnected(true);
         mostrarVistaEmpleado();
         // Refrescar silenciosamente en background
-        _refrescarDatosEmpleadoBg(url, cacheKey);
+        _refrescarDatosEmpleadoBg(cacheKey);
         return;
       } else {
         // Cache vencido → borrarlo y cargar normal
@@ -3420,10 +3393,10 @@ async function cargarDatosEmpleado() {
 
   // ── Sin cache válido: carga bloqueante ──
   showToast('Cargando tu jornada...');
-  await _refrescarDatosEmpleadoBg(url, cacheKey, true);
+  await _refrescarDatosEmpleadoBg(cacheKey, true);
 }
 
-async function _refrescarDatosEmpleadoBg(url, cacheKey, bloqueante = false) {
+async function _refrescarDatosEmpleadoBg(cacheKey, bloqueante = false) {
   try {
     // Filtrar por empleado del lado del servidor: baja el payload de "toda
     // la hoja" a solo las filas de este empleado (mucho más rápido).
@@ -8534,14 +8507,6 @@ function cambiarMesCalVac(delta) {
 
 var _eventosCache = null;
 
-function eventosApiUrl(accion, params) {
-  let url = APPS_SCRIPT_URL + '?accion=' + accion;
-  if (params) Object.entries(params).forEach(function([k,v]) {
-    if (v !== undefined && v !== null) url += '&' + k + '=' + encodeURIComponent(v);
-  });
-  return url;
-}
-
 // Barrida final GAS→Node (2026-09-18): antes pegaba directo a
 // accion=get_eventos (GAS, doGet, sin auth). Ahora usa apiEventos() (JWT
 // automático). Shape de respuesta sin cambios ({ok,eventos}).
@@ -9544,12 +9509,6 @@ function anuncioVencidoHaceMasDeUnDia(a) {
 }
 
 // ── HELPERS ───────────────────────────────────────────
-function anunciosApiUrl(accion, params) {
-  let url = `${APPS_SCRIPT_URL}?accion=${accion}`;
-  if (params) Object.entries(params).forEach(([k,v]) => { if (v !== undefined && v !== null) url += `&${k}=${encodeURIComponent(v)}`; });
-  return url;
-}
-
 function _playNotifSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
