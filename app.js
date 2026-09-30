@@ -2530,12 +2530,13 @@ async function cargarPerfiles(prefetched) {
   }
 }
 
+// Barrida final GAS→Node (2026-09-30): antes pegaba directo a GAS
+// (?accion=guardar_categoria, GET, sin JWT, sin BACKEND_SECRET). Ahora pasa
+// por croma-backend (JWT admin/jefe/horarios) vía apiCategorias(). Rollback:
+// restaurar este call-site desde el historial de git.
 async function guardarCategoria(cat) {
-  const url = getSavedUrls()['unica'] || APPS_SCRIPT_URL;
   try {
-    const datos = encodeURIComponent(JSON.stringify(cat));
-    const resp = await fetch(`${url}?accion=guardar_categoria&datos=${datos}`);
-    const json = await resp.json();
+    const json = await apiCategorias('', { method: 'POST', body: JSON.stringify(cat) });
     if (json.ok) {
       const idx = CATEGORIAS_CONFIG.findIndex(c => c.id === cat.id);
       if (idx >= 0) CATEGORIAS_CONFIG[idx] = cat;
@@ -5689,6 +5690,10 @@ const apiConfig = (path, opciones) => _apiFetch('/api/config', path, opciones);
 // Fase 6C.2: reemplaza accion=guardar_evento/eliminar_evento y
 // accion=guardar_anuncio/eliminar_anuncio.
 const apiEventos  = (path, opciones) => _apiFetch('/api/eventos', path, opciones);
+// Barrida final GAS→Node (2026-09-30): reemplaza accion=guardar_categoria
+// (GAS, GET público, sin auth — único frontend→GAS directo que quedaba
+// vivo). JWT automático vía _apiFetch.
+const apiCategorias = (path, opciones) => _apiFetch('/api/categorias', path, opciones);
 const apiAnuncios = (path, opciones) => _apiFetch('/api/anuncios', path, opciones);
 // Fase 6C.1: reemplaza accion=guardar_foto_url (paso 2 de subirFotoEmpleado)
 // — reutiliza apiMiPerfil (ya definida arriba, base '/api/mi-perfil').
