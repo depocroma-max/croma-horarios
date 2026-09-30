@@ -3008,9 +3008,13 @@ function getCertificadosDe(nombreEmp) {
 
 // ── VACACIONES APROBADAS (para el historial, igual que certificados) ──
 // prefetched: ver nota en cargarPerfiles().
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_solicitudes_vac&estado=aprobada (GAS). Ahora usa el endpoint
+// Node ya existente y productivo /api/vacaciones-aprobadas-sheets (Fase
+// 4B, JWT automático vía _apiFetch) — mismo contrato {ok,solicitudes}.
 async function cargarVacacionesAprobadas(prefetched) {
   try {
-    const json = prefetched || await fetchJSONretry(`${APPS_SCRIPT_URL}?accion=get_solicitudes_vac&estado=aprobada`);
+    const json = prefetched || await _apiFetch('/api/vacaciones-aprobadas-sheets', '', { method: 'GET' });
     if (json.ok) VACACIONES_APROBADAS_CACHE = json.solicitudes || [];
     return VACACIONES_APROBADAS_CACHE;
   } catch(e) {
@@ -7389,22 +7393,16 @@ let _solicitudesCache = [];  // [ { id, empleado, desde, hasta, dias, estado, fe
 let _configCache = {};       // { email_admin, ... }
 
 // ── HELPERS ───────────────────────────────────────────
-// Cache-busting (_ts): el navegador puede cachear la respuesta 302 de GAS
-// (script.google.com → script.googleusercontent.com/macros/echo?...&lib=…)
-// vía la cache HTTP normal. Si esa 302 quedó cacheada de un momento en que
-// GAS estaba caído, se sigue reproduciendo un 404 aunque GAS ya haya vuelto
-// — como la URL completa es la clave de cache, un parámetro único por
-// request evita que se sirva una respuesta vieja.
-function vacApiUrl(accion, params) {
-  let url = `${APPS_SCRIPT_URL}?accion=${accion}&_ts=${Date.now()}`;
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') {
-        url += `&${k}=${encodeURIComponent(v)}`;
-      }
-    });
-  }
-  return url;
+// Barrida final GAS→Node (2026-09-18): query string para apiVacaciones()
+// (backend, JWT automático) — reemplaza las lecturas de GAS de
+// get_vacaciones/get_solicitudes_vac (las escrituras vía POST ya migraron por
+// separado).
+function _qsVacaciones(params) {
+  const partes = [];
+  if (params) Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') partes.push(`${k}=${encodeURIComponent(v)}`);
+  });
+  return partes.length ? `?${partes.join('&')}` : '';
 }
 
 function formatFechaISO(isoStr) {
@@ -7532,17 +7530,19 @@ async function guardarEmailsContactos(lista, statusEl) {
 }
 
 // ── VACACIONES: BANCO DE DÍAS ──────────────────────────
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_vacaciones/get_solicitudes_vac (GAS, sin auth). Ahora usa
+// apiVacaciones() (JWT automático). Shape de respuesta sin cambios.
 async function cargarVacacionesAdmin(nombreEmp) {
   const container = document.getElementById('vacAdminContent_inner');
   if (!container) return;
   container.innerHTML = '<p style="color:var(--text-muted);font-size:13px">Cargando...</p>';
   const anioActual = new Date().getFullYear();
   try {
-    const [respVac, respSol] = await Promise.all([
-      fetch(vacApiUrl('get_vacaciones', { empleado: nombreEmp, anio: anioActual })),
-      fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp })),
+    const [jVac, jSol] = await Promise.all([
+      apiVacaciones('/banco' + _qsVacaciones({ empleado: nombreEmp, anio: anioActual }), { method: 'GET' }),
+      apiVacaciones('/solicitudes' + _qsVacaciones({ empleado: nombreEmp }), { method: 'GET' }),
     ]);
-    const [jVac, jSol] = await Promise.all([respVac.json(), respSol.json()]);
     const vac = jVac.ok ? (jVac.vacaciones?.[0] || null) : null;
     const sols = jSol.ok ? (jSol.solicitudes || []) : [];
     container.innerHTML = renderVacacionesAdminHTML(nombreEmp, vac, sols, anioActual);
@@ -7605,16 +7605,20 @@ function renderVacacionesAdminHTML(nombreEmp, vac, solicitudes, anio) {
 }
 
 // ── VACACIONES EMPLEADO (vista propia) ─────────────────
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a GAS con
+// timeout defensivo propio (_fetchConTimeout, pensado para la lentitud de
+// GAS). Ahora usa apiVacaciones() contra el backend, que no tiene ese
+// problema — se deja de envolver con timeout manual, mismo criterio ya
+// aplicado en el resto de las migraciones de esta barrida.
 async function cargarVacacionesEmpleado(nombreEmp) {
   const container = document.getElementById('evTabVacaciones');
   if (!container) return;
   const anio = new Date().getFullYear();
   try {
-    const [respVac, respSol] = await Promise.all([
-      _fetchConTimeout(vacApiUrl('get_vacaciones', { empleado: nombreEmp, anio })),
-      _fetchConTimeout(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp })),
+    const [jVac, jSol] = await Promise.all([
+      apiVacaciones('/banco' + _qsVacaciones({ empleado: nombreEmp, anio }), { method: 'GET' }),
+      apiVacaciones('/solicitudes' + _qsVacaciones({ empleado: nombreEmp }), { method: 'GET' }),
     ]);
-    const [jVac, jSol] = await Promise.all([respVac.json(), respSol.json()]);
     const vac  = jVac.ok  ? (jVac.vacaciones?.[0]   || null) : null;
     const sols = jSol.ok  ? (jSol.solicitudes || []) : [];
     container.innerHTML = renderVacacionesEmpleadoHTML(nombreEmp, vac, sols);
@@ -8172,10 +8176,11 @@ async function _recibosPortalDescargar(id, btn) {
 //  CAMPANA DE NOTIFICACIONES
 // ══════════════════════════════════════════════════════
 
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_solicitudes_vac. Ahora usa apiVacaciones() (JWT automático).
 async function actualizarBadgeCampana() {
   try {
-    const resp = await fetch(vacApiUrl('get_solicitudes_vac', { estado: 'pendiente' }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/solicitudes' + _qsVacaciones({ estado: 'pendiente' }), { method: 'GET' });
     const n = json.ok ? (json.solicitudes || []).length : 0;
     const badge = document.getElementById('bellBadge');
     if (!badge) return;
@@ -8200,8 +8205,7 @@ function toggleBellDropdown() {
   dd.className = 'bell-dropdown';
   dd.innerHTML = '<div class="bell-dd-loading">Cargando...</div>';
   document.getElementById('bellWrap').appendChild(dd);
-  fetch(vacApiUrl('get_solicitudes_vac', { estado: 'pendiente' }))
-    .then(function(r) { return r.json(); })
+  apiVacaciones('/solicitudes' + _qsVacaciones({ estado: 'pendiente' }), { method: 'GET' })
     .then(function(json) {
       const sols = json.ok ? (json.solicitudes || []) : [];
       if (!sols.length) {
@@ -8250,8 +8254,7 @@ var _bellEmpLeidos = new Set(JSON.parse(localStorage.getItem('croma_bell_leidos'
 async function actualizarBadgeCampanaEmp(nombreEmp) {
   _bellEmpNombre = nombreEmp;
   try {
-    const resp = await fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombreEmp }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/solicitudes' + _qsVacaciones({ empleado: nombreEmp }), { method: 'GET' });
     const sols = json.ok ? (json.solicitudes || []) : [];
     const noLeidas = sols.filter(function(s) {
       return (s.estado === 'aprobada' || s.estado === 'rechazada') && !_bellEmpLeidos.has(s.id);
@@ -8272,8 +8275,7 @@ function toggleBellDropdownEmp() {
   dd.innerHTML = '<div class="bell-dd-loading">Cargando...</div>';
   document.getElementById('bellWrapEmp').appendChild(dd);
   const nombre = _bellEmpNombre || (sesionActual && sesionActual.empleadoNombre) || '';
-  fetch(vacApiUrl('get_solicitudes_vac', { empleado: nombre }))
-    .then(function(r) { return r.json(); })
+  apiVacaciones('/solicitudes' + _qsVacaciones({ empleado: nombre }), { method: 'GET' })
     .then(function(json) {
       const sols = (json.ok ? json.solicitudes || [] : []).filter(function(s) {
         return s.estado === 'aprobada' || s.estado === 'rechazada';
@@ -9172,8 +9174,7 @@ var _vacSolicitudesCache = null; // cache: null = no cargado, [] = cargado vací
 async function fetchSolicitudesCache(force) {
   if (!force && _vacSolicitudesCache !== null) return _vacSolicitudesCache;
   try {
-    const resp = await fetch(vacApiUrl('get_solicitudes_vac', {}));
-    const json = await resp.json();
+    const json = await apiVacaciones('/solicitudes', { method: 'GET' });
     _vacSolicitudesCache = json.ok ? (json.solicitudes || []) : [];
   } catch(e) {
     if (_vacSolicitudesCache === null) _vacSolicitudesCache = [];
@@ -9222,14 +9223,15 @@ function switchVacTab(tab, btn) {
 }
 
 // ── DÍAS DE VACACIONES (ex "Banco de días", tab Administración) ──────
+// Barrida final GAS→Node (2026-09-18): antes pegaba directo a
+// accion=get_vacaciones. Ahora usa apiVacaciones() (JWT automático).
 async function cargarBancoDias() {
   const container = document.getElementById('adminTabDiasVacaciones');
   if (!container) return;
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   const anio = new Date().getFullYear();
   try {
-    const resp = await fetch(vacApiUrl('get_vacaciones', { anio: anio }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/banco' + _qsVacaciones({ anio }), { method: 'GET' });
     const vacaciones = json.ok ? (json.vacaciones || []) : [];
 
     // Obtener lista de empleados activos
@@ -9300,8 +9302,7 @@ async function cargarBancoDiasAnio(anio) {
   if (!container) return;
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   try {
-    const resp = await fetch(vacApiUrl('get_vacaciones', { anio: anio }));
-    const json = await resp.json();
+    const json = await apiVacaciones('/banco' + _qsVacaciones({ anio }), { method: 'GET' });
     const vacaciones = json.ok ? (json.vacaciones || []) : [];
     const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
       const na = parseInt(a)||999, nb = parseInt(b)||999;
@@ -9360,7 +9361,6 @@ async function cargarBancoHorasAdmin() {
   container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   try {
     // Antes: accion=get_banco_horas_todos (GAS). Ahora croma-backend (JWT admin/jefe/horarios).
-    // Rollback: volver a `fetch(vacApiUrl('get_banco_horas_todos'))`.
     const json = await apiBancoHoras('', { method: 'GET' });
     if (!json.ok) throw new Error(json.error || 'Error');
     const empleados = json.empleados || [];
