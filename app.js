@@ -180,9 +180,10 @@ const GAS_FETCH_TIMEOUT_MS = 15000;
 function _fetchConTimeout(url, timeoutMs) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs || GAS_FETCH_TIMEOUT_MS);
-  // cache:'no-store' — ver nota de cache-busting en vacApiUrl(): evita que
-  // el navegador reproduzca una 302 de GAS vieja (cacheada de un momento
-  // en que estaba caído) en vez de pedirla de nuevo.
+  // cache:'no-store': el navegador puede cachear la 302 de GAS
+  // (script.google.com → script.googleusercontent.com/macros/echo?...). Si quedó
+  // cacheada de un momento en que GAS estaba caído, reproduciría el 404 aunque
+  // ya haya vuelto; no-store fuerza a pedirla de nuevo.
   return fetch(url, { signal: ctrl.signal, cache: 'no-store' }).finally(() => clearTimeout(t));
 }
 
@@ -5681,7 +5682,7 @@ const apiRecibos   = (path, opciones) => _apiFetch('/api/recibos', path, opcione
 // ajustar_vac/agregar_vacacion_admin (GAS público, sin auth) por estos 5
 // endpoints Node (JWT, rol server-side, BACKEND_SECRET agregado por el
 // backend). Las acciones GAS viejas siguen intactas mientras dure la
-// transición — rollback: volver los call-sites a vacApiUrl(...).
+// transición — rollback: restaurar los call-sites desde el historial de git.
 const apiVacaciones = (path, opciones) => _apiFetch('/api/vacaciones', path, opciones);
 // Fase 6B: reemplaza accion=guardar_certificado/borrar_certificado.
 const apiCertificadosAdmin = (path, opciones) => _apiFetch('/api/certificados', path, opciones);
