@@ -632,7 +632,12 @@ function _agruparFichadasEnJornadas(empleado, local, fichadas) {
     (porFecha[f.fecha] = porFecha[f.fecha] || []).push(f);
   });
   return Object.keys(porFecha).map(fecha => {
-    const turnos = porFecha[fecha].slice().sort((a, b) => (a.entrada || '').localeCompare(b.entrada || ''));
+    // Los turnos ACTIVOS ocupan Turno 1/Turno 2 primero; un turno ANULADO nunca
+    // debe quitarle el lugar a uno activo (si no, 'Turno 2 sin Turno 1' bloquea el ajuste).
+    const turnos = porFecha[fecha].slice().sort((a, b) => {
+      const aa = (a.estado === 'ANULADA') ? 1 : 0, ba = (b.estado === 'ANULADA') ? 1 : 0;
+      return aa - ba || (a.entrada || '').localeCompare(b.entrada || '');
+    });
     const toTurno = f => ({ id_fichada: f.id_fichada, entrada: f.entrada, salida: f.salida, estado: f.estado || 'ACTIVA' });
     return {
       empleado, local, fecha,

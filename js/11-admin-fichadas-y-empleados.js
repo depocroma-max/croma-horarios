@@ -282,6 +282,10 @@ function renderTablaAjusteJornada(filas) {
   "</div>";
 }
 
+function _turnoActivoAjuste(t) {
+  return (t && t.estado !== 'ANULADA') ? t : null;
+}
+
 function _calcularHsJornada(j) {
   const hsTurno = t => {
     if (!t || t.estado === 'ANULADA') return 0;
@@ -445,12 +449,15 @@ async function confirmarAjusteJornada(empleado, fechaISO) {
   const payload = {
     empleado, local: j.local,
     fecha_jornada: fechaISO, fecha_jornada_original: fechaISO,
-    id_fichada_turno1: j.turno1?.id_fichada || null,
+    // Un turno ANULADO se manda como inexistente (id/original null): el backend
+    // rechaza cualquier operación sobre un turno ya anulado (YA_ANULADA), así que
+    // si queda vacío no se toca y si se completa se crea uno nuevo (nunca DELETE).
+    id_fichada_turno1: _turnoActivoAjuste(j.turno1)?.id_fichada || null,
     entrada1: t1.entrada, salida1: t1.salida,
-    turno1_original: j.turno1 ? { entrada: j.turno1.entrada, salida: j.turno1.salida, estado: j.turno1.estado } : null,
-    id_fichada_turno2: j.turno2?.id_fichada || null,
+    turno1_original: _turnoActivoAjuste(j.turno1) ? { entrada: j.turno1.entrada, salida: j.turno1.salida, estado: j.turno1.estado } : null,
+    id_fichada_turno2: _turnoActivoAjuste(j.turno2)?.id_fichada || null,
     entrada2: t2.entrada, salida2: t2.salida,
-    turno2_original: j.turno2 ? { entrada: j.turno2.entrada, salida: j.turno2.salida, estado: j.turno2.estado } : null,
+    turno2_original: _turnoActivoAjuste(j.turno2) ? { entrada: j.turno2.entrada, salida: j.turno2.salida, estado: j.turno2.estado } : null,
     recupera_horas: !!recuperaHoras,
     observacion: observacion || '',
     motivo, motivo_detalle: motivo === 'otro' ? motivoDetalle : null,
