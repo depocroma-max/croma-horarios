@@ -386,7 +386,7 @@ var _vacRolesCache = null;
 var ROLES_COBERTURA = [
   { id: 'vendedor',  nombre: 'Vendedor',  critico: false },
   { id: 'cajero',    nombre: 'Cajero',    critico: true  },
-  { id: 'encargado', nombre: 'Encargado', critico: true  }
+  { id: 'encargado', nombre: 'Encargado', critico: true, cubrenEste: ['cajero'] } // un cajero presente cubre al encargado
 ];
 async function fetchRolesCache() {
   if (_vacRolesCache) return _vacRolesCache;
@@ -501,7 +501,10 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
     const nAus = equipo.filter(function(e) { return ausentes[e.clave]; }).length;
     const sinRol = ROLES_COBERTURA.filter(function(r) { return r.critico; }).filter(function(r) {
       const titulares = equipo.filter(function(e) { return e.rol === r.id; });
-      return titulares.length > 0 && titulares.every(function(e) { return ausentes[e.clave]; });
+      if (!(titulares.length > 0 && titulares.every(function(e) { return ausentes[e.clave]; }))) return false;
+      // ¿Algún reemplazo habilitado (ej. cajero por encargado) sigue presente?
+      const hayReemplazo = equipo.some(function(e) { return (r.cubrenEste || []).indexOf(e.rol) >= 0 && !ausentes[e.clave]; });
+      return !hayReemplazo;
     }).map(function(r) { return r.nombre; });
     return { total: equipo.length, ausentes: nAus, sinRol: sinRol };
   }
