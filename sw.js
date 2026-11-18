@@ -1,4 +1,4 @@
-const CACHE = 'croma-v9';
+const CACHE = 'croma-v10';
 const ASSETS = [
   '/',
   '/index.html',
@@ -22,6 +22,7 @@ const ASSETS = [
   '/js/15-portal-empleado-y-calendario.js',
   '/js/16-admin-vacaciones-y-banco-horas.js',
   '/js/17-anuncios.js',
+  '/js/18-admin-usuarios.js',
   '/tridente_solo.png',
   '/favicon.svg',
 ];

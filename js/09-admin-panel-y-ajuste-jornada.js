@@ -149,6 +149,7 @@ function renderAdminInline() {
       "<button class='rail-item' onclick=\"switchAdminTab('fichadas',this)\">" + icon('download','icon-16') + "<span>Fichadas</span></button>" +
       ((sesionActual?.rol === 'admin' || sesionActual?.rol === 'jefe') ? "<button class='rail-item' onclick=\"switchAdminTab('kioscos',this)\">" + icon('store','icon-16') + "<span>Kioscos</span></button>" : '') +
       ((sesionActual?.rol === 'admin' || sesionActual?.rol === 'jefe') ? "<button class='rail-item' onclick=\"switchAdminTab('sucursales',this)\">" + icon('warehouse','icon-16') + "<span>Sucursales</span></button>" : '') +
+      (sesionActual?.rol === 'admin' ? "<button class='rail-item' onclick=\"switchAdminTab('usuarios',this)\">" + icon('settings','icon-16') + "<span>Usuarios</span></button>" : '') +
       "<button class='rail-item' onclick=\"switchAdminTab('recibos',this)\">" + icon('fileText','icon-16') + "<span>Recibos</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('diasVacaciones',this)\">" + icon('palmtree','icon-16') + "<span>Días de Vacaciones</span></button>" +
       "<button class='rail-item' onclick=\"switchAdminTab('bancoHoras',this)\">" + icon('timer','icon-16') + "<span>Banco de horas</span></button>" +
@@ -277,6 +278,7 @@ function renderAdminInline() {
     "<div id='adminTabFichadas' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabKioscos' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabSucursales' class='admin-tab-content' style='display:none'></div>" +
+    "<div id='adminTabUsuarios' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabRecibos' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabDiasVacaciones' class='admin-tab-content' style='display:none'></div>" +
     "<div id='adminTabBancoHoras' class='admin-tab-content' style='display:none'></div>" +
@@ -300,6 +302,8 @@ function switchAdminTab(tab, btn) {
   if (_tabKioscos) _tabKioscos.style.display = tab === 'kioscos' ? 'block' : 'none';
   const _tabSucursales = document.getElementById('adminTabSucursales');
   if (_tabSucursales) _tabSucursales.style.display = tab === 'sucursales' ? 'block' : 'none';
+  const _tabUsuarios = document.getElementById('adminTabUsuarios');
+  if (_tabUsuarios) _tabUsuarios.style.display = tab === 'usuarios' ? 'block' : 'none';
   document.getElementById('adminTabRecibos').style.display      = tab === 'recibos'        ? 'block' : 'none';
   document.getElementById('adminTabDiasVacaciones').style.display = tab === 'diasVacaciones' ? 'block' : 'none';
   document.getElementById('adminTabBancoHoras').style.display   = tab === 'bancoHoras'     ? 'block' : 'none';
@@ -308,6 +312,7 @@ function switchAdminTab(tab, btn) {
   if (tab === 'fichadas') renderFichadasTab();
   if (tab === 'kioscos') renderKioscosAdminTab();
   if (tab === 'sucursales') renderSucursalesAdminTab();
+  if (tab === 'usuarios') renderUsuariosAdminTab();
   if (tab === 'recibos') renderRecibosAdminTab();
   if (tab === 'diasVacaciones') cargarBancoDias();
   if (tab === 'bancoHoras') cargarBancoHorasAdmin();
