@@ -4415,6 +4415,34 @@ body {
   .envivo-chip { flex: 1 1 0; min-width: 0; justify-content: center; padding: 8px 8px; flex-wrap: wrap; text-align: center; }
   .envivo-chip > span:not(.envivo-live-dot) { font-size: 10px; }
 }
+/* Escala compacta: entre el tamaño original y el rediseño inicial (entra todo en pantalla) */
+.envivo-bar { padding: 12px 20px; margin-bottom: 1rem; border-radius: 18px; }
+.envivo-bar-dia { font-size: 28px; }
+.envivo-bar-hora { font-size: 12px; padding-left: 12px; }
+.envivo-chips { gap: 6px; }
+.envivo-chip { padding: 6px 14px; font-size: 12.5px; gap: 6px; }
+.envivo-chip b { font-size: 20px; }
+.envivo-board { gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.envivo-card { border-radius: 18px; min-height: 140px; }
+.envivo-card-head { padding: 10px 14px 4px; gap: 8px; }
+.envivo-card-suc { font-size: 14px; }
+.envivo-card-count { padding: 2px 10px; gap: 5px; }
+.envivo-card-count b { font-size: 20px; }
+.envivo-card-count span { font-size: 9px; }
+.envivo-presentes { padding: 0 8px 6px; gap: 1px; }
+.envivo-emp { padding: 5px 8px; gap: 10px; align-items: center; }
+.envivo-emp-avatar { width: 36px; height: 36px; font-size: 12px; }
+.envivo-emp-nombre { font-size: 13px; }
+.envivo-emp-meta { font-size: 11.5px; margin-top: 0; }
+.envivo-tags { margin-top: 2px; }
+.envivo-tag { font-size: 9.5px; padding: 1px 7px; }
+.envivo-vacia-msg { padding: 14px 12px; font-size: 12px; gap: 4px; }
+.envivo-card-foot { margin: 0 14px 10px; padding-top: 8px; gap: 4px; }
+.envivo-alerta { padding: 5px 12px; font-size: 11.5px; gap: 6px; }
+.envivo-sec-titulo { font-size: 12px; margin-bottom: 1px; }
+.envivo-prox { padding: 1px 2px; font-size: 12px; gap: 6px; }
+.envivo-prox span { font-size: 12px; }
+.envivo-foot-line { font-size: 11.5px; }
 /* Croma Horarios: pesos de fuente iguales a los del panel */
 .envivo-card-suc, .envivo-emp-nombre, .envivo-foot-line b { font-weight: 800; }
 .envivo-chip.ok b { color: #15803d; }
