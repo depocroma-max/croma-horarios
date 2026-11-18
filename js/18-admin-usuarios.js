@@ -20,10 +20,10 @@ function renderUsuariosAdminTab() {
         "<tbody id='usuariosAdminBody'><tr><td colspan='5' style='text-align:center;padding:2rem;color:var(--text-muted)'>Cargando…</td></tr></tbody>" +
       "</table>" +
     "</div></div>";
-  cargarUsuariosAdmin();
+  cargarUsuariosAdminTab();
 }
 
-async function cargarUsuariosAdmin() {
+async function cargarUsuariosAdminTab() {
   const body = document.getElementById('usuariosAdminBody');
   if (!body) return;
   const json = await apiUsuariosAdmin('', { method: 'GET' });
