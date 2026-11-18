@@ -408,10 +408,12 @@ async function guardarFormularioEmpleado() {
       });
 
       if (data.ok) {
+        await _guardarRolFormEmpleado(nombre);
         showToast('✓ Empleado creado');
         await _refrescarAdminEmpleados();
         cerrarFormularioEmpleado();
       } else if (data.estado === 'empleado_creado_acceso_fallido') {
+        await _guardarRolFormEmpleado(nombre);
         showToast('El empleado fue creado correctamente, pero no se pudo crear el acceso. Podés reintentarlo desde la pestaña Acceso.', 4500);
         await _refrescarAdminEmpleados();
         // No se cierra el formulario: se reabre en modo edición sobre el
@@ -434,6 +436,7 @@ async function guardarFormularioEmpleado() {
       _mostrarErrorFormEmpleado(resPerfil.error || 'No se pudo guardar el empleado');
       return;
     }
+    await _guardarRolFormEmpleado(nombre);
 
     if (quiereCrearAcceso) {
       const usuario = {

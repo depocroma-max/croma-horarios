@@ -863,6 +863,13 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
             <select class="admin-input" id="formEmpCategoria">${catOpts}</select>
           </div>
           <div class="admin-form-grupo">
+            <label class="emp-filtro-label" for="formEmpRolCobertura">Rol en el local</label>
+            <select class="admin-input" id="formEmpRolCobertura" disabled><option value="">Cargando...</option></select>
+            <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
+              Encargado y Cajero se cubren entre sí: el calendario de Vacaciones avisa si un local se queda sin ninguno de los dos. Vendedor no cuenta para la cobertura.
+            </span>
+          </div>
+          <div class="admin-form-grupo">
             <label class="emp-filtro-label" for="formEmpReglaCustom">Regla personalizada de horas extra</label>
             <select class="admin-input" id="formEmpReglaCustom" onchange="_toggleHsBaseFormEmp(this.value)">${reglaOpts}</select>
           </div>
@@ -914,9 +921,41 @@ function abrirFormularioEmpleado(nombre, tabInicial) {
   </div>`;
 
   montarOverlayAdmin(html);
+  _cargarRolFormEmpleado(esNuevo ? '' : emp.nombre);
   if (tabInicial === 'laboral' || tabInicial === 'acceso') {
     const idx = tabInicial === 'laboral' ? 1 : 2;
     _switchFormEmpTab(tabInicial, document.querySelectorAll('#formEmpTabs .admin-tab')[idx]);
+  }
+}
+
+// Rol de cobertura (encargado/cajero/vendedor) — vive en croma-backend
+// (/vacaciones/roles), no en la hoja EMPLEADOS. Se carga async al abrir la
+// ficha; el select queda deshabilitado hasta que llegan los roles, y si la
+// carga falla no se guarda nada (no se pisa un rol por un fallo de lectura).
+async function _cargarRolFormEmpleado(nombre) {
+  const sel = document.getElementById('formEmpRolCobertura');
+  if (!sel) return;
+  try {
+    const roles = await fetchRolesCache();
+    const actual = (nombre && roles[_claveEmpVac(nombre)]) || 'vendedor';
+    sel.innerHTML = ROLES_COBERTURA.map(r => '<option value="' + r.id + '"' + (r.id === actual ? ' selected' : '') + '>' + r.nombre + '</option>').join('');
+    sel.dataset.original = actual;
+    sel.disabled = false;
+  } catch (e) {
+    sel.innerHTML = '<option value="">No se pudo cargar</option>';
+  }
+}
+
+// Guarda el rol solo si se cambió (select cargado y distinto del original).
+async function _guardarRolFormEmpleado(nombre) {
+  const sel = document.getElementById('formEmpRolCobertura');
+  if (!sel || sel.disabled || !sel.dataset.original || sel.value === sel.dataset.original) return;
+  try {
+    const json = await apiVacaciones('/roles', { method: 'POST', body: JSON.stringify({ empleado: nombre, rol: sel.value }) });
+    if (!json.ok) throw new Error(json.error || 'Error');
+    _vacRolesCache = null;
+  } catch (e) {
+    showToast('El empleado se guardó, pero no se pudo guardar el rol: ' + e.message, 4500);
   }
 }
 
