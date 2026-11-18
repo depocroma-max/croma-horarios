@@ -807,6 +807,8 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
       '<select class="filter-select" id="calVacFiltroLocalSelect" aria-label="Filtrar por local" style="font-size:13px" onchange="_calVacFiltroLocal=this.value;cargarCalendarioVacaciones()">' + sucOpts + '</select>' +
+      '<button class="btn-admin-edit" style="font-size:12px" onclick="abrirModalAgregarVacCalendario()">＋ Agregar vacaciones</button>' +
+      '<button class="btn-admin-edit" style="font-size:12px" onclick="imprimirPlanVacaciones()" title="Imprimir o guardar como PDF el plan del mes (solo aprobadas)">🖨 Imprimir plan</button>' +
       // "Nuevo evento" (sistema viejo) jubilado a favor del panel Avisos —
       // ver avisosProvider Etapa 6/9. Botón oculto, no borrado: revertir
       // es solo restaurar esta línea.
@@ -1527,3 +1529,218 @@ function renderCalendarioView() {
   cargarCalendarioVacaciones();
 }
 
+
+// ══════════════════════════════════════════════════════
+//  AGREGAR VACACIONES DESDE EL CALENDARIO (admin)
+//  Usa POST /vacaciones/agregar-admin: queda aprobada y descuenta el banco.
+// ══════════════════════════════════════════════════════
+function abrirModalAgregarVacCalendario() {
+  const hoy = new Date();
+  const hoyISO = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0');
+  // Empleados activos, ordenados por local y nombre
+  const vistos = {};
+  const emps = [];
+  state.datos.forEach(function(r) {
+    const k = _claveEmpVac(r.EMPLEADO);
+    if (vistos[k] || _empleadoInactivoVac(r.EMPLEADO)) return;
+    vistos[k] = true;
+    emps.push({ nombre: r.EMPLEADO, local: _localDeEmpleadoVac(r.EMPLEADO) });
+  });
+  emps.sort(function(a, b) { return (a.local || '').localeCompare(b.local || '') || _claveEmpVac(a.nombre).localeCompare(_claveEmpVac(b.nombre)); });
+  const porLocal = {};
+  emps.forEach(function(e) { (porLocal[e.local || '—'] = porLocal[e.local || '—'] || []).push(e); });
+  const opts = '<option value="">Elegí un empleado…</option>' + Object.keys(porLocal).sort().map(function(loc) {
+    const suc = SUCURSALES_TODAS.find(function(x) { return x.id === loc; });
+    return '<optgroup label="' + esc(suc ? suc.nombre : loc) + '">' + porLocal[loc].map(function(e) {
+      return '<option value="' + encodeURIComponent(e.nombre) + '">' + esc(e.nombre.replace(/^\d+\s+/, '')) + '</option>';
+    }).join('') + '</optgroup>';
+  }).join('');
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Agregar vacaciones</div>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label" for="vacEmpSel">Empleado</label>
+          <select class="admin-input" id="vacEmpSel" onchange="actualizarSaldoAgregarVac()">${opts}</select>
+          <span id="vacEmpSaldo" style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block"></span>
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label" for="vacDesde">Fecha desde</label>
+          <input type="date" class="admin-input" id="vacDesde" value="${hoyISO}" onchange="calcularDiasVacForm();actualizarSaldoAgregarVac()" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label" for="vacHasta">Fecha hasta</label>
+          <input type="date" class="admin-input" id="vacHasta" value="${hoyISO}" onchange="calcularDiasVacForm();actualizarSaldoAgregarVac()" />
+        </div>
+        <div class="admin-form-grupo">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+            <span style="font-size:13px;color:#374151">Días corridos:</span>
+            <span id="diasVacCalc" style="font-size:18px;font-weight:700;color:#2563eb">1</span>
+          </div>
+          <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">Queda aprobada y descuenta del banco del empleado.</span>
+        </div>
+        <p id="vacSolError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" id="btnAgregarVacCal" onclick="confirmarAgregarVacCalendario()">Guardar (queda aprobada)</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+  calcularDiasVacForm();
+}
+
+// Muestra el saldo disponible del empleado elegido (año de "desde") y avisa si no alcanza.
+async function actualizarSaldoAgregarVac() {
+  const el = document.getElementById('vacEmpSaldo');
+  const sel = document.getElementById('vacEmpSel');
+  const desde = document.getElementById('vacDesde')?.value;
+  if (!el || !sel || !sel.value || !desde) { if (el) el.textContent = ''; return; }
+  const anio = parseInt(desde.substring(0, 4), 10);
+  try {
+    const banco = await fetchBancoCache(anio);
+    const v = banco.find(function(b) { return _claveEmpVac(b.empleado) === _claveEmpVac(decodeURIComponent(sel.value)); });
+    const dias = calcularDiasVacForm() || 0;
+    if (!v) { el.style.color = 'var(--text-muted)'; el.textContent = 'Sin banco cargado para ' + anio + '.'; return; }
+    const quedan = v.dias_disponibles - dias;
+    el.style.color = quedan < 0 ? '#dc2626' : '#059669';
+    el.textContent = 'Disponibles en ' + anio + ': ' + v.dias_disponibles + (quedan < 0 ? ' — este período lo excede por ' + (-quedan) + ' días.' : ' — quedarían ' + quedan + '.');
+  } catch(e) { el.textContent = ''; }
+}
+
+async function confirmarAgregarVacCalendario() {
+  const btn = document.getElementById('btnAgregarVacCal');
+  if (btn && btn.disabled) return;
+  const errEl = document.getElementById('vacSolError');
+  const empEnc = document.getElementById('vacEmpSel')?.value;
+  const desde = document.getElementById('vacDesde')?.value;
+  const hasta = document.getElementById('vacHasta')?.value;
+  const falla = function(msg) { errEl.textContent = msg; errEl.style.display = 'block'; };
+  if (!empEnc) return falla('Elegí un empleado');
+  if (!desde || !hasta) return falla('Seleccioná las fechas');
+  if (hasta < desde) return falla('La fecha hasta debe ser posterior a la fecha desde');
+  const empleado = decodeURIComponent(empEnc);
+  const dias = calcularDiasVacForm();
+  if (parseInt(desde.substring(0, 4), 10) !== parseInt(hasta.substring(0, 4), 10)) {
+    return falla('El período cruza de año: cargalo en dos partes (hasta el 31/12 y desde el 01/01).');
+  }
+  // Aviso (no bloquea) si el período excede el saldo
+  try {
+    const banco = await fetchBancoCache(parseInt(desde.substring(0, 4), 10));
+    const v = banco.find(function(b) { return _claveEmpVac(b.empleado) === _claveEmpVac(empleado); });
+    if (v && dias > v.dias_disponibles && !confirm(empleado.replace(/^\d+\s+/, '') + ' tiene ' + v.dias_disponibles + ' días disponibles y esto son ' + dias + '. ¿Cargarlo igual?')) return;
+  } catch(e) {}
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    const json = await apiVacaciones('/agregar-admin', {
+      method: 'POST',
+      body: JSON.stringify({ empleado: empleado, fecha_desde: desde, fecha_hasta: hasta, dias: dias }),
+    });
+    if (!json.ok) throw new Error(json.error || 'Error');
+    _vacSolicitudesCache = null; _vacBancoCache = {};
+    VACACIONES_APROBADAS_CACHE = [];
+    cerrarAdmin();
+    showToast('✓ Vacaciones agregadas');
+    _calVacAnio = parseInt(desde.substring(0, 4), 10);
+    _calVacMes = parseInt(desde.substring(5, 7), 10) - 1;
+    cargarCalendarioVacaciones();
+    cargarVacacionesAprobadas();
+  } catch(e) {
+    falla(e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar (queda aprobada)'; }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  IMPRIMIR / PDF DEL PLAN DEL MES
+//  Solo vacaciones aprobadas (es lo que se cuelga en el local). Respeta el
+//  filtro de local. En el diálogo de impresión se puede "Guardar como PDF".
+// ══════════════════════════════════════════════════════
+async function imprimirPlanVacaciones() {
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const todas = await fetchSolicitudesCache(false);
+  const anio = _calVacAnio, mes = _calVacMes;
+  const ini = anio + '-' + String(mes + 1).padStart(2, '0') + '-01';
+  const diasMes = new Date(anio, mes + 1, 0).getDate();
+  const fin = anio + '-' + String(mes + 1).padStart(2, '0') + '-' + String(diasMes).padStart(2, '0');
+  const sols = todas.filter(function(sol) {
+    if (sol.estado !== 'aprobada' || !sol.fecha_desde || !sol.fecha_hasta) return false;
+    if (sol.fecha_hasta < ini || sol.fecha_desde > fin) return false;
+    return _calVacFiltroLocal === 'all' || _localDeEmpleadoVac(sol.empleado) === _calVacFiltroLocal;
+  });
+  const sucFiltro = SUCURSALES_TODAS.find(function(x) { return x.id === _calVacFiltroLocal; });
+  const titulo = 'Vacaciones — ' + MESES[mes] + ' ' + anio + (sucFiltro ? ' — ' + sucFiltro.nombre : '');
+  const nombreCorto = function(emp) {
+    const partes = emp.replace(/^\d+\s+/, '').split(' ');
+    return partes[0] + (partes[1] ? ' ' + partes[1].charAt(0) + '.' : '');
+  };
+
+  // Grilla del mes
+  const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  let celdas = '';
+  for (let i = 0; i < new Date(anio, mes, 1).getDay(); i++) celdas += '<div class="c vacio"></div>';
+  for (let d = 1; d <= diasMes; d++) {
+    const iso = anio + '-' + String(mes + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const f = new Date(anio, mes, d);
+    const fuera = sols.filter(function(sol) { return iso >= sol.fecha_desde && iso <= sol.fecha_hasta; });
+    celdas += '<div class="c' + (f.getDay() === 0 || f.getDay() === 6 ? ' finde' : '') + (esFeriado(f) ? ' feriado' : '') + '"><div class="n">' + d + '</div>' +
+      fuera.map(function(sol) {
+        const suc = SUCURSALES_TODAS.find(function(x) { return x.id === _localDeEmpleadoVac(sol.empleado); }) || { color: '#64748b' };
+        return '<div class="e" style="border-left-color:' + suc.color + '">' + esc(nombreCorto(sol.empleado)) + '</div>';
+      }).join('') + '</div>';
+  }
+
+  // Listado por local
+  const porLocal = {};
+  sols.forEach(function(sol) { const l = _localDeEmpleadoVac(sol.empleado) || '—'; (porLocal[l] = porLocal[l] || []).push(sol); });
+  const fmt = function(iso) { const [y, m, d] = iso.split('-'); return d + '/' + m + '/' + y; };
+  const listado = Object.keys(porLocal).sort().map(function(loc) {
+    const suc = SUCURSALES_TODAS.find(function(x) { return x.id === loc; }) || { nombre: loc };
+    return '<h3>' + esc(suc.nombre) + '</h3><table><thead><tr><th>Empleado</th><th>Desde</th><th>Hasta</th><th>Días</th></tr></thead><tbody>' +
+      porLocal[loc].sort(function(a, b) { return a.fecha_desde.localeCompare(b.fecha_desde); }).map(function(sol) {
+        return '<tr><td>' + esc(sol.empleado.replace(/^\d+\s+/, '')) + '</td><td>' + fmt(sol.fecha_desde) + '</td><td>' + fmt(sol.fecha_hasta) + '</td><td class="num">' + sol.dias + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }).join('') || '<p class="vacio-msg">Sin vacaciones aprobadas en este mes.</p>';
+
+  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' + esc(titulo) + '</title><style>' +
+    '@page{size:A4 landscape;margin:12mm}' +
+    '*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}' +
+    'h1{font-size:20px;margin:0 0 2px}h2{font-size:12px;font-weight:400;color:#555;margin:0 0 10px}' +
+    'h3{font-size:13px;margin:12px 0 4px;border-bottom:2px solid #111;padding-bottom:2px}' +
+    '.g{display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid #999;border-left:1px solid #999}' +
+    '.h{background:#111;color:#fff;font-size:10px;font-weight:700;text-align:center;padding:3px;border-right:1px solid #999}' +
+    '.c{min-height:62px;border-right:1px solid #999;border-bottom:1px solid #999;padding:2px 3px;font-size:10px}' +
+    '.c.finde{background:#f1f5f9}.c.feriado{background:#fef3c7}.c.vacio{background:#fafafa}' +
+    '.n{font-weight:700;font-size:10px;color:#555}' +
+    '.e{border-left:3px solid #64748b;background:#f8fafc;margin-top:1px;padding:0 3px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    'table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:6px}th,td{border-bottom:1px solid #ccc;padding:3px 6px;text-align:left}th{background:#eee}.num{text-align:center}' +
+    '.vacio-msg{color:#666;font-size:12px}.pie{margin-top:10px;font-size:9px;color:#777}' +
+    '.listado{page-break-before:always}' +
+    '</style></head><body>' +
+    '<h1>' + esc(titulo) + '</h1><h2>Plan de vacaciones aprobadas · Croma</h2>' +
+    '<div class="g">' + dias.map(function(d) { return '<div class="h">' + d + '</div>'; }).join('') + celdas + '</div>' +
+    '<div class="listado">' + listado + '</div>' +
+    '<div class="pie">Impreso el ' + new Date().toLocaleDateString('es-AR') + '. Incluye solo vacaciones aprobadas.</div>' +
+    '</body></html>';
+
+  // iframe oculto: evita el bloqueo de ventanas emergentes
+  const prev = document.getElementById('iframePlanVac');
+  if (prev) prev.remove();
+  const ifr = document.createElement('iframe');
+  ifr.id = 'iframePlanVac';
+  ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(ifr);
+  ifr.contentDocument.open();
+  ifr.contentDocument.write(doc);
+  ifr.contentDocument.close();
+  setTimeout(function() {
+    ifr.contentWindow.focus();
+    ifr.contentWindow.print();
+  }, 300);
+}
