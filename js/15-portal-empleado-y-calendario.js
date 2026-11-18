@@ -710,6 +710,37 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
         }).join('') +
       '</div></div>';
 
+    // Fila de totales por mes: personas distintas fuera, días-persona y pico
+    // simultáneo (respeta el filtro de local). Intensidad relativa al mes más cargado.
+    const ausentesDia = [];
+    for (let d = 0; d < diasAnio; d++) ausentesDia.push({});
+    solsFiltradas.forEach(function(sol) {
+      if (!sol.fecha_desde || !sol.fecha_hasta) return;
+      const i0 = Math.max(0, idxDia(sol.fecha_desde));
+      const i1 = Math.min(diasAnio - 1, idxDia(sol.fecha_hasta));
+      for (let d = i0; d <= i1; d++) ausentesDia[d][_claveEmpVac(sol.empleado)] = true;
+    });
+    const totalesMes = inicioMes.map(function(ini, m) {
+      const fin = m < 11 ? inicioMes[m + 1] : diasAnio;
+      const personas = {};
+      let diasPersona = 0, pico = 0;
+      for (let d = ini; d < fin; d++) {
+        const claves = Object.keys(ausentesDia[d]);
+        claves.forEach(function(k) { personas[k] = true; });
+        diasPersona += claves.length;
+        if (claves.length > pico) pico = claves.length;
+      }
+      return { ini: ini, fin: fin, personas: Object.keys(personas).length, diasPersona: diasPersona, pico: pico };
+    });
+    const maxPersonas = Math.max.apply(null, totalesMes.map(function(t) { return t.personas; }).concat([1]));
+    const celdasTotales = totalesMes.map(function(t) {
+      const alfa = t.personas ? (0.12 + 0.5 * t.personas / maxPersonas).toFixed(2) : 0;
+      return '<div title="' + esc(MESES_CORTOS[totalesMes.indexOf(t)] + ': ' + t.personas + ' persona(s) con vacaciones · ' + t.diasPersona + ' días en total · máximo ' + t.pico + ' a la vez') + '" ' +
+        'style="position:absolute;top:2px;bottom:2px;left:' + pct(t.ini) + '%;width:' + pct(t.fin - t.ini) + '%;background:rgba(37,99,235,' + alfa + ');border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;line-height:1.15;color:#1e293b">' +
+        (t.personas ? '<strong>' + t.personas + '</strong><span style="font-size:9px;color:#475569">pico ' + t.pico + '</span>' : '<span style="color:#cbd5e1">—</span>') + '</div>';
+    }).join('');
+    html += fila('<strong style="color:#1d4ed8">Personas fuera</strong>', celdasTotales, 36, 'background:#f8fafc');
+
     locales.forEach(function(loc) {
       const sucL = SUCURSALES_TODAS.find(function(x) { return x.id === loc; }) || { nombre: loc, color: '#94a3b8', colorLight: '#f1f5f9' };
       // Fila de cobertura: días del año con el local sin encargado/cajero
