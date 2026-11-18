@@ -376,20 +376,16 @@ async function cargarCalendarioVacaciones() {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   }
   try {
-    const [todas, eventos] = await Promise.all([
-      fetchSolicitudesCache(false),
-      cargarEventos(false)
-    ]);
+    const todas = await fetchSolicitudesCache(false);
     renderCalendarioVacaciones(container, todas.filter(function(s) {
       return s.estado === 'aprobada' || s.estado === 'pendiente';
-    }), eventos);
+    }));
   } catch(e) {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
   }
 }
 
-function renderCalendarioVacaciones(container, solicitudes, eventos) {
-  eventos = eventos || [];
+function renderCalendarioVacaciones(container, solicitudes) {
   // Selectores de mes y año
   const aniosDisponibles = [2024, 2025, 2026, 2027];
   const mesOpts = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -447,25 +443,13 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
       return '<div class="cal-vac-emp" style="background:' + suc.colorLight + ';border-left:3px solid ' + suc.color + ';' + (esPend ? 'opacity:0.6;' : '') + '">' +
         '<span style="font-size:10px;font-weight:500;color:' + suc.color + '">' + nom + (esPend ? ' ·' : '') + '</span></div>';
     }).join('');
-    const eventosDelDia = eventos.filter(function(ev) {
-      const fin = ev.fecha_fin || ev.fecha;
-      return isoFecha >= ev.fecha && isoFecha <= fin;
-    });
-    const eventosRows = eventosDelDia.map(function(ev) {
-      const vencido = (ev.fecha_fin || ev.fecha) < hoyISO;
-      return '<div class="cal-vac-evento' + (vencido ? ' cal-vac-evento-vencido' : '') + '" title="' + esc(ev.descripcion) + '" onclick="event.stopPropagation(); eliminarEvento(\'' + ev.id + '\')" style="cursor:pointer">' +
-        '<span style="display:inline-flex;font-size:9px">' + icon(vencido ? 'fileText' : 'mapPin', 'icon-12') + '</span>' +
-        '<span style="font-size:9px;font-weight:600;color:' + (vencido ? '#94a3b8' : '#7c3aed') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(ev.titulo) + (vencido ? ' (Vencido)' : '') + '</span>' +
-      '</div>';
-    }).join('');
     celdasHTML += '<div class="cal-vac-cell' +
       (esHoy     ? ' cal-vac-hoy'      : '') +
       (esFinde   ? ' cal-vac-finde'    : '') +
       (esFer     ? ' cal-vac-feriado'  : '') +
-      (conflicto ? ' cal-vac-conflicto': '') + '"' +
-      ' onclick="abrirNuevoEvento(\'' + isoFecha + '\')" style="cursor:pointer">' +
+      (conflicto ? ' cal-vac-conflicto': '') + '">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
-      empRows + eventosRows + '</div>';
+      empRows + '</div>';
   }
 
   // Tabla solicitudes del mes
@@ -531,7 +515,6 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#d1fae5;border-left:3px solid #059669"></span>Aprobada</span>' +
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef9c3;border-left:3px solid #f59e0b"></span>Pendiente</span>' +
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef3c7"></span>Feriado</span>' +
-        '<span class="cal-vac-legend-item" style="color:#7c3aed;font-weight:600">📌 Evento</span>' +
         '<span class="cal-vac-legend-item" style="color:#f59e0b;font-weight:600">⚠ Conflicto</span>' +
       '</div>' +
     '</div>' +
