@@ -385,8 +385,8 @@ async function fetchBancoCache(anio) {
 var _vacRolesCache = null;
 var ROLES_COBERTURA = [
   { id: 'vendedor',  nombre: 'Vendedor',  critico: false },
-  { id: 'cajero',    nombre: 'Cajero',    critico: true  },
-  { id: 'encargado', nombre: 'Encargado', critico: true, cubrenEste: ['cajero'] } // un cajero presente cubre al encargado
+  { id: 'cajero',    nombre: 'Cajero',    critico: true, cubrenEste: ['encargado'] },
+  { id: 'encargado', nombre: 'Encargado', critico: true, cubrenEste: ['cajero'] } // cajero y encargado se cubren entre sí
 ];
 async function fetchRolesCache() {
   if (_vacRolesCache) return _vacRolesCache;
