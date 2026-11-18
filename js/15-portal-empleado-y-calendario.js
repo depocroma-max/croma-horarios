@@ -368,6 +368,24 @@ var _calVacMes  = new Date().getMonth();
 var _calVacAnio = new Date().getFullYear();
 var _calVacFiltroLocal = 'all';
 var _calVacVista = 'mes'; // 'mes' | 'anio'
+var _calVacSel = null;    // primer día elegido (ISO) mientras se arma un rango con dos clics
+
+// Dos clics para armar un período: el 1.º marca el inicio, el 2.º (puede ser otro mes
+// o el mismo día) abre "Agregar vacaciones" con desde/hasta ya cargados.
+function clickDiaCalVac(iso) {
+  if (!_calVacSel) { _calVacSel = iso; cargarCalendarioVacaciones(); return; }
+  const desde = _calVacSel < iso ? _calVacSel : iso;
+  const hasta = _calVacSel < iso ? iso : _calVacSel;
+  _calVacSel = null;
+  abrirModalAgregarVacCalendario(desde, hasta);
+  cargarCalendarioVacaciones();
+}
+function cancelarSeleccionCalVac() {
+  if (!_calVacSel) return;
+  _calVacSel = null;
+  cargarCalendarioVacaciones();
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') cancelarSeleccionCalVac(); });
 
 // Banco de días (hoja VACACIONES) por año — { anio: { ts, filas } }. Cache corto
 // para no releer Sheets al cambiar de mes; se invalida con _vacBancoCache = {}
@@ -551,7 +569,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
       (esHoy     ? ' cal-vac-hoy'      : '') +
       (esFinde   ? ' cal-vac-finde'    : '') +
       (esFer     ? ' cal-vac-feriado'  : '') +
-      (conflicto ? ' cal-vac-conflicto': '') + '" style="cursor:pointer" title="Clic para agregar vacaciones desde este día" onclick="abrirModalAgregarVacCalendario(\'' + isoFecha + '\')">' +
+      (conflicto ? ' cal-vac-conflicto': '') + '" style="cursor:pointer;' + (_calVacSel === isoFecha ? 'outline:3px solid #2563eb;outline-offset:-3px;background:#dbeafe;' : '') + '" title="' + (_calVacSel ? 'Clic para elegir el último día' : 'Clic para elegir el primer día de las vacaciones') + '" onclick="clickDiaCalVac(\'' + isoFecha + '\')">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
       empRows + cobRows + '</div>';
   }
@@ -779,7 +797,12 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
     if (_calVacVista === 'anio') {
       return '</div><div class="cal-vac-wrap" style="padding:8px 0;margin-top:1rem">' + construirVistaAnual() + '</div>';
     }
-    return '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div></div>' +
+    const avisoSel = _calVacSel
+      ? '<div style="display:flex;align-items:center;gap:10px;margin:8px 0;padding:8px 12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;font-size:13px;color:#1e3a8a">' +
+          'Inicio elegido: <strong>' + formatFechaISO(_calVacSel) + '</strong> — hacé clic en el último día (puede ser en otro mes; el mismo día = 1 día).' +
+          '<button class="btn-admin-edit" style="margin-left:auto;font-size:12px" onclick="cancelarSeleccionCalVac()">Cancelar (Esc)</button></div>'
+      : '<div style="margin:8px 0;font-size:12px;color:var(--text-muted)">Tip: hacé clic en un día y luego en otro para cargar vacaciones de ese período.</div>';
+    return avisoSel + '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div></div>' +
       '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
       '<div class="admin-table-wrap">' +
         '<table class="admin-tabla">' +
@@ -1534,7 +1557,7 @@ function renderCalendarioView() {
 //  AGREGAR VACACIONES DESDE EL CALENDARIO (admin)
 //  Usa POST /vacaciones/agregar-admin: queda aprobada y descuenta el banco.
 // ══════════════════════════════════════════════════════
-function abrirModalAgregarVacCalendario(isoInicial) {
+function abrirModalAgregarVacCalendario(isoInicial, isoFinal) {
   const hoy = new Date();
   // Con clic en un día, ese día viene precargado; si no, hoy.
   const hoyISO = isoInicial || (hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0'));
@@ -1575,7 +1598,7 @@ function abrirModalAgregarVacCalendario(isoInicial) {
         </div>
         <div class="admin-form-grupo">
           <label class="emp-filtro-label" for="vacHasta">Fecha hasta</label>
-          <input type="date" class="admin-input" id="vacHasta" value="${hoyISO}" onchange="calcularDiasVacForm();actualizarSaldoAgregarVac()" />
+          <input type="date" class="admin-input" id="vacHasta" value="${isoFinal || hoyISO}" onchange="calcularDiasVacForm();actualizarSaldoAgregarVac()" />
         </div>
         <div class="admin-form-grupo">
           <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
