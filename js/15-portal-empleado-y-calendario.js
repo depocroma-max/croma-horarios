@@ -632,7 +632,9 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
       }
     }
     return '<tr>' +
-      '<td><strong>' + nom + '</strong></td>' +
+      '<td><strong>' + nom + '</strong> <span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:4px;' +
+        (rolSol === 'encargado' ? 'background:#ede9fe;color:#5b21b6' : rolSol === 'cajero' ? 'background:#dbeafe;color:#1e40af' : 'background:#f1f5f9;color:#64748b') + '">' +
+        esc((ROLES_COBERTURA.find(function(r) { return r.id === rolSol; }) || { nombre: 'Vendedor' }).nombre) + '</span></td>' +
       '<td><span class="suc-badge-mini" style="background:' + (suc.colorLight || '#f1f5f9') + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
       '<td>' + formatFechaISO(s.fecha_desde) + ' — ' + formatFechaISO(s.fecha_hasta) + '</td>' +
       '<td style="text-align:center">' + s.dias + '</td>' +
