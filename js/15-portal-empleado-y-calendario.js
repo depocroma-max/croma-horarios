@@ -367,6 +367,7 @@ function toggleBellDropdownEmp() {
 var _calVacMes  = new Date().getMonth();
 var _calVacAnio = new Date().getFullYear();
 var _calVacFiltroLocal = 'all';
+var _calVacVista = 'mes'; // 'mes' | 'anio'
 
 // Banco de días (hoja VACACIONES) por año — { anio: { ts, filas } }. Cache corto
 // para no releer Sheets al cambiar de mes; se invalida con _vacBancoCache = {}
@@ -660,6 +661,103 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
     panelDias = '<p style="color:var(--text-muted);font-size:12px;margin-top:1.5rem">No se pudo cargar el banco de días (se muestran solo las solicitudes).</p>';
   }
 
+  // ── Vista anual (Gantt): una fila por empleado con vacaciones en el año ──
+  function construirVistaAnual() {
+    const anio = _calVacAnio;
+    const inicioAnio = Date.UTC(anio, 0, 1);
+    const diasAnio = (Date.UTC(anio + 1, 0, 1) - inicioAnio) / 86400000;
+    const pct = function(dia) { return (dia / diasAnio * 100).toFixed(3); };
+    const idxDia = function(iso) {
+      const [y, m, d] = iso.split('-').map(Number);
+      return Math.round((Date.UTC(y, m - 1, d) - inicioAnio) / 86400000);
+    };
+    const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const inicioMes = [];
+    for (let m = 0; m < 12; m++) inicioMes.push((Date.UTC(anio, m, 1) - inicioAnio) / 86400000);
+
+    // Solicitudes que tocan este año, agrupadas por local → empleado
+    const grupos = {};
+    solsFiltradas.forEach(function(sol) {
+      if (!sol.fecha_desde || !sol.fecha_hasta) return;
+      if (sol.fecha_hasta < anio + '-01-01' || sol.fecha_desde > anio + '-12-31') return;
+      const loc = _localDeEmpleadoVac(sol.empleado) || '—';
+      const g = grupos[loc] = grupos[loc] || {};
+      (g[_claveEmpVac(sol.empleado)] = g[_claveEmpVac(sol.empleado)] || { nombre: sol.empleado, sols: [] }).sols.push(sol);
+    });
+    const locales = Object.keys(grupos).sort();
+    if (!locales.length) {
+      return '<div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:13px">Sin vacaciones cargadas en ' + anio + '</div>';
+    }
+
+    const lineasMes = inicioMes.map(function(d) {
+      return '<div style="position:absolute;top:0;bottom:0;left:' + pct(d) + '%;border-left:1px solid #e5e7eb"></div>';
+    }).join('');
+    const hoy = new Date();
+    const lineaHoy = hoy.getFullYear() === anio
+      ? '<div title="Hoy" style="position:absolute;top:0;bottom:0;left:' + pct(Math.floor((Date.UTC(anio, hoy.getMonth(), hoy.getDate()) - inicioAnio) / 86400000)) + '%;border-left:2px solid #ef4444;opacity:.6"></div>'
+      : '';
+    const LABEL_W = 170;
+    const fila = function(label, contenido, altura, estilo) {
+      return '<div style="display:flex;align-items:stretch;border-top:1px solid #f1f5f9;' + (estilo || '') + '">' +
+        '<div style="flex:0 0 ' + LABEL_W + 'px;padding:5px 8px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + label + '</div>' +
+        '<div style="position:relative;flex:1;min-height:' + altura + 'px">' + lineasMes + lineaHoy + contenido + '</div></div>';
+    };
+
+    let html = '<div style="overflow-x:auto"><div style="min-width:760px">' +
+      '<div style="display:flex"><div style="flex:0 0 ' + LABEL_W + 'px"></div><div style="position:relative;flex:1;height:22px">' +
+        inicioMes.map(function(d, m) {
+          return '<span style="position:absolute;left:' + pct(d) + '%;font-size:11px;font-weight:600;color:#64748b;padding-left:4px">' + MESES_CORTOS[m] + '</span>';
+        }).join('') +
+      '</div></div>';
+
+    locales.forEach(function(loc) {
+      const sucL = SUCURSALES_TODAS.find(function(x) { return x.id === loc; }) || { nombre: loc, color: '#94a3b8', colorLight: '#f1f5f9' };
+      // Fila de cobertura: días del año con el local sin encargado/cajero
+      let segmentos = '';
+      let tramo = null;
+      for (let d = 0; d <= diasAnio; d++) {
+        const iso = d < diasAnio ? new Date(inicioAnio + d * 86400000).toISOString().substring(0, 10) : null;
+        const roto = iso && coberturaDia(iso, loc).sinRol.length > 0;
+        if (roto && tramo === null) tramo = d;
+        if (!roto && tramo !== null) {
+          segmentos += '<div title="Local sin encargado/cajero" style="position:absolute;top:3px;bottom:3px;left:' + pct(tramo) + '%;width:' + pct(d - tramo) + '%;background:#fca5a5;border-radius:3px"></div>';
+          tramo = null;
+        }
+      }
+      html += '<div style="background:' + sucL.colorLight + ';border-top:2px solid ' + sucL.color + ';padding:4px 8px;font-size:12px;font-weight:700;color:' + sucL.color + '">' + esc(sucL.nombre) + '</div>';
+      html += fila('<span style="color:#b91c1c;font-size:11px">Sin cobertura</span>', segmentos, 20);
+
+      Object.values(grupos[loc]).sort(function(a, b) { return _claveEmpVac(a.nombre).localeCompare(_claveEmpVac(b.nombre)); }).forEach(function(emp) {
+        const rol = rolDe(emp.nombre);
+        const rolTxt = rol !== 'vendedor' ? ' <span style="font-size:10px;color:#64748b">· ' + esc((ROLES_COBERTURA.find(function(r) { return r.id === rol; }) || {}).nombre) + '</span>' : '';
+        const barras = emp.sols.map(function(sol) {
+          const i0 = Math.max(0, idxDia(sol.fecha_desde));
+          const i1 = Math.min(diasAnio - 1, idxDia(sol.fecha_hasta));
+          const pend = sol.estado === 'pendiente';
+          const mesIni = Math.max(0, parseInt(sol.fecha_desde.substring(0, 4), 10) < anio ? 0 : parseInt(sol.fecha_desde.substring(5, 7), 10) - 1);
+          return '<div onclick="_calVacMes=' + mesIni + ';_calVacVista=\'mes\';cargarCalendarioVacaciones()" style="position:absolute;top:4px;bottom:4px;left:' + pct(i0) + '%;width:' + pct(i1 - i0 + 1) + '%;min-width:4px;background:' + sucL.color + ';' +
+            (pend ? 'opacity:.5;border:1px dashed ' + sucL.color + ';background-image:repeating-linear-gradient(45deg,transparent 0 4px,rgba(255,255,255,.55) 4px 8px);' : '') +
+            'border-radius:4px;cursor:pointer" title="' + esc(emp.nombre.replace(/^\d+\s+/, '') + ': ' + formatFechaISO(sol.fecha_desde) + ' — ' + formatFechaISO(sol.fecha_hasta) + ' (' + sol.dias + ' días) · ' + (pend ? 'pendiente' : 'aprobada')) + '"></div>';
+        }).join('');
+        html += fila('<strong>' + esc(emp.nombre.replace(/^\d+\s+/, '')) + '</strong>' + rolTxt, barras, 26);
+      });
+    });
+    return html + '</div></div>';
+  }
+  const bloqueVista = function() {
+    if (_calVacVista === 'anio') {
+      return '</div><div class="cal-vac-wrap" style="padding:8px 0;margin-top:1rem">' + construirVistaAnual() + '</div>';
+    }
+    return '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div></div>' +
+      '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
+      '<div class="admin-table-wrap">' +
+        '<table class="admin-tabla">' +
+          '<thead><tr><th>Empleado</th><th>Local</th><th>Período</th><th style="text-align:center">Días</th><th style="text-align:center">Saldo</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
+          '<tbody>' + tablaSols + '</tbody>' +
+        '</table>' +
+      '</div>';
+  };
+
   const headersSem = diasSem.map(function(d) { return '<div class="cal-vac-header">' + d + '</div>'; }).join('');
 
   container.innerHTML =
@@ -667,9 +765,13 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
     '<div class="cal-vac-wrap">' +
     // Toolbar
     '<div class="cal-vac-toolbar">' +
+      '<div class="week-btns" style="display:inline-flex;gap:0;margin-right:8px">' +
+        '<button class="week-btn' + (_calVacVista === 'mes' ? ' active' : '') + '" style="' + (_calVacVista === 'mes' ? 'font-weight:700;' : '') + '" onclick="_calVacVista=\'mes\';cargarCalendarioVacaciones()">Mes</button>' +
+        '<button class="week-btn' + (_calVacVista === 'anio' ? ' active' : '') + '" style="' + (_calVacVista === 'anio' ? 'font-weight:700;' : '') + '" onclick="_calVacVista=\'anio\';cargarCalendarioVacaciones()">Año</button>' +
+      '</div>' +
       '<div class="cal-vac-nav">' +
         '<button class="week-btn" onclick="cambiarMesCalVac(-1)">&#8592;</button>' +
-        '<select class="filter-select" id="calVacMesSelect" aria-label="Mes" style="font-size:14px;font-weight:600;background:transparent;border:none;box-shadow:none" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>' +
+        (_calVacVista === 'anio' ? '' : '<select class="filter-select" id="calVacMesSelect" aria-label="Mes" style="font-size:14px;font-weight:600;background:transparent;border:none;box-shadow:none" onchange="_calVacMes=parseInt(this.value);cargarCalendarioVacaciones()">' + mesOpts + '</select>') +
         '<select class="filter-select" id="calVacAnioSelect" aria-label="Año" style="font-size:14px;font-weight:600;width:78px;background:transparent;border:none;box-shadow:none" onchange="_calVacAnio=parseInt(this.value);cargarCalendarioVacaciones()">' + anioOpts + '</select>' +
         '<button class="week-btn" onclick="cambiarMesCalVac(1)">&#8594;</button>' +
       '</div>' +
@@ -684,22 +786,14 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
         '<span class="cal-vac-legend-item" style="color:#f59e0b;font-weight:600">⚠ Local sin encargado/cajero</span>' +
       '</div>' +
     '</div>' +
-    // Grilla
-    '<div class="cal-vac-grid">' + headersSem + celdasHTML + '</div>' +
-    '</div>' +
-    // Tabla del mes
-    '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
-    '<div class="admin-table-wrap">' +
-      '<table class="admin-tabla">' +
-        '<thead><tr><th>Empleado</th><th>Local</th><th>Período</th><th style="text-align:center">Días</th><th style="text-align:center">Saldo</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
-        '<tbody>' + tablaSols + '</tbody>' +
-      '</table>' +
-    '</div>' +
+    // Grilla mensual + tabla, o Gantt anual (según _calVacVista)
+    bloqueVista() +
     panelDias +
     '</div>';
 }
 
 function cambiarMesCalVac(delta) {
+  if (_calVacVista === 'anio') { _calVacAnio += delta; cargarCalendarioVacaciones(); return; }
   _calVacMes += delta;
   if (_calVacMes > 11) { _calVacMes = 0; _calVacAnio++; }
   if (_calVacMes < 0)  { _calVacMes = 11; _calVacAnio--; }
