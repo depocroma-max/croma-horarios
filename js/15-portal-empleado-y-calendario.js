@@ -368,6 +368,26 @@ var _calVacMes  = new Date().getMonth();
 var _calVacAnio = new Date().getFullYear();
 var _calVacFiltroLocal = 'all';
 
+// Banco de días (hoja VACACIONES) por año — { anio: { ts, filas } }. Cache corto
+// para no releer Sheets al cambiar de mes; se invalida con _vacBancoCache = {}
+// después de aprobar/editar/ajustar.
+var _vacBancoCache = {};
+async function fetchBancoCache(anio) {
+  const hit = _vacBancoCache[anio];
+  if (hit && Date.now() - hit.ts < 60000) return hit.filas;
+  const json = await apiVacaciones('/banco' + _qsVacaciones({ anio: anio }), { method: 'GET' });
+  const filas = json.ok ? (json.vacaciones || []) : [];
+  _vacBancoCache[anio] = { ts: Date.now(), filas: filas };
+  return filas;
+}
+function _claveEmpVac(nombre) {
+  return String(nombre || '').replace(/^\d+\s+/, '').trim().toLowerCase();
+}
+function _localDeEmpleadoVac(nombre) {
+  const perf = EMPLEADOS_PERFILES[nombre] || {};
+  return perf.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
+}
+
 async function cargarCalendarioVacaciones() {
   const container = document.getElementById('vacCalendarioContainer');
   if (!container) return;
@@ -376,16 +396,28 @@ async function cargarCalendarioVacaciones() {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   }
   try {
-    const todas = await fetchSolicitudesCache(false);
+    const [todas, banco] = await Promise.all([
+      fetchSolicitudesCache(false),
+      fetchBancoCache(_calVacAnio).catch(function() { return null; }) // sin banco: se ve igual, sin saldos
+    ]);
     renderCalendarioVacaciones(container, todas.filter(function(s) {
       return s.estado === 'aprobada' || s.estado === 'pendiente';
-    }));
+    }), banco);
   } catch(e) {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
   }
 }
 
-function renderCalendarioVacaciones(container, solicitudes) {
+function renderCalendarioVacaciones(container, solicitudes, banco) {
+  // Saldo por empleado (clave normalizada) para el año mostrado
+  const saldoPorEmp = {};
+  (banco || []).forEach(function(v) { saldoPorEmp[_claveEmpVac(v.empleado)] = v; });
+  const pendientesPorEmp = {};
+  solicitudes.forEach(function(s) {
+    if (s.estado !== 'pendiente' || !s.fecha_desde || parseInt(s.fecha_desde, 10) !== _calVacAnio) return;
+    const k = _claveEmpVac(s.empleado);
+    pendientesPorEmp[k] = (pendientesPorEmp[k] || 0) + (parseInt(s.dias, 10) || 0);
+  });
   // Selectores de mes y año
   const aniosDisponibles = [2024, 2025, 2026, 2027];
   const mesOpts = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -484,15 +516,63 @@ function renderCalendarioVacaciones(container, solicitudes) {
           editBtn + calBtn +
           '</div>'
       : '<div style="display:flex;gap:4px;flex-wrap:wrap">' + editBtn + calBtn + '</div>';
+    // Saldo: solo tiene sentido en pendientes (las aprobadas ya descontaron).
+    let saldoHTML = '<span style="color:#94a3b8">—</span>';
+    const bancoEmp = saldoPorEmp[_claveEmpVac(s.empleado)];
+    if (s.estado === 'pendiente') {
+      if (!bancoEmp) {
+        saldoHTML = banco ? '<span style="color:#94a3b8;font-size:12px" title="Sin banco cargado para este año">Sin banco</span>' : '<span style="color:#94a3b8">—</span>';
+      } else {
+        const quedan = bancoEmp.dias_disponibles - (parseInt(s.dias, 10) || 0);
+        saldoHTML = quedan < 0
+          ? '<span style="color:#dc2626;font-weight:700" title="Disponibles: ' + bancoEmp.dias_disponibles + ' · pide ' + s.dias + '">' + icon('alertTriangle','icon-14') + ' Excede por ' + (-quedan) + '</span>'
+          : '<span style="color:' + (quedan > 7 ? '#059669' : '#f59e0b') + ';font-weight:600" title="Disponibles: ' + bancoEmp.dias_disponibles + ' · pide ' + s.dias + '">Quedan ' + quedan + '</span>';
+      }
+    }
     return '<tr>' +
       '<td><strong>' + nom + '</strong></td>' +
       '<td><span class="suc-badge-mini" style="background:' + (suc.colorLight || '#f1f5f9') + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +
       '<td>' + formatFechaISO(s.fecha_desde) + ' — ' + formatFechaISO(s.fecha_hasta) + '</td>' +
       '<td style="text-align:center">' + s.dias + '</td>' +
+      '<td style="text-align:center">' + saldoHTML + '</td>' +
       '<td>' + estadoBadge(s.estado) + '</td>' +
       '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">' + icon('alertTriangle','icon-14') + ' Conflicto</span>' : '—') + '</td>' +
       '<td>' + acciones + '</td></tr>';
-  }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
+  }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
+
+  // Panel "Días por empleado" (año mostrado, respeta el filtro de local)
+  let panelDias = '';
+  if (banco) {
+    const nombreCompleto = function(v) {
+      return (state.datos.find(function(r) { return _claveEmpVac(r.EMPLEADO) === _claveEmpVac(v.empleado); }) || {}).EMPLEADO || v.empleado;
+    };
+    const filasDias = banco.filter(function(v) {
+      return _calVacFiltroLocal === 'all' || _localDeEmpleadoVac(nombreCompleto(v)) === _calVacFiltroLocal;
+    }).sort(function(a, b) { return _claveEmpVac(a.empleado).localeCompare(_claveEmpVac(b.empleado)); }).map(function(v) {
+      const nomFull = nombreCompleto(v);
+      const sucV = SUCURSALES_TODAS.find(function(x) { return x.id === _localDeEmpleadoVac(nomFull); }) || { nombre: '—', color: '#94a3b8', colorLight: '#f1f5f9' };
+      const corresponden = v.dias_banco + v.dias_ajuste;
+      const pend = pendientesPorEmp[_claveEmpVac(v.empleado)] || 0;
+      const libre = v.dias_disponibles - pend;
+      const colorDisp = v.dias_disponibles > 7 ? '#059669' : v.dias_disponibles > 0 ? '#f59e0b' : '#dc2626';
+      return '<tr>' +
+        '<td><strong>' + esc(String(v.empleado).replace(/^\d+\s+/, '')) + '</strong></td>' +
+        '<td><span class="suc-badge-mini" style="background:' + sucV.colorLight + ';color:' + sucV.color + '">' + sucV.nombre + '</span></td>' +
+        '<td style="text-align:center">' + corresponden + '</td>' +
+        '<td style="text-align:center">' + v.dias_usados + '</td>' +
+        '<td style="text-align:center;font-weight:700;color:' + colorDisp + '">' + v.dias_disponibles + '</td>' +
+        '<td style="text-align:center">' + (pend ? '<span style="color:#92400e;font-weight:600">' + pend + '</span>' : '—') + '</td>' +
+        '<td style="text-align:center;font-weight:600;color:' + (libre < 0 ? '#dc2626' : '#374151') + '">' + (pend ? libre : '—') + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin datos de banco para ' + _calVacAnio + '</td></tr>';
+    panelDias =
+      '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Días por empleado — ' + _calVacAnio + '</h4>' +
+      '<div class="admin-table-wrap"><table class="admin-tabla">' +
+        '<thead><tr><th>Empleado</th><th>Local</th><th style="text-align:center">Corresponden</th><th style="text-align:center">Usados</th><th style="text-align:center">Disponibles</th><th style="text-align:center">Pedidos pend.</th><th style="text-align:center">Libres tras pend.</th></tr></thead>' +
+        '<tbody>' + filasDias + '</tbody></table></div>';
+  } else {
+    panelDias = '<p style="color:var(--text-muted);font-size:12px;margin-top:1.5rem">No se pudo cargar el banco de días (se muestran solo las solicitudes).</p>';
+  }
 
   const headersSem = diasSem.map(function(d) { return '<div class="cal-vac-header">' + d + '</div>'; }).join('');
 
@@ -525,10 +605,11 @@ function renderCalendarioVacaciones(container, solicitudes) {
     '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Solicitudes del mes</h4>' +
     '<div class="admin-table-wrap">' +
       '<table class="admin-tabla">' +
-        '<thead><tr><th>Empleado</th><th>Local</th><th>Período</th><th style="text-align:center">Días</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
+        '<thead><tr><th>Empleado</th><th>Local</th><th>Período</th><th style="text-align:center">Días</th><th style="text-align:center">Saldo</th><th>Estado</th><th>Conflicto</th><th></th></tr></thead>' +
         '<tbody>' + tablaSols + '</tbody>' +
       '</table>' +
     '</div>' +
+    panelDias +
     '</div>';
 }
 

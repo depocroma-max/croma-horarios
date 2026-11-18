@@ -370,6 +370,7 @@ async function confirmarAjusteAdmin(empEnc, anio) {
     });
     if (!json.ok) throw new Error(json.error || 'Error');
     cerrarAdmin();
+    _vacBancoCache = {};
     showToast('✓ Ajuste guardado');
     cargarVacacionesAdmin(nombreEmp);
   } catch(e) {
@@ -427,7 +428,7 @@ async function responderSolicitudAdmin(id, estado, nota) {
     cerrarAdmin();
     showToast(estado === 'aprobada' ? '✓ Solicitud aprobada' : '✗ Solicitud rechazada');
     // Recargar según contexto
-    _vacSolicitudesCache = null; // invalidar cache
+    _vacSolicitudesCache = null; _vacBancoCache = {}; // invalidar cache
     const vacView = document.getElementById('viewCalendario');
     if (vacView && vacView.classList.contains('active')) renderCalendarioView();
     // Tab "Solicitudes" dentro de Avisos, si está visible
@@ -505,7 +506,7 @@ async function confirmarEdicionSolicitud(id) {
       body: JSON.stringify({ id, fecha_desde: desde, fecha_hasta: hasta }),
     });
     if (!json.ok) throw new Error(json.error || 'Error');
-    _vacSolicitudesCache = null;
+    _vacSolicitudesCache = null; _vacBancoCache = {};
     VACACIONES_APROBADAS_CACHE = [];
     cerrarAdmin();
     showToast('✓ Fechas actualizadas');
@@ -610,7 +611,7 @@ async function confirmarSolicitudVac(empEnc, esAdmin) {
           body: JSON.stringify({ fecha_desde: desde, fecha_hasta: hasta, dias }),
         });
     if (!json.ok) throw new Error(json.error || 'Error');
-    _vacSolicitudesCache = null; // invalidar cache
+    _vacSolicitudesCache = null; _vacBancoCache = {}; // invalidar cache
     VACACIONES_APROBADAS_CACHE = []; // forzar recarga para que aparezca en el historial
     await cargarVacacionesAprobadas();
     cerrarAdmin();
