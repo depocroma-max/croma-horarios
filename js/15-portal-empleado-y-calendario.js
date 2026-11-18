@@ -1239,39 +1239,16 @@ function renderCalendarioView() {
   const container = document.getElementById('calendarioAdminContainer');
   if (!container) return;
 
-  // "Solicitudes pendientes" (→ tab Solicitudes en Avisos) y "Banco de
-  // días"/"Banco de horas" (→ Administración) jubilados de acá — ver
-  // avisosProvider Etapa 6/9. Quedan solo Calendario y Anuncios, sin
-  // punto de entrada propio en el top bar (Calendario está oculto), pero
-  // siguen funcionando para quien llegue por un link interno (campana).
+  // Solo el calendario de vacaciones (días pedidos por los empleados).
+  // Anuncios vive en el panel Avisos; Solicitudes/Banco en Administración.
   container.innerHTML =
     '<div class="admin-inline-wrap">' +
-    '<div class="admin-tabs" id="vacTabs">' +
-      '<button class="admin-tab active" onclick="switchVacTab(\'calendario\',this)">Calendario</button>' +
-      '<button class="admin-tab" onclick="switchVacTab(\'anuncios\',this)">Anuncios</button>' +
-    '</div>' +
     '<div id="vacCalendarioContainer" class="admin-tab-content">' +
       '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>' +
-    '</div>' +
-    '<div id="vacAnunciosContainer" class="admin-tab-content" style="display:none">' +
-      '<div class="admin-toolbar">' +
-        '<span style="font-size:12px;color:var(--text-muted)">Enviá mensajes a tus empleados — aparecen en su pantalla con sonido</span>' +
-        // "Nuevo anuncio" (sistema viejo) jubilado a favor del panel Avisos —
-        // ver avisosProvider Etapa 6/9. Botón oculto, no borrado.
-      '</div>' +
-      '<div id="adminAnunciosList"><div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:13px">Cargando...</div></div>' +
     '</div>' +
     '</div>';
 
   // Cargar calendario con cache
   cargarCalendarioVacaciones();
-}
-
-function switchVacTab(tab, btn) {
-  document.querySelectorAll('#vacTabs .admin-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('vacCalendarioContainer').style.display   = tab === 'calendario'  ? 'block' : 'none';
-  document.getElementById('vacAnunciosContainer').style.display     = tab === 'anuncios'    ? 'block' : 'none';
-  if (tab === 'anuncios')    cargarListaAnuncios();
 }
 
