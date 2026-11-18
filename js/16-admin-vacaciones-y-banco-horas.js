@@ -11,7 +11,7 @@ async function cargarBancoDias() {
     const vacaciones = json.ok ? (json.vacaciones || []) : [];
 
     // Obtener lista de empleados activos
-    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
+    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].filter(function(n) { return !_empleadoInactivoVac(n); }).sort(function(a,b) {
       const na = parseInt(a)||999, nb = parseInt(b)||999;
       return na !== nb ? na - nb : a.localeCompare(b);
     });
@@ -80,7 +80,7 @@ async function cargarBancoDiasAnio(anio) {
   try {
     const json = await apiVacaciones('/banco' + _qsVacaciones({ anio }), { method: 'GET' });
     const vacaciones = json.ok ? (json.vacaciones || []) : [];
-    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
+    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].filter(function(n) { return !_empleadoInactivoVac(n); }).sort(function(a,b) {
       const na = parseInt(a)||999, nb = parseInt(b)||999;
       return na !== nb ? na - nb : a.localeCompare(b);
     });
@@ -141,7 +141,7 @@ async function cargarBancoHorasAdmin() {
     if (!json.ok) throw new Error(json.error || 'Error');
     const empleados = json.empleados || [];
 
-    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].sort(function(a,b) {
+    const empNombres = [...new Set(state.datos.map(function(r) { return r.EMPLEADO; }))].filter(function(n) { return !_empleadoInactivoVac(n); }).sort(function(a,b) {
       const na = parseInt(a)||999, nb = parseInt(b)||999;
       return na !== nb ? na - nb : a.localeCompare(b);
     });
