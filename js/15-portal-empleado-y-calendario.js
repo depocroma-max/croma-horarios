@@ -551,7 +551,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
       (esHoy     ? ' cal-vac-hoy'      : '') +
       (esFinde   ? ' cal-vac-finde'    : '') +
       (esFer     ? ' cal-vac-feriado'  : '') +
-      (conflicto ? ' cal-vac-conflicto': '') + '" style="cursor:pointer" title="Clic para agregar vacaciones desde este día" onclick="abrirModalAgregarVacCalendario('' + isoFecha + '')">' +
+      (conflicto ? ' cal-vac-conflicto': '') + '" style="cursor:pointer" title="Clic para agregar vacaciones desde este día" onclick="abrirModalAgregarVacCalendario(\'' + isoFecha + '\')">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
       empRows + cobRows + '</div>';
   }
