@@ -35,17 +35,13 @@ function iniciarAppConSesion() {
     adminAutenticado = true;
     sessionStorage.setItem('croma_admin_auth', '1');
     document.getElementById('navBtnAdmin').style.display       = '';
-    // "Calendario" (sistema viejo, ver Etapa 6/9 avisos-provider) jubilado
-    // del top bar — se deja oculto a propósito, no se restaura su display.
     document.getElementById('drawerNavAdmin').style.display    = '';
     document.getElementById('bellWrap').style.display       = 'flex';
     document.getElementById('bellWrapEmp').style.display    = 'none';
     document.querySelectorAll('.nav-btn').forEach(b => b.style.display = '');
     document.querySelectorAll('.drawer-nav-btn').forEach(b => b.style.display = '');
-    // Re-ocultar "Calendario" (sistema viejo jubilado) después del forEach
-    // genérico de arriba, que los vuelve a mostrar a todos por igual.
-    document.getElementById('navBtnCalendario').style.display = 'none';
-    document.getElementById('drawerNavCalendario').style.display = 'none';
+    // Pestaña "Vacaciones" (ex "Calendario"): visible para admin, la
+    // muestra el forEach genérico de arriba.
     actualizarIndicadorSesion();
     showApp();
     const vistaGuardada = localStorage.getItem('croma_vista') || 'empleados';

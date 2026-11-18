@@ -285,7 +285,7 @@ function toggleBellDropdown() {
       }).join('');
       dd.innerHTML = '<div class="bell-dd-title">Solicitudes pendientes</div>' + rows +
         '<div class="bell-dd-more" onclick="setView(\'calendario\');document.getElementById(\'bellDropdown\')?.remove()">' +
-          (sols.length > 5 ? 'Ver todas (' + sols.length + ') →' : 'Ir a Calendario →') +
+          (sols.length > 5 ? 'Ver todas (' + sols.length + ') →' : 'Ir a Vacaciones →') +
         '</div>';
     }).catch(function() { dd.innerHTML = '<div class="bell-dd-empty">Error al cargar</div>'; });
   setTimeout(function() {
@@ -489,15 +489,17 @@ function renderCalendarioVacaciones(container, solicitudes, eventos) {
     const anioSol = partesSol.length >= 1 ? parseInt(partesSol[0]) : new Date().getFullYear();
     const calBtn  = '<button class="btn-admin-edit" style="font-size:11px" ' +
       'onclick="_calVacMes=' + mesSol + ';_calVacAnio=' + anioSol + ';cargarCalendarioVacaciones()">' + icon('calendar','icon-14') + ' Ver</button>';
+    const editBtn = '<button class="btn-admin-edit" style="font-size:11px" ' +
+      'onclick="abrirModalEditarSolicitud(\'' + s.id + '\')">✎ Editar</button>';
     const acciones = s.estado === 'pendiente'
       ? '<div style="display:flex;gap:4px;flex-wrap:wrap">' +
           '<button class="btn-admin-edit" style="background:#d1fae5;color:#065f46;border-color:#6ee7b7" ' +
             'onclick="responderSolicitudAdmin(\'' + s.id + '\',\'aprobada\',\'\')">✓ Aprobar</button>' +
           '<button class="btn-admin-edit" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5" ' +
             'onclick="abrirModalRespuesta(\'' + s.id + '\',\'rechazada\',\'' + encodeURIComponent(s.empleado) + '\')">✗ Rechazar</button>' +
-          calBtn +
+          editBtn + calBtn +
           '</div>'
-      : calBtn;
+      : '<div style="display:flex;gap:4px;flex-wrap:wrap">' + editBtn + calBtn + '</div>';
     return '<tr>' +
       '<td><strong>' + nom + '</strong></td>' +
       '<td><span class="suc-badge-mini" style="background:' + (suc.colorLight || '#f1f5f9') + ';color:' + suc.color + '">' + suc.nombre + '</span></td>' +

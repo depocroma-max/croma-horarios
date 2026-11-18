@@ -447,6 +447,81 @@ async function responderSolicitudAdmin(id, estado, nota) {
   }
 }
 
+// ── EDITAR FECHAS DE UNA SOLICITUD (admin) ────────────
+function abrirModalEditarSolicitud(solicitudId) {
+  const s = (_vacSolicitudesCache || []).find(function(x) { return x.id === solicitudId; });
+  if (!s) { showToast('No se encontró la solicitud', 'error'); return; }
+  const nom = String(s.empleado || '').replace(/^\d+\s+/, '');
+  const aviso = s.estado === 'aprobada'
+    ? 'Esta solicitud ya está aprobada: al guardar se reajusta el banco de días del empleado.'
+    : '';
+  const html = `
+  <div class="admin-overlay" id="adminOverlay" onclick="cerrarAdmin(event)">
+    <div class="admin-panel admin-panel-sm" onclick="event.stopPropagation()">
+      <div class="admin-header">
+        <div class="admin-titulo">Editar fechas — ${esc(nom)}</div>
+        <button class="detalle-close" onclick="cerrarAdmin()" aria-label="Cerrar">${icon('x','icon-16')}</button>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label" for="vacDesde">Fecha desde</label>
+          <input type="date" class="admin-input" id="vacDesde" value="${esc(s.fecha_desde)}" onchange="calcularDiasVacForm()" />
+        </div>
+        <div class="admin-form-grupo">
+          <label class="emp-filtro-label" for="vacHasta">Fecha hasta</label>
+          <input type="date" class="admin-input" id="vacHasta" value="${esc(s.fecha_hasta)}" onchange="calcularDiasVacForm()" />
+        </div>
+        <div class="admin-form-grupo">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+            <span style="font-size:13px;color:#374151">Días corridos:</span>
+            <span id="diasVacCalc" style="font-size:18px;font-weight:700;color:#2563eb">${s.dias}</span>
+          </div>
+          ${aviso ? `<span style="font-size:11px;color:#b45309;margin-top:4px;display:block">${aviso}</span>` : ''}
+        </div>
+        <p id="vacSolError" style="color:#dc2626;font-size:12px;display:none;margin-bottom:0.5rem"></p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:1.5rem">
+          <button class="btn-connect" style="margin:0" id="btnGuardarEdicionVac" onclick="confirmarEdicionSolicitud('${esc(solicitudId)}')">Guardar cambios</button>
+          <button class="btn-demo" onclick="cerrarAdmin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  montarOverlayAdmin(html);
+  calcularDiasVacForm();
+}
+
+async function confirmarEdicionSolicitud(id) {
+  const btn = document.getElementById('btnGuardarEdicionVac');
+  if (btn && btn.disabled) return;
+  const desde = document.getElementById('vacDesde')?.value;
+  const hasta = document.getElementById('vacHasta')?.value;
+  const errEl = document.getElementById('vacSolError');
+  if (!desde || !hasta) { errEl.textContent = 'Seleccioná las fechas'; errEl.style.display = 'block'; return; }
+  if (hasta < desde) { errEl.textContent = 'La fecha hasta debe ser posterior a la fecha desde'; errEl.style.display = 'block'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    const json = await apiVacaciones('/editar', {
+      method: 'POST',
+      body: JSON.stringify({ id, fecha_desde: desde, fecha_hasta: hasta }),
+    });
+    if (!json.ok) throw new Error(json.error || 'Error');
+    _vacSolicitudesCache = null;
+    VACACIONES_APROBADAS_CACHE = [];
+    cerrarAdmin();
+    showToast('✓ Fechas actualizadas');
+    // Saltar al mes de las nuevas fechas para ver el cambio
+    const [y, m] = desde.split('-').map(Number);
+    _calVacAnio = y; _calVacMes = m - 1;
+    if (document.getElementById('vacCalendarioContainer')) cargarCalendarioVacaciones();
+    if (document.getElementById('avzSolicitudesContainer')) cargarSolicitudesAdmin();
+    cargarVacacionesAprobadas();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar cambios'; }
+  }
+}
+
 // ── MODAL SOLICITAR VACACIONES (empleado) ─────────────
 function abrirModalSolicitudVac(empEnc, esAdmin) {
   const nombreEmp = decodeURIComponent(empEnc);
