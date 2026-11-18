@@ -551,7 +551,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
       (esHoy     ? ' cal-vac-hoy'      : '') +
       (esFinde   ? ' cal-vac-finde'    : '') +
       (esFer     ? ' cal-vac-feriado'  : '') +
-      (conflicto ? ' cal-vac-conflicto': '') + '">' +
+      (conflicto ? ' cal-vac-conflicto': '') + '" style="cursor:pointer" title="Clic para agregar vacaciones desde este día" onclick="abrirModalAgregarVacCalendario('' + isoFecha + '')">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
       empRows + cobRows + '</div>';
   }
@@ -1534,9 +1534,10 @@ function renderCalendarioView() {
 //  AGREGAR VACACIONES DESDE EL CALENDARIO (admin)
 //  Usa POST /vacaciones/agregar-admin: queda aprobada y descuenta el banco.
 // ══════════════════════════════════════════════════════
-function abrirModalAgregarVacCalendario() {
+function abrirModalAgregarVacCalendario(isoInicial) {
   const hoy = new Date();
-  const hoyISO = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0');
+  // Con clic en un día, ese día viene precargado; si no, hoy.
+  const hoyISO = isoInicial || (hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0'));
   // Empleados activos, ordenados por local y nombre
   const vistos = {};
   const emps = [];
