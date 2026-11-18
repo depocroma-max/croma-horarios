@@ -383,6 +383,14 @@ async function fetchBancoCache(anio) {
 function _claveEmpVac(nombre) {
   return String(nombre || '').replace(/^\d+\s+/, '').trim().toLowerCase();
 }
+// Ex-empleado (perfil.activo === false): no figura en el panel de días,
+// pero su registro queda en la hoja y en el historial de solicitudes.
+function _empleadoInactivoVac(nombre) {
+  const k = _claveEmpVac(nombre);
+  return Object.keys(EMPLEADOS_PERFILES).some(function(n) {
+    return _claveEmpVac(n) === k && EMPLEADOS_PERFILES[n].activo === false;
+  });
+}
 function _localDeEmpleadoVac(nombre) {
   const perf = EMPLEADOS_PERFILES[nombre] || {};
   return perf.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === nombre; }) || {}).LOCAL || '';
@@ -547,6 +555,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
       return (state.datos.find(function(r) { return _claveEmpVac(r.EMPLEADO) === _claveEmpVac(v.empleado); }) || {}).EMPLEADO || v.empleado;
     };
     const filasDias = banco.filter(function(v) {
+      if (_empleadoInactivoVac(v.empleado)) return false;
       return _calVacFiltroLocal === 'all' || _localDeEmpleadoVac(nombreCompleto(v)) === _calVacFiltroLocal;
     }).sort(function(a, b) { return _claveEmpVac(a.empleado).localeCompare(_claveEmpVac(b.empleado)); }).map(function(v) {
       const nomFull = nombreCompleto(v);
