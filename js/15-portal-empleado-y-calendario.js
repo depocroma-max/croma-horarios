@@ -380,6 +380,32 @@ async function fetchBancoCache(anio) {
   _vacBancoCache[anio] = { ts: Date.now(), filas: filas };
   return filas;
 }
+// Roles de cobertura (encargado / cajero / vendedor) — { clave: rol }, vendedor = sin fila.
+// Se guardan en croma-backend (GET/POST /vacaciones/roles).
+var _vacRolesCache = null;
+var ROLES_COBERTURA = [
+  { id: 'vendedor',  nombre: 'Vendedor',  critico: false },
+  { id: 'cajero',    nombre: 'Cajero',    critico: true  },
+  { id: 'encargado', nombre: 'Encargado', critico: true  }
+];
+async function fetchRolesCache() {
+  if (_vacRolesCache) return _vacRolesCache;
+  const json = await apiVacaciones('/roles', { method: 'GET' });
+  _vacRolesCache = json.ok ? (json.roles || {}) : {};
+  return _vacRolesCache;
+}
+async function guardarRolCobertura(empEnc, rol) {
+  const empleado = decodeURIComponent(empEnc);
+  try {
+    const json = await apiVacaciones('/roles', { method: 'POST', body: JSON.stringify({ empleado: empleado, rol: rol }) });
+    if (!json.ok) throw new Error(json.error || 'Error');
+    _vacRolesCache = null;
+    showToast('✓ Rol actualizado');
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+  cargarCalendarioVacaciones();
+}
 function _claveEmpVac(nombre) {
   return String(nombre || '').replace(/^\d+\s+/, '').trim().toLowerCase();
 }
@@ -404,19 +430,21 @@ async function cargarCalendarioVacaciones() {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:var(--text-muted);font-size:13px">Cargando...</p></div>';
   }
   try {
-    const [todas, banco] = await Promise.all([
+    const [todas, banco, roles] = await Promise.all([
       fetchSolicitudesCache(false),
-      fetchBancoCache(_calVacAnio).catch(function() { return null; }) // sin banco: se ve igual, sin saldos
+      fetchBancoCache(_calVacAnio).catch(function() { return null; }), // sin banco: se ve igual, sin saldos
+      fetchRolesCache().catch(function() { return {}; })               // sin roles: no hay conflictos por rol
     ]);
     renderCalendarioVacaciones(container, todas.filter(function(s) {
       return s.estado === 'aprobada' || s.estado === 'pendiente';
-    }), banco);
+    }), banco, roles);
   } catch(e) {
     container.innerHTML = '<div style="padding:1.5rem"><p style="color:#dc2626;font-size:13px">Error: ' + e.message + '</p></div>';
   }
 }
 
-function renderCalendarioVacaciones(container, solicitudes, banco) {
+function renderCalendarioVacaciones(container, solicitudes, banco, roles) {
+  roles = roles || {};
   // Saldo por empleado (clave normalizada) para el año mostrado
   const saldoPorEmp = {};
   (banco || []).forEach(function(v) { saldoPorEmp[_claveEmpVac(v.empleado)] = v; });
@@ -447,15 +475,35 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
     return sucEmp === _calVacFiltroLocal;
   });
 
-  function hayConflicto(empsEnFecha) {
-    if (empsEnFecha.length < 2) return false;
-    const grupos = {};
-    empsEnFecha.forEach(function(s) {
-      const perfEmp = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfEmp.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || 'x';
-      if (!grupos[local]) grupos[local] = [];
-      grupos[local].push(s);
+  // ── Cobertura por local ────────────────────────────────────────────────
+  // Equipo de cada local = empleados activos (perfil.activo !== false), con su
+  // rol. Hay conflicto un día cuando, en un local, TODOS los que tienen un rol
+  // crítico (encargado/cajero) están de vacaciones (aprobada o pendiente).
+  const rolDe = function(nombre) { return roles[_claveEmpVac(nombre)] || 'vendedor'; };
+  const equipoPorLocal = {};
+  const _vistos = {};
+  state.datos.forEach(function(r) {
+    const k = _claveEmpVac(r.EMPLEADO);
+    if (_vistos[k] || _empleadoInactivoVac(r.EMPLEADO)) return;
+    _vistos[k] = true;
+    const loc = _localDeEmpleadoVac(r.EMPLEADO);
+    if (!loc) return;
+    (equipoPorLocal[loc] = equipoPorLocal[loc] || []).push({ clave: k, rol: rolDe(r.EMPLEADO) });
+  });
+  function coberturaDia(iso, local) {
+    const equipo = equipoPorLocal[local] || [];
+    const ausentes = {};
+    solicitudes.forEach(function(s) {
+      if (!s.fecha_desde || iso < s.fecha_desde || iso > s.fecha_hasta) return;
+      if (_localDeEmpleadoVac(s.empleado) !== local) return;
+      ausentes[_claveEmpVac(s.empleado)] = true;
     });
-    return Object.values(grupos).some(function(g) { return g.length >= 2; });
+    const nAus = equipo.filter(function(e) { return ausentes[e.clave]; }).length;
+    const sinRol = ROLES_COBERTURA.filter(function(r) { return r.critico; }).filter(function(r) {
+      const titulares = equipo.filter(function(e) { return e.rol === r.id; });
+      return titulares.length > 0 && titulares.every(function(e) { return ausentes[e.clave]; });
+    }).map(function(r) { return r.nombre; });
+    return { total: equipo.length, ausentes: nAus, sinRol: sinRol };
   }
 
   const diasSem = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -474,7 +522,19 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
     const emps = solsFiltradas.filter(function(s) {
       return s.fecha_desde && s.fecha_hasta && isoFecha >= s.fecha_desde && isoFecha <= s.fecha_hasta;
     });
-    const conflicto = hayConflicto(emps);
+    // Cobertura por local presente ese día (respeta el filtro de local)
+    const localesDia = [];
+    emps.forEach(function(s) { const l = _localDeEmpleadoVac(s.empleado); if (l && localesDia.indexOf(l) < 0) localesDia.push(l); });
+    let conflicto = false;
+    const cobRows = localesDia.map(function(l) {
+      const c = coberturaDia(isoFecha, l);
+      const sucL = SUCURSALES_TODAS.find(function(x) { return x.id === l; }) || { nombre: l, color: '#94a3b8' };
+      if (c.sinRol.length) conflicto = true;
+      return '<div class="cal-vac-cob" style="font-size:9px;margin-top:2px;color:' + (c.sinRol.length ? '#dc2626;font-weight:700' : '#64748b') + '" ' +
+        'title="' + esc(sucL.nombre + ': ' + c.ausentes + ' de ' + c.total + ' de vacaciones' + (c.sinRol.length ? ' · SIN ' + c.sinRol.join(' y ').toUpperCase() : '')) + '">' +
+        esc(sucL.nombre.replace(/^\d+\s+/, '').substring(0, 9)) + ' ' + c.ausentes + '/' + c.total +
+        (c.sinRol.length ? ' · sin ' + esc(c.sinRol.join('/').toLowerCase()) : '') + '</div>';
+    }).join('');
     const empRows = emps.map(function(s) {
       const nom   = s.empleado.replace(/^\d+\s+/, '').split(' ')[0];
       const perfEmp2 = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfEmp2.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '';
@@ -489,7 +549,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
       (esFer     ? ' cal-vac-feriado'  : '') +
       (conflicto ? ' cal-vac-conflicto': '') + '">' +
       '<div class="cal-vac-num">' + d + (esFer ? ' <span class="cal-fer-dot" title="Feriado">🗓</span>' : '') + (conflicto ? ' <span style="color:#f59e0b">!!</span>' : '') + '</div>' +
-      empRows + '</div>';
+      empRows + cobRows + '</div>';
   }
 
   // Tabla solicitudes del mes
@@ -503,11 +563,23 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
     const nom   = s.empleado.replace(/^\d+\s+/, '');
     const perfSol2 = EMPLEADOS_PERFILES[s.empleado] || {}; const local = perfSol2.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === s.empleado; }) || {}).LOCAL || '-';
     const suc   = SUCURSALES_TODAS.find(function(x) { return x.id === local; }) || { nombre: local, color: '#94a3b8', colorLight: '#f1f5f9' };
-    const conflictoSol = solsFiltradas.some(function(o) {
-      return o.id !== s.id &&
-        (EMPLEADOS_PERFILES[o.empleado]?.sucursal_id || (state.datos.find(function(r) { return r.EMPLEADO === o.empleado; }) || {}).LOCAL) === local &&
-        o.fecha_desde <= s.fecha_hasta && o.fecha_hasta >= s.fecha_desde;
-    });
+    // Conflicto por rol: solo si quien pide es titular de un rol crítico y en algún
+    // día del período el local se queda sin nadie con ese rol.
+    let conflictoSol = '';
+    const rolSol = rolDe(s.empleado);
+    if (rolSol !== 'vendedor' && s.fecha_desde && s.fecha_hasta) {
+      const nombreRol = (ROLES_COBERTURA.find(function(r) { return r.id === rolSol; }) || {}).nombre;
+      const [ay, am, ad] = s.fecha_desde.split('-').map(Number);
+      const [hy, hm, hd] = s.fecha_hasta.split('-').map(Number);
+      const finMs = Date.UTC(hy, hm - 1, hd);
+      for (let t = Date.UTC(ay, am - 1, ad); t <= finMs; t += 86400000) {
+        const iso = new Date(t).toISOString().substring(0, 10);
+        if (coberturaDia(iso, _localDeEmpleadoVac(s.empleado)).sinRol.indexOf(nombreRol) >= 0) {
+          conflictoSol = 'Sin ' + nombreRol.toLowerCase() + ' el ' + formatFechaISO(iso);
+          break;
+        }
+      }
+    }
     const partesSol = s.fecha_desde ? s.fecha_desde.split('-') : [];
     const mesSol  = partesSol.length >= 2 ? parseInt(partesSol[1]) - 1 : 0;
     const anioSol = partesSol.length >= 1 ? parseInt(partesSol[0]) : new Date().getFullYear();
@@ -544,7 +616,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
       '<td style="text-align:center">' + s.dias + '</td>' +
       '<td style="text-align:center">' + saldoHTML + '</td>' +
       '<td>' + estadoBadge(s.estado) + '</td>' +
-      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600">' + icon('alertTriangle','icon-14') + ' Conflicto</span>' : '—') + '</td>' +
+      '<td>' + (conflictoSol ? '<span style="color:#f59e0b;font-weight:600" title="' + esc(conflictoSol) + '">' + icon('alertTriangle','icon-14') + ' ' + esc(conflictoSol) + '</span>' : '—') + '</td>' +
       '<td>' + acciones + '</td></tr>';
   }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin solicitudes en este mes</td></tr>';
 
@@ -567,17 +639,19 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
       return '<tr>' +
         '<td><strong>' + esc(String(v.empleado).replace(/^\d+\s+/, '')) + '</strong></td>' +
         '<td><span class="suc-badge-mini" style="background:' + sucV.colorLight + ';color:' + sucV.color + '">' + sucV.nombre + '</span></td>' +
+        '<td>' + '<select class="filter-select" style="font-size:12px" onchange="guardarRolCobertura(\'' + encodeURIComponent(v.empleado) + '\', this.value)">' +
+          ROLES_COBERTURA.map(function(r) { return '<option value="' + r.id + '"' + (rolDe(v.empleado) === r.id ? ' selected' : '') + '>' + r.nombre + '</option>'; }).join('') + '</select></td>' +
         '<td style="text-align:center">' + corresponden + '</td>' +
         '<td style="text-align:center">' + v.dias_usados + '</td>' +
         '<td style="text-align:center;font-weight:700;color:' + colorDisp + '">' + v.dias_disponibles + '</td>' +
         '<td style="text-align:center">' + (pend ? '<span style="color:#92400e;font-weight:600">' + pend + '</span>' : '—') + '</td>' +
         '<td style="text-align:center;font-weight:600;color:' + (libre < 0 ? '#dc2626' : '#374151') + '">' + (pend ? libre : '—') + '</td>' +
       '</tr>';
-    }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin datos de banco para ' + _calVacAnio + '</td></tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:1.5rem;font-size:13px">Sin datos de banco para ' + _calVacAnio + '</td></tr>';
     panelDias =
       '<h4 style="font-size:13px;font-weight:600;color:#374151;margin:1.5rem 0 0.75rem">Días por empleado — ' + _calVacAnio + '</h4>' +
       '<div class="admin-table-wrap"><table class="admin-tabla">' +
-        '<thead><tr><th>Empleado</th><th>Local</th><th style="text-align:center">Corresponden</th><th style="text-align:center">Usados</th><th style="text-align:center">Disponibles</th><th style="text-align:center">Pedidos pend.</th><th style="text-align:center">Libres tras pend.</th></tr></thead>' +
+        '<thead><tr><th>Empleado</th><th>Local</th><th>Rol</th><th style="text-align:center">Corresponden</th><th style="text-align:center">Usados</th><th style="text-align:center">Disponibles</th><th style="text-align:center">Pedidos pend.</th><th style="text-align:center">Libres tras pend.</th></tr></thead>' +
         '<tbody>' + filasDias + '</tbody></table></div>';
   } else {
     panelDias = '<p style="color:var(--text-muted);font-size:12px;margin-top:1.5rem">No se pudo cargar el banco de días (se muestran solo las solicitudes).</p>';
@@ -604,7 +678,7 @@ function renderCalendarioVacaciones(container, solicitudes, banco) {
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#d1fae5;border-left:3px solid #059669"></span>Aprobada</span>' +
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef9c3;border-left:3px solid #f59e0b"></span>Pendiente</span>' +
         '<span class="cal-vac-legend-item"><span class="cal-vac-legend-dot" style="background:#fef3c7"></span>Feriado</span>' +
-        '<span class="cal-vac-legend-item" style="color:#f59e0b;font-weight:600">⚠ Conflicto</span>' +
+        '<span class="cal-vac-legend-item" style="color:#f59e0b;font-weight:600">⚠ Local sin encargado/cajero</span>' +
       '</div>' +
     '</div>' +
     // Grilla
