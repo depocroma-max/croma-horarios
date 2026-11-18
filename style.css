@@ -4329,3 +4329,110 @@ body {
   .envivo-board { grid-template-columns: 1fr; }
   .envivo-bar-total { margin-left: 0; }
 }
+
+/* === En vivo V3 — mismo lenguaje que Horario Semanal (paleta y colores de sucursal intactos) === */
+.envivo-bar { gap: 12px 24px; padding: 16px 20px; border: none; border-radius: 20px; box-shadow: 0 2px 14px rgba(0,0,0,.06); justify-content: space-between; }
+.envivo-bar-main { display: flex; flex-direction: column; gap: 2px; }
+.envivo-bar-dia { font-size: 30px; line-height: 1; letter-spacing: 1.5px; }
+.envivo-bar-hora { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--gray-600); }
+.envivo-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.envivo-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 14px; font-size: 12px; font-weight: 600; background: var(--gray-50); color: var(--gray-600); }
+.envivo-chip b { font-family: var(--font-display); font-size: 24px; line-height: 1; letter-spacing: .5px; }
+.envivo-chip.ok { background: #f0fdf4; color: #16a34a; } .envivo-chip.ok b { color: #15803d; }
+.envivo-chip.prox { background: #eff6ff; color: #2563eb; } .envivo-chip.prox b { color: #1d4ed8; }
+.envivo-chip.atraso { background: #fef2f2; color: #dc2626; } .envivo-chip.atraso b { color: #b91c1c; }
+.envivo-chip.cero { background: var(--gray-50); color: var(--gray-400); } .envivo-chip.cero b { color: var(--gray-400); }
+.envivo-board { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.1rem; }
+.envivo-card { border: none; border-radius: 20px; box-shadow: 0 2px 14px rgba(0,0,0,.06); border-top: none; position: relative; min-height: 190px; }
+.envivo-card::before { content: ''; height: 4px; background: var(--gray-200); }
+.envivo-card.activa::before { background: var(--card-suc, var(--gray-400)); }
+.envivo-card.vacia { opacity: 1; }
+.envivo-card.vacia .envivo-card-suc { color: var(--gray-600); }
+.envivo-card.con-atraso { box-shadow: 0 2px 14px rgba(220,38,38,.14); }
+.envivo-card-head { padding: 14px 18px 8px; gap: 10px; }
+.envivo-card-pin { width: 34px; height: 34px; justify-content: center; border-radius: 12px; background: var(--card-suc-light, var(--gray-50)); }
+.envivo-card-suc { font-size: 15px; font-weight: 800; }
+.envivo-card-count { padding: 4px 12px; border-radius: 999px; background: #f0fdf4; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.envivo-card-count.cero { background: var(--gray-50); }
+.envivo-card-count b { font-size: 24px; }
+.envivo-presentes { padding: 2px 10px 10px; gap: 4px; }
+.envivo-emp { align-items: flex-start; padding: 9px 10px; border-radius: 14px; background: var(--gray-50); }
+.envivo-emp:hover { background: var(--gray-100); }
+.envivo-emp-avatar { width: 40px; height: 40px; font-size: 13px; box-shadow: 0 0 0 2px var(--white); }
+.envivo-emp-nombre { font-size: 14px; }
+.envivo-emp-meta { font-size: 12px; margin-top: 1px; }
+.envivo-emp-meta b { color: var(--black); font-weight: 700; font-variant-numeric: tabular-nums; }
+.envivo-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.envivo-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--gray-100); color: var(--gray-600); }
+.envivo-tag.aviso { background: #fef3c7; color: #92400e; }
+.envivo-vacia-msg { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 22px 16px; color: var(--gray-400); }
+.envivo-card-foot { border-top: none; background: var(--gray-50); padding: 10px 14px 12px; gap: 8px; margin: 0 8px 8px; border-radius: 14px; }
+.envivo-alertas { display: flex; flex-direction: column; gap: 6px; }
+.envivo-alerta { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 12px; }
+.envivo-alerta svg { flex-shrink: 0; }
+.envivo-alerta-txt { flex: 1; min-width: 0; color: #7f1d1d; }
+.envivo-alerta-txt b { color: #991b1b; font-weight: 800; }
+.envivo-alerta em { font-style: normal; font-weight: 800; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: #dc2626; color: #fff; white-space: nowrap; }
+.envivo-sec { display: flex; flex-direction: column; gap: 4px; }
+.envivo-sec-titulo { font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--gray-400); margin-bottom: 2px; }
+.envivo-prox { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--gray-600); padding: 5px 8px; border-radius: 10px; background: var(--white); }
+.envivo-prox svg { color: #2563eb; flex-shrink: 0; }
+.envivo-prox b { color: var(--gray-800); font-weight: 800; }
+.envivo-prox span { margin-left: auto; font-size: 11.5px; }
+.envivo-prox i { font-style: normal; font-weight: 700; color: var(--black); font-variant-numeric: tabular-nums; }
+.envivo-foot-line.pausa { color: #92400e; }
+.envivo-foot-line.pausa svg { color: #d97706; }
+/* Ajuste al boceto aprobado: encabezado en una fila, filas limpias, alerta en pildora */
+.envivo-bar { padding: 18px 26px; border-radius: 22px; }
+.envivo-bar-main { flex-direction: row; align-items: center; gap: 16px; }
+.envivo-bar-dia { font-size: 36px; }
+.envivo-bar-hora { padding-left: 16px; border-left: 1px solid var(--gray-200); font-size: 14px; }
+.envivo-chip { border-radius: 999px; padding: 9px 18px; font-size: 14px; font-weight: 500; }
+.envivo-chip b { font-size: 26px; }
+.envivo-card { border-radius: 22px; }
+.envivo-card-pin { width: auto; height: auto; background: none; border-radius: 0; }
+.envivo-emp { background: none; padding: 7px 10px; }
+.envivo-emp:hover { background: var(--gray-50); }
+.envivo-emp-avatar { width: 44px; height: 44px; }
+.envivo-card-foot { background: none; margin: 0 18px 14px; border-radius: 0; border-top: 1px solid var(--gray-100); padding: 12px 0 0; gap: 6px; }
+.envivo-sec-titulo { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--black); margin-bottom: 4px; }
+.envivo-sec-titulo svg { color: var(--gray-600); }
+.envivo-prox { background: none; padding: 3px 2px; gap: 8px; font-size: 13px; }
+.envivo-prox svg { color: var(--gray-400); }
+.envivo-prox span { margin-left: 0; font-size: 13px; }
+.envivo-alerta { border-radius: 999px; padding: 8px 14px; background: #fee2e2; border: none; }
+.envivo-alerta-txt { color: #991b1b; }
+.envivo-alerta em { background: none; color: #991b1b; padding: 0; font-weight: 700; }
+@media (max-width: 700px) {
+  .envivo-bar-main { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .envivo-bar-hora { padding-left: 0; border-left: none; }
+  .envivo-bar-dia { font-size: 28px; }
+}
+@media (max-width: 700px) {
+  .envivo-bar { padding: 14px; }
+  .envivo-bar-dia { font-size: 26px; }
+  .envivo-chips { width: 100%; }
+  .envivo-chip { flex: 1 1 0; min-width: 0; justify-content: center; padding: 8px 8px; flex-wrap: wrap; text-align: center; }
+  .envivo-chip > span:not(.envivo-live-dot) { font-size: 10px; }
+}
+/* Croma Horarios: pesos de fuente iguales a los del panel */
+.envivo-card-suc, .envivo-emp-nombre, .envivo-foot-line b { font-weight: 800; }
+.envivo-chip.ok b { color: #15803d; }
+
+/* Barra superior adaptable: sin desborde ni superposición entre 701 y 1100 px (≤960 usa menú hamburguesa/drawer) */
+.topbar, .top-nav { min-width: 0; }
+.nav-btn { white-space: nowrap; }
+@media (max-width: 1100px) {
+  .topbar { padding: 0 1.25rem; gap: .75rem; }
+  .brand-divider, .brand-section { display: none; }
+  .top-nav { margin-left: .25rem; gap: 2px; }
+  .nav-btn { padding: 0 12px; font-size: 12.5px; }
+  .top-search { min-width: 150px; flex: 0 1 190px; }
+  .top-actions { gap: 6px; }
+}
+@media (max-width: 960px) {
+  .hamburger-btn { display: flex; }
+  .top-nav { display: none; }
+  .top-search { min-width: 110px; flex: 0 1 170px; }
+  .connection-status { padding: 5px 10px; }
+}

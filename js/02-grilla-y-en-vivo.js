@@ -153,7 +153,7 @@ function renderEnVivoNode() {
     return;
   }
 
-  let totalPresentes = 0;
+  let totalPresentes = 0, totalProximos = 0, totalAtrasados = 0;
   let cards = '';
 
   SUCURSALES.forEach(suc => {
@@ -164,10 +164,12 @@ function renderEnVivoNode() {
     const proximos   = items.filter(r => r.estado === 'PROXIMO');
     const terminados = items.filter(r => r.estado === 'FINALIZADO');
     totalPresentes += presentes.length;
+    totalProximos += proximos.length;
+    totalAtrasados += atrasados.length;
 
     const hayDatos = items.length > 0;
 
-    cards += `<div class="envivo-card ${presentes.length ? 'activa' : 'vacia'}" style="--card-suc:${suc.color}">`;
+    cards += `<div class="envivo-card ${presentes.length ? 'activa' : 'vacia'}${atrasados.length ? ' con-atraso' : ''}" style="--card-suc:${suc.color};--card-suc-light:${suc.colorLight || '#F3F4F6'}">`;
     cards += `<div class="envivo-card-head">
         <span class="envivo-card-pin" style="color:${suc.color}">${icon('mapPin','icon-16')}</span>
         <span class="envivo-card-suc">${suc.nombre}</span>
@@ -177,45 +179,54 @@ function renderEnVivoNode() {
     if (presentes.length) {
       cards += '<div class="envivo-presentes">';
       presentes.forEach(item => {
-        let meta = `Ingreso ${item.real ? item.real.entrada : '?'} - Sale ${item.real ? item.real.salida : '?'}`;
-        if (item.puntualidad && item.puntualidad.estado === 'LLEGO_TARDE') meta += ` · llegó ${item.puntualidad.minutos} min tarde`;
-        if (item.plan && item.plan.estado === 'SIN_HORARIO') meta += ' · sin horario cargado';
-        if (item.inconsistencias && item.inconsistencias.length) meta += ' · ⚠ revisar horario';
+        let tags = '';
+        if (item.puntualidad && item.puntualidad.estado === 'LLEGO_TARDE') tags += `<span class="envivo-tag aviso">llegó ${item.puntualidad.minutos} min tarde</span>`;
+        if (item.plan && item.plan.estado === 'SIN_HORARIO') tags += '<span class="envivo-tag">sin horario cargado</span>';
+        if (item.inconsistencias && item.inconsistencias.length) tags += '<span class="envivo-tag aviso">⚠ revisar horario</span>';
         cards += `<div class="envivo-emp">
           ${avatarEnVivoHTML(item.empleado, suc, 'presente')}
           <div class="envivo-emp-info">
             <span class="envivo-emp-nombre">${nombreCortoEnVivo(item.empleado)}</span>
-            <span class="envivo-emp-meta">${meta}</span>
+            <span class="envivo-emp-meta">Ingreso <b>${item.real ? item.real.entrada : '?'}</b> · Sale <b>${item.real ? item.real.salida : '?'}</b></span>
+            ${tags ? `<span class="envivo-tags">${tags}</span>` : ''}
           </div>
         </div>`;
       });
       cards += '</div>';
     } else if (hayDatos) {
-      cards += '<div class="envivo-vacia-msg">Nadie en turno ahora</div>';
+      cards += `<div class="envivo-vacia-msg">${icon('users','icon-16')}<span>Nadie en turno ahora</span></div>`;
     } else {
-      cards += '<div class="envivo-vacia-msg">Sin registros hoy</div>';
+      cards += `<div class="envivo-vacia-msg">${icon('calendar','icon-16')}<span>Sin registros hoy</span></div>`;
     }
 
     if (pausados.length || atrasados.length || proximos.length || terminados.length) {
       cards += '<div class="envivo-card-foot">';
+      if (atrasados.length) {
+        cards += '<div class="envivo-alertas">';
+        atrasados.forEach(item => {
+          const minutos = item.puntualidad ? item.puntualidad.minutos : '?';
+          const esVuelta = item.puntualidad && item.puntualidad.estado === 'ATRASO_DE_VUELTA';
+          const bloque = (item.plan && item.plan.bloqueActualIndex != null && item.plan.bloques[item.plan.bloqueActualIndex]) ? item.plan.bloques[item.plan.bloqueActualIndex].entrada : '?';
+          cards += `<div class="envivo-alerta">${icon('alertTriangle','icon-14')}<span class="envivo-alerta-txt"><b>${nombreCortoEnVivo(item.empleado)}</b> · ${esVuelta ? 'atrasado de vuelta · debía volver ' : 'atrasado · debía entrar '}${bloque} · <em>${minutos} min</em></span></div>`;
+        });
+        cards += '</div>';
+      }
       pausados.forEach(item => {
         const vuelve = item.proximo ? item.proximo.entrada : '?';
-        cards += `<div class="envivo-foot-line">${icon('pause','icon-14')} <b>${nombreCortoEnVivo(item.empleado)}</b> en pausa · vuelve ${vuelve}</div>`;
+        cards += `<div class="envivo-foot-line pausa">${icon('pause','icon-14')}<span><b>${nombreCortoEnVivo(item.empleado)}</b> en pausa · vuelve ${vuelve}</span></div>`;
       });
-      atrasados.forEach(item => {
-        const minutos = item.puntualidad ? item.puntualidad.minutos : '?';
-        const esVuelta = item.puntualidad && item.puntualidad.estado === 'ATRASO_DE_VUELTA';
-        const bloque = (item.plan && item.plan.bloqueActualIndex != null && item.plan.bloques[item.plan.bloqueActualIndex]) ? item.plan.bloques[item.plan.bloqueActualIndex].entrada : '?';
-        cards += `<div class="envivo-foot-line">${icon('alertTriangle','icon-14')} <b>${nombreCortoEnVivo(item.empleado)}</b> ${esVuelta ? 'atrasado de vuelta · debía volver ' : 'atrasado · debía entrar '}${bloque} · ${minutos} min</div>`;
-      });
-      proximos.forEach(item => {
-        const entra = item.proximo ? item.proximo.entrada : '?';
-        cards += `<div class="envivo-foot-line">${icon('clock','icon-12')}<b>${nombreCortoEnVivo(item.empleado)}</b> entra ${entra}</div>`;
-      });
+      if (proximos.length) {
+        cards += `<div class="envivo-sec"><div class="envivo-sec-titulo">${icon('clock','icon-14')}Próximos ingresos (${proximos.length})</div>`;
+        proximos.forEach(item => {
+          const entra = item.proximo ? item.proximo.entrada : '?';
+          cards += `<div class="envivo-prox">${icon('clock','icon-14')}<b>${nombreCortoEnVivo(item.empleado)}</b><span>· entra <i>${entra}</i></span></div>`;
+        });
+        cards += '</div>';
+      }
       terminados.sort((a, b) => a.empleado.localeCompare(b.empleado)).forEach(item => {
         const salida = item.real ? item.real.salida : '?';
         const extra = (item.plan && item.plan.estado === 'SIN_HORARIO') ? ' (sin horario cargado)' : '';
-        cards += `<div class="envivo-foot-line fin">${icon('check','icon-12')}<b>${nombreCortoEnVivo(item.empleado)}</b> terminó ${salida}${extra}</div>`;
+        cards += `<div class="envivo-foot-line fin">${icon('check','icon-12')}<span><b>${nombreCortoEnVivo(item.empleado)}</b> terminó ${salida}${extra}</span></div>`;
       });
       cards += '</div>';
     }
@@ -231,10 +242,16 @@ function renderEnVivoNode() {
     const ahora = new Date();
     const hh = String(ahora.getHours()).padStart(2, '0');
     const mm = String(ahora.getMinutes()).padStart(2, '0');
+    const chip = (cls, ico, num, label, pre) => `<span class="envivo-chip ${cls}${num ? '' : ' cero'}">${ico}${pre ? `<span>${pre}</span>` : ''}<b>${num}</b><span>${label}</span></span>`;
     bar.innerHTML =
+      `<div class="envivo-bar-main">` +
       `<span class="envivo-bar-dia">${DIAS_FULL_ES[ahora.getDay()]} ${ahora.getDate()} ${MESES_ES[ahora.getMonth()].toLowerCase()}</span>` +
-      `<span class="envivo-bar-hora">actualizado <b>${hh}:${mm}</b></span>` +
-      `<span class="envivo-bar-total"><span class="envivo-live-dot"></span>EN VIVO · <b>${totalPresentes}</b>&nbsp;trabajando</span>`;
+      `<span class="envivo-bar-hora">${icon('clock','icon-12')} actualizado <b>${hh}:${mm}</b></span></div>` +
+      `<div class="envivo-chips">` +
+      chip('ok', '<span class="envivo-live-dot"></span>', totalPresentes, 'trabajando', 'EN VIVO ·') +
+      chip('prox', icon('calendar','icon-14'), totalProximos, totalProximos === 1 ? 'próximo ingreso' : 'próximos ingresos') +
+      chip('atraso', icon('alertTriangle','icon-14'), totalAtrasados, totalAtrasados === 1 ? 'atrasado' : 'atrasados') +
+      `</div>`;
   }
 }
 
